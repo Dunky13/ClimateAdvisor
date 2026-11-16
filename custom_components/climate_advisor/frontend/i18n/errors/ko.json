@@ -32,6 +32,8 @@
   "errors.preference_seed_action": "action은 'accept' 또는 'discard'여야 합니다",
   "errors.preference_seed_built": "기록을 분석했습니다({days}일). 찾은 거주자 변경: {observations}. 제거한 일정 변경: {schedule}.",
   "errors.preference_seed_discarded": "기록 제안을 버렸습니다.",
+  "errors.preference_seed_failed": "기록 기반 제안을 처리할 수 없습니다({error}).",
+  "errors.preference_seed_invalid": "기록 분석에서 유효한 제안이 나오지 않아 아무것도 저장되지 않았습니다. 자세한 내용은 로그를 확인하세요.",
   "errors.preference_seed_none": "검토할 기록 제안이 없습니다.",
   "errors.preferences_off": "선호 학습이 꺼져 있습니다.",
   "errors.preferences_reset": "학습된 선호도를 지웠습니다.",

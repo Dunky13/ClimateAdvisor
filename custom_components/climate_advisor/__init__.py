@@ -18,7 +18,7 @@ import homeassistant.helpers.config_validation as cv
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ServiceValidationError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.start import async_at_started
 
@@ -109,6 +109,7 @@ from .const import (
 )
 from .coordinator import ClimateAdvisorCoordinator
 from .dashboard_api import DASHBOARD_VIEWS
+from .learning import PreferenceSeedInvalid
 from .storage_paths import remove_entry_scoped_files
 
 _LOGGER = logging.getLogger(__name__)
@@ -774,7 +775,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             """Handle the backfill_preferences service call."""
             zone_coordinator = _resolve_zone_coordinator(hass, call)
             with log_capture.zone_scope(zone_coordinator.zone_label):
-                result = await zone_coordinator.async_backfill_preferences(call.data.get("days", 30))
+                try:
+                    result = await zone_coordinator.async_backfill_preferences(call.data.get("days", 30))
+                except PreferenceSeedInvalid as err:
+                    raise HomeAssistantError(
+                        translation_domain=DOMAIN, translation_key="preference_seed_invalid"
+                    ) from err
             if result is None:
                 raise ServiceValidationError(translation_domain=DOMAIN, translation_key="preference_learning_off")
 

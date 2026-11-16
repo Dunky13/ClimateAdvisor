@@ -32,6 +32,8 @@
   "errors.preference_seed_action": "action must be 'accept' or 'discard'",
   "errors.preference_seed_built": "History analysed ({days} days). Occupant changes found: {observations}. Schedule changes removed: {schedule}.",
   "errors.preference_seed_discarded": "History proposal discarded.",
+  "errors.preference_seed_failed": "Could not apply the history proposal ({error}).",
+  "errors.preference_seed_invalid": "The history analysis gave no usable proposal; nothing was stored. The log has the details.",
   "errors.preference_seed_none": "There is no history proposal to review.",
   "errors.preferences_off": "Preference learning is off.",
   "errors.preferences_reset": "Learned preferences cleared.",

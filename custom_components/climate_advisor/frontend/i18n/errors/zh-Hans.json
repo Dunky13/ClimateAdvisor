@@ -32,6 +32,8 @@
   "errors.preference_seed_action": "action 必须是 'accept' 或 'discard'",
   "errors.preference_seed_built": "已分析历史（{days} 天）。找到的住户更改：{observations}。已移除的日程更改：{schedule}。",
   "errors.preference_seed_discarded": "已放弃历史提议。",
+  "errors.preference_seed_failed": "无法处理来自历史记录的建议（{error}）。",
+  "errors.preference_seed_invalid": "历史分析未得到有效的建议，因此未保存任何内容。详情请查看日志。",
   "errors.preference_seed_none": "没有可审核的历史提议。",
   "errors.preferences_off": "偏好学习已关闭。",
   "errors.preferences_reset": "已清除已学习的偏好。",

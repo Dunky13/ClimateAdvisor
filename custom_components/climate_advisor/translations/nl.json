@@ -885,6 +885,9 @@
     },
     "preference_learning_off": {
       "message": "Voorkeuren leren staat uit voor deze zone. Zet het eerst aan in de opties van Climate Advisor."
+    },
+    "preference_seed_invalid": {
+      "message": "De analyse van de geschiedenis gaf geen bruikbaar voorstel; er is niets opgeslagen. De details staan in het logboek."
     }
   }
 }

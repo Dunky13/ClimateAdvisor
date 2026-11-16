@@ -248,9 +248,9 @@ def test_update_falls_back_to_the_day_type_part_level():
     assert offsets[B]["level"] == pl.LEVEL_DAYTYPE_PART
     assert offsets[B]["n"] == 3
     assert offsets[sibling]["level"] == pl.LEVEL_DAYTYPE_PART
-    # Phase 3: the band "-" four-part key of each bucket with observations moves too, through the same fallback.
-    assert offsets[f"{B}|-"]["level"] == pl.LEVEL_DAYTYPE_PART
-    assert {c["bucket"] for c in changes} == {B, sibling, f"{B}|-", f"{sibling}|-"}
+    # Phase 3: with only band "-" observations no "-" key mirrors the three-part key (one row, one history record).
+    assert f"{B}|-" not in offsets
+    assert {c["bucket"] for c in changes} == {B, sibling}
 
 
 def test_update_uses_only_the_newest_twenty():
@@ -490,9 +490,9 @@ def test_weekly_update_state_roundtrips_through_disk(tmp_path):
     for day in range(3):
         _change(engine, _at(2026, 11, 2 + day, 18), 73.0)
         engine.flush_preference_episode(_at(2026, 11, 2 + day, 19))
-    changes = engine.run_preference_update(TODAY, max_offset_f=3.6, step_f=0.9)
+    changes = engine.run_preference_update(TODAY, max_offset_f=3.6, step_f=0.9, unit="fahrenheit")
     assert B in [c["bucket"] for c in changes]
-    assert engine.run_preference_update(TODAY, max_offset_f=3.6, step_f=0.9) is None  # not due again
+    assert engine.run_preference_update(TODAY, max_offset_f=3.6, step_f=0.9, unit="fahrenheit") is None  # not due again
     engine.save_state()
 
     reloaded = _engine(tmp_path)
@@ -646,7 +646,7 @@ def test_corrupt_episode_fields_are_dropped_with_a_warning(tmp_path, caplog):
         reloaded = _engine(tmp_path)
     assert reloaded._state.preference_open_episode is None
     assert reloaded.preference_offsets() == {}
-    assert caplog.text.count("dropping invalid preference") >= 3
+    assert caplog.text.count("Preference state entry dropped:") >= 3
 
 
 def test_the_remote_offset_captured_at_episode_open_covers_every_change_in_it(tmp_path):

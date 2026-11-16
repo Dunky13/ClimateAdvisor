@@ -885,6 +885,9 @@
     },
     "preference_learning_off": {
       "message": "L’apprentissage des préférences est désactivé pour cette zone. Activez-le d’abord dans les options de Climate Advisor."
+    },
+    "preference_seed_invalid": {
+      "message": "L’analyse de l’historique n’a donné aucune proposition exploitable ; rien n’a été enregistré. Les détails figurent dans le journal."
     }
   }
 }

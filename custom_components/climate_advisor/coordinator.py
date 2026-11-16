@@ -436,15 +436,20 @@ from .prediction_accuracy import RANGES as CHART_RANGE_DAYS
 from .prediction_accuracy import build_chart_v4, ca_swap_epochs, load_backtest
 from .preference_backfill import build_seed, climate_rows, humidity_series, temperature_series
 from .preference_learning import (
+    BACKGROUND_INTERVAL,
     BAND_NONE,
+    PART_NIGHT,
     PARTS_OF_DAY,
     REF_THERMOSTAT,
     PreferenceView,
+    episode_context,
+    heat_gate_reasons,
     humidity_band,
     near_schedule_edge,
     part_of_day,
     part_reference,
     references_by_part,
+    seed_row_blocked,
     selected_rooms,
     steering_reference,
     steering_room,
@@ -1408,6 +1413,11 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         self._timeline_night_failed_logged = False
         self._v4_night_replay_failed_logged = False
         self._v4_night_replay_running = False
+        # Fork Dunky13#1 phase 3: the humidity band in force (None until the first read, for the hysteresis), the
+        # reference humidity behind it, and when each part of day last got its 30-minute background sample.
+        self._preference_band: str | None = None
+        self._preference_rh: float | None = None
+        self._preference_bg_sampled: dict[str, datetime] = {}
         self.learning = LearningEngine(
             Path(hass.config.config_dir), entry_id=self._entry_id, temp_unit=config.get("temp_unit", "fahrenheit")
         )
@@ -5550,6 +5560,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         _indoor_reading = self._get_indoor_temp_with_provenance()
         self._refresh_indoor_sensor_health()  # Issue #1033
         _indoor_temp = _indoor_reading.value
+        # Sleep sensor only (fork Dunky13#1): the Status "reads bedroom" note; a steering room has its own status line.
         _sleep_indoor_sensor_active = (
             _indoor_reading.source_entity is not None
             and _indoor_reading.source_entity == self.config.get("sleep_indoor_temp_entity")
@@ -5971,6 +5982,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         self._note_indoor_companion(reading)
         self._note_indoor_source(reading)
         sleep_entity = self.config.get("sleep_indoor_temp_entity")
+        # Sleep sensor only (fork Dunky13#1): a failing steering room is a fall-back announced by _note_indoor_source.
         if sleep_entity and _in_sleep_window(dt_util.now(), self.config):
             self._note_indoor_sensor_state("sleep", reading.sleep_reason, sleep_entity, reading.value)
         else:
@@ -6384,19 +6396,33 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             reading = self._get_indoor_temp_with_provenance()
         source = getattr(reading, "source_entity", None)
         role = indoor_role_for(source, self.config.get("sleep_indoor_temp_entity"))
-
-        def _discover(eid: str, exclude: bool) -> tuple[str, ...]:
-            return self._companion_sensors(eid, "humidity", exclude)
-
         if getattr(reading, "remote_context", None) == REMOTE_CONTEXT_ROOM and source:
-            rh, src = resolve_humidity(self.hass, ROLE_INDOOR_DAY, source_entities=(source,), discover=_discover)
+            rh, src = resolve_humidity(
+                self.hass, ROLE_INDOOR_DAY, source_entities=(source,), discover=self._humidity_companions
+            )
             if rh is not None:
                 return rh, src, role, None
-        chosen, sources, fallback = self._humidity_role_inputs(role, source)
-        rh, src = resolve_humidity(
-            self.hass, role, chosen=chosen, source_entities=sources, fallback_entity=fallback, discover=_discover
-        )
+        rh, src, chosen = self._role_humidity(role, source)
         return rh, src, role, chosen
+
+    def _role_humidity(
+        self, role: str, source_entity: str | None = None
+    ) -> tuple[float | None, str | None, str | None]:
+        """``(rh, source, chosen)``: the Issue #1414 resolver for ``role`` (inputs from ``_humidity_role_inputs``)."""
+        chosen, sources, fallback = self._humidity_role_inputs(role, source_entity)
+        rh, src = resolve_humidity(
+            self.hass,
+            role,
+            chosen=chosen,
+            source_entities=sources,
+            fallback_entity=fallback,
+            discover=self._humidity_companions,
+        )
+        return rh, src, chosen
+
+    def _humidity_companions(self, entity_id: str, exclude_non_room: bool) -> tuple[str, ...]:
+        """The humidity sensors on ``entity_id``'s device (the resolver's ``discover`` callback)."""
+        return self._companion_sensors(entity_id, "humidity", exclude_non_room)
 
     def _read_chart_humidity(
         self, *, indoor_f: float | None, outdoor_f: float | None, reading: IndoorTempReading | None = None
@@ -6414,10 +6440,6 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         try:
             cfg = self.config
             rh_in, src_in, role, chosen = self._reference_humidity(reading)
-
-            def _discover(eid: str, exclude: bool) -> tuple[str, ...]:
-                return self._companion_sensors(eid, "humidity", exclude)
-
             self._note_humidity_source(role, src_in, rh_in, chosen)
             # Issue #1459: keep the OTHER indoor room's device lookup warm too (event loop, in-memory registry), so
             # get_chart_data()'s capabilities block (executor thread, cache-only) can tell a bedroom humidity sensor
@@ -6425,7 +6447,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             other = ROLE_INDOOR_DAY if role == ROLE_INDOOR_SLEEP else ROLE_INDOOR_SLEEP
             for eid in self._humidity_role_inputs(other)[1]:
                 if isinstance(eid, str) and eid:
-                    _discover(eid, True)
+                    self._humidity_companions(eid, True)
             if rh_in is not None:
                 out["humidity"] = rh_in
                 fl_in = feels_like_f(indoor_f, rh_in)
@@ -6440,7 +6462,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
                 chosen=chosen_out,
                 source_entities=sources_out,
                 fallback_entity=fallback_out,
-                discover=_discover,
+                discover=self._humidity_companions,
             )
             self._note_humidity_source(ROLE_OUTDOOR, src_out, rh_out, chosen_out)
             if rh_out is not None:
@@ -6579,6 +6601,23 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             return None
         bed = self._read_chart_indoor_sensors().get(sleep_entity)
         return float(primary_f) - float(bed) if isinstance(bed, int | float) else None
+
+    def _night_room_gap_f(self, primary_f: float | None) -> float | None:
+        """The thermostat's room minus the room that steers the night (fork Dunky13#1), internal F; None without one.
+
+        The room twin of ``_sleep_gap_f`` (a configured sleep sensor always wins the night, so then this is None).
+        Pure read."""
+        view = self.preference_view()
+        if view is None or not isinstance(primary_f, int | float):
+            return None
+        night = part_reference(PART_NIGHT, self.config, view.learned_rooms)
+        if night.context != REMOTE_CONTEXT_ROOM or night.entity is None:
+            return None
+        unit = self.config.get("temp_unit", "fahrenheit")
+        room_f, _reason = resolve_remote_indoor_temp_f(
+            hass=self.hass, unit=unit, entity_id=night.entity, now=dt_util.utcnow()
+        )
+        return None if room_f is None else float(primary_f) - room_f
 
     def _read_chart_indoor_sensors(self) -> dict[str, float | None]:
         """Every configured indoor sensor's reading for chart_log's ``indoor_sensors`` (Issue #1230 R0).
@@ -6839,6 +6878,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         # rows are skipped for the primary node.
         aliases = tuple(c for c in (self.config.get("climate_entity"),) if c)
         cfg = dict(self.config)
+        # v4 models the bedroom node only (fork Dunky13#1): a steering room is not a v4 node (spec phase 3 notes).
         in_sleep = (lambda dt, _cfg=cfg: _in_sleep_window(dt, _cfg)) if cfg.get("sleep_indoor_temp_entity") else None
         # Issue #1432: the separate sleep sensor (None: none configured, or it is the primary): the per-room model
         # needs it modelled before it is used, so sleep hours are never forecast from the thermostat's room.
@@ -7414,6 +7454,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             house_stepper=prediction_engines.control_stepper(self, self.config),
             sleep_sensor_label="bedroom sensor" if sleep_entity else None,
             sleep_gap_f=self._sleep_gap_f(reading.primary_value, sleep_entity),
+            night_room_gap_f=self._night_room_gap_f(reading.primary_value),
             primary_sensor_label="thermostat",
             band_at=band_resolver_for(c, self.config, self.preference_view()),
             occupancy_mode=self._occupancy_mode,
@@ -7553,6 +7594,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         caps = self.automation_engine._get_thermostat_capabilities()
         unknown = not (caps.supports_heat or caps.supports_cool)
         model_thermal = snap.thermal_model or {}
+        # The night strategy is v4 advice for the bedroom node; a steering room is not a v4 node (fork Dunky13#1).
         sleep_entity = self.config.get("sleep_indoor_temp_entity")
         inp = v4_shadow.night_inputs(
             model_dict=model_dict,
@@ -11466,7 +11508,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             offsets=learning.preference_offsets(),
             max_offset_f=float(config.get(CONF_PREFERENCE_MAX_OFFSET_F, DEFAULT_PREFERENCE_MAX_OFFSET_F)),
             # Phase 3: the humidity band in force (``_refresh_preference_context``) and the learned rooms, snapshots.
-            band=getattr(self, "_preference_band", None) or BAND_NONE,
+            band=self._preference_band or BAND_NONE,
             learned_rooms=learning.learned_room_map(),
             room_names={room: self._indoor_friendly_name(room) for room in selected_rooms(config)},
         )
@@ -11475,14 +11517,17 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         """``{part: reference entity}`` under the current config (``view`` None = the feature is off)."""
         return references_by_part(self.config, None if view is None else view.learned_rooms)
 
-    def _room_readings_f(self, now: datetime) -> dict[str, float]:
-        """Each selected room's usable reading (the steering checks), keyed by entity id."""
+    def _room_readings_f(self, reading: IndoorTempReading) -> dict[str, float]:
+        """Each selected room's usable reading (the steering checks) and the thermostat's, keyed by entity id."""
         unit = self.config.get("temp_unit", "fahrenheit")
+        now = dt_util.utcnow()
         out: dict[str, float] = {}
         for entity in selected_rooms(self.config):
             value, _reason = resolve_remote_indoor_temp_f(hass=self.hass, unit=unit, entity_id=entity, now=now)
             if value is not None:
                 out[entity] = round(value, 2)
+        if reading.primary_value is not None:
+            out[REF_THERMOSTAT] = round(float(reading.primary_value), 2)
         return out
 
     def _refresh_preference_context(self, reading: IndoorTempReading | None = None) -> float | None:
@@ -11491,15 +11536,16 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         The band changes only past the 2 % RH hysteresis (``preference_learning.humidity_band``). Event loop.
         """
         rh = self._reference_humidity(reading)[0]
-        band = humidity_band(rh, getattr(self, "_preference_band", None))
-        if band != getattr(self, "_preference_band", None):
-            _LOGGER.info("Preference humidity band now %s (reference humidity %s%%)", band, rh)
+        band = humidity_band(rh, self._preference_band)
+        if band != self._preference_band:
+            _LOGGER.info("Preference humidity band changed: old=%s new=%s rh=%s", self._preference_band, band, rh)
         self._preference_band = band
         self._preference_rh = rh
         return rh
 
     def _sample_preference_background(self, view: PreferenceView | None) -> None:
-        """30-minute refresh: the band in force, and one background sample per room (and the thermostat) per part."""
+        """Each refresh: the band in force; every 30 minutes per part of day, one background sample per room and the
+        thermostat (a refresh requested between the scheduled ones must not add samples)."""
         if view is None:
             return
         try:
@@ -11508,18 +11554,20 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             if not selected_rooms(self.config):
                 return
             now = dt_util.now()
-            readings = self._room_readings_f(dt_util.utcnow())
-            if reading.primary_value is not None:
-                readings[REF_THERMOSTAT] = round(float(reading.primary_value), 2)
             part = part_of_day(
                 now,
                 self.config.get("wake_time"),
                 self.config.get("sleep_time"),
                 in_sleep_window=_in_sleep_window(now, self.config),
             )[0]
-            self.learning.sample_room_background(part, readings)
+            last = self._preference_bg_sampled.get(part)
+            # A minute of slack: the next scheduled refresh may run a moment under 30 minutes after this one.
+            if last is not None and now - last < BACKGROUND_INTERVAL - timedelta(minutes=1):
+                return
+            self._preference_bg_sampled[part] = now
+            self.learning.sample_room_background(part, self._room_readings_f(reading))
         except Exception:
-            _LOGGER.error("Preference background sample failed; continuing the update cycle", exc_info=True)
+            _LOGGER.error("Preference background sample failed, update cycle continues", exc_info=True)
 
     def _reconcile_preference_references(self) -> bool:
         """Setup / options reload: warn about stale room pins and record each part's reference (fork Dunky13#1).
@@ -11535,9 +11583,14 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             pin = self.config.get(key, ROOM_PIN_AUTO)
             if pin not in (ROOM_PIN_AUTO, ROOM_PIN_THERMOSTAT) and pin not in rooms:
                 _LOGGER.warning(
-                    "Preference room pin for the %s is %s, which is not a selected room sensor; using auto", part, pin
+                    "Preference room pin ignored, using auto: part=%s pin=%s reason=not_a_selected_room", part, pin
                 )
-        self.learning.reconcile_references(self._preference_refs(view), dt_util.now().date())
+        self.learning.reconcile_references(
+            self._preference_refs(view),
+            dt_util.now().date(),
+            legacy=references_by_part(self.config, None),
+            rooms=rooms,
+        )
         return True
 
     def _preference_offset_at(self, classification: DayClassification, at: datetime, *, in_sleep_window: bool) -> float:
@@ -11590,13 +11643,13 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         if view is None:
             return False
         c = self._current_classification
+        gate = heat_gate_reasons(
+            getattr(new_state, "state", None),
+            (getattr(st, "attributes", {}).get("preset_mode") for st in (old_state, new_state)),
+        )
         reasons = {
             "automation off": not self._automation_enabled,
-            "mode not heat": getattr(new_state, "state", None) != "heat",
-            "eco preset": any(
-                str(getattr(st, "attributes", {}).get("preset_mode", "")).lower() == "eco"
-                for st in (old_state, new_state)
-            ),
+            **dict.fromkeys(gate, True),
             "not home or guest": self._occupancy_mode not in (OCCUPANCY_HOME, OCCUPANCY_GUEST),
             "no classification": c is None,
             "no usable setpoint": old_f is None or new_f is None,
@@ -11619,18 +11672,10 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         view = self.preference_view() or view  # the band may just have changed
         bucket = view.offset_at(now, str(c.day_type), self.config, in_sleep_window=asleep)[1]
         remote_f = self._applied_remote_offset_f()
-        rooms = self._room_readings_f(dt_util.utcnow())
-        if reading.primary_value is not None:
-            rooms[REF_THERMOSTAT] = round(float(reading.primary_value), 2)
-        context = {
-            "ref": steering_reference(
-                now, self.config, in_sleep_window=asleep, learned_rooms=view.learned_rooms
-            ).entity,
-            "band": view.band,
-            "rooms": rooms,
-        }
-        if rh is not None:
-            context["rh"] = round(float(rh), 1)
+        # The reference actually used at open: the remote sensor whose reading steered (sleep sensor or room), else the
+        # thermostat, also when the planned room's reading was unusable.
+        ref = reading.source_entity if reading.remote_context is not None else None
+        context = episode_context(ref, view.band, self._room_readings_f(reading), rh)
         changed = self.learning.record_preference_change(
             at=now,
             old_f=float(old_f),
@@ -11672,8 +11717,8 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
                 now.date(),
                 max_offset_f=float(self.config.get(CONF_PREFERENCE_MAX_OFFSET_F, DEFAULT_PREFERENCE_MAX_OFFSET_F)),
                 step_f=float(self.config.get(CONF_PREFERENCE_WEEKLY_STEP_F, DEFAULT_PREFERENCE_WEEKLY_STEP_F)),
-                rooms=selected_rooms(self.config),
                 unit=self.config.get("temp_unit", "fahrenheit"),
+                rooms=selected_rooms(self.config),
                 references=lambda learned: references_by_part(self.config, learned),
             )
             return closed or due is not None
@@ -11691,15 +11736,18 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         """
         view = self.preference_view()
         if view is None:
-            _LOGGER.info("Preference history backfill skipped: preference learning is off")
+            _LOGGER.info("Preference history backfill skipped: reason=preferences_off")
             return None
         from homeassistant.components.recorder import get_instance, history  # recorder is an after_dependency
 
-        cfg = self.config
+        # Thread safety: the executor job below reads only this snapshot, never live coordinator state.
+        cfg = copy.deepcopy(dict(self.config))
+        tz = dt_util.now().tzinfo or UTC
+        live_since = self.learning.preference_live_since(tz)  # history stops where live recording took over
         unit = cfg.get("temp_unit", "fahrenheit")
         climate = cfg["climate_entity"]
         rooms = selected_rooms(cfg)
-        rh_source = self._reference_humidity(IndoorTempReading(value=None, source_entity=None, primary_value=None))[1]
+        rh_source = self._role_humidity(ROLE_INDOOR_DAY)[1]  # the thermostat room's source: history had no room
         rh_entity, _sep, rh_attr = (rh_source or "").partition("#")
         outdoor_sensor = (
             cfg.get("outdoor_temp_entity")
@@ -11710,7 +11758,13 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         entities = sorted({e for e in (climate, *rooms, rh_entity, outdoor) if e})
         end = dt_util.utcnow()
         start = end - timedelta(days=days)
-        _LOGGER.info("Preference history backfill started: days=%d entities=%s humidity=%s", days, entities, rh_source)
+        _LOGGER.info(
+            "Preference history backfill started: days=%d entities=%s humidity=%s live_since=%s",
+            days,
+            entities,
+            rh_source,
+            live_since,
+        )
         raw = await get_instance(self.hass).async_add_executor_job(
             functools.partial(
                 history.get_significant_states, self.hass, start, end, entities, significant_changes_only=False
@@ -11735,11 +11789,13 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
                 else [],
                 start=start,
                 end=end,
-                tz=dt_util.now().tzinfo or UTC,
+                tz=tz,
                 config=cfg,
                 classify=lambda snapshot: classify_day(snapshot, **classify_kwargs),
                 base_floor=_base_floor,
+                asleep=lambda local: _in_sleep_window(local, cfg),
                 max_offset_f=float(cfg.get(CONF_PREFERENCE_MAX_OFFSET_F, DEFAULT_PREFERENCE_MAX_OFFSET_F)),
+                live_since=live_since,
             )
 
         seed = await self._executor_job(_build)
@@ -11758,6 +11814,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             today=dt_util.now().date(),
             refs=self._preference_refs(view),
             max_offset_f=view.max_offset_f,
+            rooms=selected_rooms(self.config),
         )
         if result is not None:
             await self._executor_job(self.learning.save_state)
@@ -11766,7 +11823,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
 
     async def async_discard_preference_seed(self) -> bool:
         """Delete the history seed; True when there was one."""
-        if not self.learning.discard_preference_seed(dt_util.now().date()):
+        if not self.learning.discard_preference_seed(dt_util.now().date(), rooms=selected_rooms(self.config)):
             return False
         await self._executor_job(self.learning.save_state)
         return True
@@ -11850,7 +11907,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
                         "bucket": key,
                         **row,
                         # The history was steered by the thermostat: a part steered by a room now cannot take it.
-                        "disabled": refs.get(key.split("|")[1]) is not None,
+                        "disabled": seed_row_blocked(key, refs),
                     }
                     for key, row in sorted((seed.get("summary") or {}).items())
                 ],
@@ -11868,7 +11925,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
                 "remote_offset_f": self._applied_remote_offset_f(),
             },
             "band": view.band,
-            "rh": getattr(self, "_preference_rh", None),
+            "rh": self._preference_rh,
             "rooms": [{"entity": e, "name": self._indoor_friendly_name(e)} for e in selected_rooms(cfg)],
             "parts": parts,
             "seed": seed,
@@ -19746,6 +19803,8 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
                 start,
                 end if historical else max(end, now.timestamp()) + ahead_s,
                 tz=now.tzinfo or datetime.now().astimezone().tzinfo,
+                # Recorded rows break on every band_sensor change (rooms included); the predicted line follows the
+                # sleep node only, so future breaks stay sleep-only (fork Dunky13#1).
                 sleep_sensor=self.config.get("sleep_indoor_temp_entity"),
                 sleep_time=self.config.get("sleep_time"),
                 wake_time=self.config.get("wake_time"),

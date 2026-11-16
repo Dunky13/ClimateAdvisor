@@ -885,6 +885,9 @@
     },
     "preference_learning_off": {
       "message": "تعلّم التفضيلات متوقف لهذه المنطقة. شغّله أولاً في خيارات Climate Advisor."
+    },
+    "preference_seed_invalid": {
+      "message": "لم يُنتج تحليل السجل اقتراحاً صالحاً؛ لم يُحفظ شيء. التفاصيل في سجل الأحداث."
     }
   }
 }

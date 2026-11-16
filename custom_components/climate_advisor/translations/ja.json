@@ -885,6 +885,9 @@
     },
     "preference_learning_off": {
       "message": "このゾーンでは好みの学習がオフです。まず Climate Advisor のオプションでオンにしてください。"
+    },
+    "preference_seed_invalid": {
+      "message": "履歴の分析から有効な提案が得られなかったため、何も保存されませんでした。詳細はログを確認してください。"
     }
   }
 }

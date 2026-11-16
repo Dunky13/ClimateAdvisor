@@ -136,7 +136,8 @@ def test_a_stale_pin_reads_as_auto_with_a_warning(caplog):
     n = _night("room", room_pin_morning="sensor.gone")
     caplog.set_level("WARNING")
     n.co._reconcile_preference_references()
-    assert "not a selected room sensor; using auto" in caplog.text
+    expected = "Preference room pin ignored, using auto: part=morning pin=sensor.gone reason=not_a_selected_room"
+    assert expected in caplog.text
 
 
 # ── the resolver on its own ─────────────────────────────────────────────────────────────────────────────────────────
@@ -181,6 +182,14 @@ def test_resolver_uses_the_room_while_heating():
     )
 
 
+def test_resolver_logs_lead_with_the_outcome_then_key_values(caplog):
+    caplog.set_level("DEBUG", logger="custom_components.climate_advisor.indoor_temp")
+    _resolve(*_hass("heat", ["off", "heat"]))
+    assert f"Steering room sensor used: entity={BEDROOM} value_f=64.0" in caplog.text
+    _resolve(*_hass("heat", ["off", "heat"], room_value="unavailable"))
+    assert f"Remote indoor sensor unusable: entity={BEDROOM} reason=" in caplog.text
+
+
 def test_resolver_heat_only_thermostat_off_still_uses_the_room():
     assert _resolve(*_hass("off", ["off", "heat"])).remote_context == REMOTE_CONTEXT_ROOM
 
@@ -197,3 +206,36 @@ def test_resolver_falls_back_on_a_stale_or_broken_room():
     hass, now = _hass("heat", ["off", "heat"], room_value="unavailable")
     r = _resolve(hass, now)
     assert (r.value, r.remote_context, r.room_reason) == (68.0, None, "unavailable")
+
+
+# ── the plan: a room that steers the night moves the heat edge only (D5) ────────────────────────────────────────────
+
+
+def test_the_plan_lets_a_night_room_raise_the_heat_edge_but_never_lower_the_cool_edge():
+    import dataclasses
+
+    from custom_components.climate_advisor import operation_timeline as ot
+    from tests.test_v4_sleep_loop_1553 import _seg
+    from tests.timeline_fixtures import make_snapshot
+
+    def edges(gap, sleep_gap=None, label=None, asleep=True):
+        snap = make_snapshot("cold", sleep_sensor=label)
+        snap = dataclasses.replace(snap, night_room_gap_f=gap, sleep_gap_f=sleep_gap)
+        return ot._sleep_loop_edges(snap, _seg(asleep))
+
+    assert edges(2.3) == pytest.approx((68.3, 72.0))
+    assert edges(-1.5) == (66.0, 72.0)  # a warmer room never lowers the cooling ceiling
+    assert edges(2.3, asleep=False) == (66.0, 72.0)
+    assert edges(None) == (66.0, 72.0)
+    # a configured sleep sensor always wins the night
+    assert edges(2.3, sleep_gap=-1.5, label="bedroom sensor") == pytest.approx((66.0, 70.5))
+
+
+def test_the_coordinator_hands_the_plan_the_night_room_gap_only_when_a_room_steers_the_night():
+    room, sleep = _night("room"), _night("sleep")
+    room.set_bedroom(64.0)
+    with room.sch.installed():
+        assert room.co._night_room_gap_f(68.0) == pytest.approx(4.0)
+        assert room.co._night_room_gap_f(None) is None
+    with sleep.sch.installed():
+        assert sleep.co._night_room_gap_f(68.0) is None  # the sleep sensor's own gap feeds the plan

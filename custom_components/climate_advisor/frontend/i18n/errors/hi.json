@@ -32,6 +32,8 @@
   "errors.preference_seed_action": "action 'accept' या 'discard' होना चाहिए",
   "errors.preference_seed_built": "इतिहास का विश्लेषण हुआ ({days} दिन)। निवासियों के मिले बदलाव: {observations}। हटाए गए शेड्यूल बदलाव: {schedule}।",
   "errors.preference_seed_discarded": "इतिहास का प्रस्ताव हटा दिया गया।",
+  "errors.preference_seed_failed": "इतिहास से मिला प्रस्ताव संसाधित नहीं हो सका ({error})।",
+  "errors.preference_seed_invalid": "इतिहास के विश्लेषण से कोई उपयोगी प्रस्ताव नहीं मिला; कुछ भी सहेजा नहीं गया। विवरण लॉग में है।",
   "errors.preference_seed_none": "समीक्षा के लिए इतिहास से कोई प्रस्ताव नहीं है।",
   "errors.preferences_off": "पसंद सीखना बंद है।",
   "errors.preferences_reset": "सीखी हुई प्राथमिकताएँ मिटा दी गईं।",

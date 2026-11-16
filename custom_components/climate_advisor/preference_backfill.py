@@ -20,15 +20,18 @@ from typing import Any
 from .classifier import DayClassification, ForecastSnapshot
 from .humidity_sources import valid_rh
 from .preference_learning import (
+    BACKGROUND_INTERVAL,
     BACKGROUND_RESERVOIR,
     BAND_NONE,
+    EPISODE_GAP,
     REF_THERMOSTAT,
     SOURCE_HISTORY,
     bucket_key,
     close_episode,
+    episode_context,
     extend_episode,
+    heat_gate_reasons,
     humidity_band,
-    in_sleep_window,
     near_schedule_edge,
     part_of_day,
     seed_offsets,
@@ -40,7 +43,6 @@ SCHEDULE_WINDOW_MIN = 10  # the same clock time: within 10 minutes (wrapping mid
 SCHEDULE_MIN_SHARE = 0.4  # of the days the history covers
 SCHEDULE_MIN_DAYS = 4
 ROOM_MAX_AGE = timedelta(minutes=30)
-BACKGROUND_INTERVAL = timedelta(minutes=30)
 _DAY_MIN = 24 * 60
 
 Series = list[tuple[datetime, float]]
@@ -117,8 +119,7 @@ def setpoint_changes(rows: list[ClimateRow]) -> list[SetpointChange]:
             and prev.setpoint_f is not None
             and row.setpoint_f is not None
             and abs(row.setpoint_f - prev.setpoint_f) > 1e-6
-            and row.mode == "heat"
-            and "eco" not in (str(prev.preset or "").lower(), str(row.preset or "").lower())
+            and not heat_gate_reasons(row.mode, (prev.preset, row.preset))
         ):
             out.append(SetpointChange(row.at, prev.setpoint_f, row.setpoint_f, row.user_id))
         prev = row
@@ -195,10 +196,12 @@ def background_samples(
     end: datetime,
     tz: tzinfo,
     config: Mapping[str, Any],
+    asleep: Callable[[datetime], bool],
 ) -> dict[str, dict[str, list[float]]]:
     """``{part: {entity: [temp_f, ...]}}``: each entity's reading every 30 minutes, newest 200 per part.
 
-    The same sampling the live 30-minute refresh does, replayed over the history window.
+    The same sampling the live 30-minute refresh does, replayed over the history window. ``asleep(local)`` is the
+    sleep-window test (the caller's ``automation._in_sleep_window`` on a config snapshot).
     """
     wake, sleep = config.get("wake_time"), config.get("sleep_time")
     lookups = {entity: _Lookup(series) for entity, series in rooms.items()}
@@ -206,7 +209,7 @@ def background_samples(
     at = start
     while at <= end:
         loc = at.astimezone(tz)
-        part, _day = part_of_day(loc, wake, sleep, in_sleep_window=in_sleep_window(loc, sleep, wake))
+        part, _day = part_of_day(loc, wake, sleep, in_sleep_window=asleep(loc))
         for entity, lookup in lookups.items():
             value = lookup.at(at, ROOM_MAX_AGE)
             if value is not None:
@@ -227,9 +230,19 @@ def build_seed(
     config: Mapping[str, Any],
     classify: Callable[[ForecastSnapshot], DayClassification],
     base_floor: Callable[[datetime, DayClassification, bool], float],
+    asleep: Callable[[datetime], bool],
     max_offset_f: float,
+    live_since: datetime | None = None,
 ) -> dict[str, Any]:
     """The ``preference_seed`` for a recorder window (see the spec's steps 2 to 6).
+
+    A change in the sleep window while a sleep sensor is configured is left out (``sleep_sensor`` count): that sensor's
+    remote offset moved the setpoint the thermostat reported, and the recorder does not keep the offset, so the change
+    has no known reference frame.
+
+    ``live_since`` (``preference_learning.live_since``) is where live recording took over: an episode that ends at or
+    after 15 minutes before it is live recording's own (it would have joined that episode) and is left out, so no
+    raise counts twice.
 
     ``classify`` turns a day's outdoor high/low into its classification (the coordinator's ``classify_day`` thresholds)
     and ``base_floor(local_at, classification, asleep)`` is today's configured heat floor without any learned offset.
@@ -269,11 +282,26 @@ def build_seed(
         return classifications.get(day)
 
     observations: list[dict] = []
-    no_outdoor = 0
+    no_outdoor = live = sleep_sensor = 0
+    sleep_steered = bool(config.get("sleep_indoor_temp_entity"))
+    overlap = None if live_since is None else live_since - EPISODE_GAP
+
+    def keep(ep: dict, closed: dict | None) -> None:
+        nonlocal live
+        if closed is None:
+            return
+        if overlap is not None and datetime.fromisoformat(ep["last"]) >= overlap:
+            live += 1
+            return
+        observations.append({**closed, "source": SOURCE_HISTORY})
+
     episode: dict | None = None
     for change in kept:
         loc = change.at.astimezone(tz)
-        asleep = in_sleep_window(loc, sleep, wake)
+        in_sleep = asleep(loc)
+        if in_sleep and sleep_steered:
+            sleep_sensor += 1
+            continue
         c = classification_for(loc.date())
         if c is None:
             no_outdoor += 1
@@ -284,26 +312,27 @@ def build_seed(
         room_temps = {
             e: round(v, 2) for e, lk in temp_lookups.items() if (v := lk.at(change.at, ROOM_MAX_AGE)) is not None
         }
-        base = base_floor(loc, c, asleep)
-        context: dict[str, Any] = {"ref": None, "band": band, "rooms": room_temps}
-        if rh is not None:
-            context["rh"] = round(rh, 1)
+        base = base_floor(loc, c, in_sleep)
+        previous = episode
         # target_f = old: the CA target of the time is unknown, so an undo is a return to where the occupant started.
         episode, closed = extend_episode(
             episode,
             at=loc,
             old_f=change.old_f,
             new_f=change.new_f,
-            bucket=bucket_key(loc, str(c.day_type), wake, sleep, in_sleep_window=asleep, band=band),
+            bucket=bucket_key(loc, str(c.day_type), wake, sleep, in_sleep_window=in_sleep, band=band),
             base_f=base,
             target_f=change.old_f,
             excluded=near_schedule_edge(loc, wake, sleep),
-            context=context,
+            # The history has no remote-sensor offset (it was steered by the thermostat: ref null), so the reported
+            # setpoint is already the comfort-target frame.
+            remote_f=0.0,
+            context=episode_context(None, band, room_temps, rh),
         )
-        if closed is not None:
-            observations.append({**closed, "source": SOURCE_HISTORY})
-    if episode is not None and (last := close_episode(episode)) is not None:
-        observations.append({**last, "source": SOURCE_HISTORY})
+        if closed is not None and previous is not None:
+            keep(previous, closed)
+    if episode is not None:
+        keep(episode, close_episode(episode))
 
     return {
         "created": end.isoformat(),
@@ -312,9 +341,11 @@ def build_seed(
             "changes": len(changes),
             "schedule": len(changes) - len(kept),
             "no_outdoor": no_outdoor,
+            "live": live,
+            "sleep_sensor": sleep_sensor,
             "observations": len(observations),
         },
         "observations": observations,
         "summary": seed_offsets(observations, max_offset_f=max_offset_f),
-        "background": background_samples(temps, start=first, end=end, tz=tz, config=config),
+        "background": background_samples(temps, start=first, end=end, tz=tz, config=config, asleep=asleep),
     }

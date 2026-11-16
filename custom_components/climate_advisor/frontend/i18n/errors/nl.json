@@ -32,6 +32,8 @@
   "errors.preference_seed_action": "action moet 'accept' of 'discard' zijn",
   "errors.preference_seed_built": "Geschiedenis geanalyseerd ({days} dagen). Gevonden wijzigingen van bewoners: {observations}. Verwijderde schemawijzigingen: {schedule}.",
   "errors.preference_seed_discarded": "Voorstel uit de geschiedenis verworpen.",
+  "errors.preference_seed_failed": "Het voorstel uit de geschiedenis kon niet worden verwerkt ({error}).",
+  "errors.preference_seed_invalid": "De analyse van de geschiedenis gaf geen bruikbaar voorstel; er is niets opgeslagen. De details staan in het logboek.",
   "errors.preference_seed_none": "Er is geen voorstel uit de geschiedenis om te beoordelen.",
   "errors.preferences_off": "Voorkeuren leren staat uit.",
   "errors.preferences_reset": "Geleerde voorkeuren gewist.",

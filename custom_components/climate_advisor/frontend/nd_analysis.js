@@ -374,15 +374,19 @@
   function th(keys) {
     return '<thead><tr>' + keys.map(function (k) { return '<th scope="col">' + esc(T(k)) + '</th>'; }).join('') + '</tr></thead>';
   }
-  // Per part of the day: where the comfort target is measured, why, and every candidate room's spread ratio and samples.
+  // Per part of the day: where the comfort target is measured, why, and every candidate's spread ratio ('—' until it
+  // has enough samples) and raise samples. Shown with rooms selected or any other reference (the sleep sensor at night).
   function prefReferences(P) {
-    var names = {};
-    (P.rooms || []).forEach(function (r) { names[r.entity] = r.name || r.entity; });
-    if (!(P.rooms || []).length) return '';
-    var rows = (P.parts || []).map(function (r) {
-      var cands = Object.keys(r.ratios || {}).map(function (e) {
+    var names = {}, rooms = (P.rooms || []).map(function (r) { names[r.entity] = r.name || r.entity; return r.entity; });
+    var parts = P.parts || [];
+    if (!rooms.length && !parts.some(function (r) { return r.entity; })) return '';
+    var rows = parts.map(function (r) {
+      var ratios = r.ratios || {}, counts = r.counts || {}, seen = {};
+      var cands = rooms.concat(['thermostat'], Object.keys(ratios), Object.keys(counts)).filter(function (e) {
+        return seen[e] ? false : (seen[e] = true);
+      }).map(function (e) {
         var whole = (r.whole || []).indexOf(e) >= 0 ? ' ' + T('pref.whole') : '';
-        return (e === 'thermostat' ? T('pref.thermostat') : names[e] || e) + ' ' + nf(r.ratios[e], 2) + ' (' + ((r.counts || {})[e] || 0) + ')' + whole;
+        return (e === 'thermostat' ? T('pref.thermostat') : names[e] || e) + ' ' + (ratios[e] == null ? '—' : nf(ratios[e], 2)) + ' (' + (counts[e] || 0) + ')' + whole;
       }).join(', ');
       return '<tr><td>' + esc(T(PREF_PART[r.part])) + '</td><td>' + esc(r.entity ? r.name || r.entity : T('pref.thermostat')) + '</td><td>' +
         esc(T(PREF_SOURCE[r.source] || 'pref.source.thermostat')) + '</td><td>' + esc(cands || '—') + '</td></tr>';

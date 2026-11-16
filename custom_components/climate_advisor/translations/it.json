@@ -885,6 +885,9 @@
     },
     "preference_learning_off": {
       "message": "L’apprendimento delle preferenze è disattivato per questa zona. Attivalo prima nelle opzioni di Climate Advisor."
+    },
+    "preference_seed_invalid": {
+      "message": "L’analisi della cronologia non ha prodotto una proposta valida; non è stato salvato nulla. I dettagli sono nel log."
     }
   }
 }

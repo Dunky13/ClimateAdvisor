@@ -885,6 +885,9 @@
     },
     "preference_learning_off": {
       "message": "Preference learning is off for this zone. Turn it on in the Climate Advisor options first."
+    },
+    "preference_seed_invalid": {
+      "message": "The history analysis gave no usable proposal; nothing was stored. The log has the details."
     }
   }
 }

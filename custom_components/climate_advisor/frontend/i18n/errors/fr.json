@@ -32,6 +32,8 @@
   "errors.preference_seed_action": "action doit être « accept » ou « discard »",
   "errors.preference_seed_built": "Historique analysé ({days} jours). Changements des occupants trouvés : {observations}. Changements du programme retirés : {schedule}.",
   "errors.preference_seed_discarded": "Proposition issue de l’historique abandonnée.",
+  "errors.preference_seed_failed": "Impossible de traiter la proposition issue de l'historique ({error}).",
+  "errors.preference_seed_invalid": "L'analyse de l'historique n'a donné aucune proposition exploitable ; rien n'a été enregistré. Les détails figurent dans le journal.",
   "errors.preference_seed_none": "Aucune proposition issue de l’historique à examiner.",
   "errors.preferences_off": "L’apprentissage des préférences est désactivé.",
   "errors.preferences_reset": "Préférences apprises effacées.",

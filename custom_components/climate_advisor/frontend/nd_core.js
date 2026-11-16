@@ -176,7 +176,8 @@
     }
     if (!resp.ok) {
       var msg = 'HTTP ' + resp.status, b = null;
-      try { b = await resp.json(); if (b && b.message) msg = b.message; } catch (e) { /* ignore */ }
+      // a coded error body (_error_body) carries its sentence in `error`/`error_msg`, not `message`
+      try { b = await resp.json(); msg = ND.text(b, 'message') || ND.text(b, 'error') || msg; } catch (e) { /* ignore */ }
       var err = new Error(msg); err.status = resp.status; err.body = b; // callers tell 'no plan yet' (503) from a failure
       throw err;
     }

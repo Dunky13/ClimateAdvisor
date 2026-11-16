@@ -10,15 +10,18 @@ import asyncio
 import threading
 import types
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
+from custom_components.climate_advisor import coordinator as coord_mod
 from custom_components.climate_advisor.api import (
     ClimateAdvisorBackfillPreferencesView,
     ClimateAdvisorPreferenceSeedView,
 )
 from custom_components.climate_advisor.const import DOMAIN
+from custom_components.climate_advisor.learning import PreferenceSeedInvalid
 from custom_components.climate_advisor.preference_backfill import climate_rows, humidity_series, temperature_series
 from tools.sim_harness._loop import run_coro
 from tools.sim_harness.build_coordinator import build_headless_coordinator
@@ -115,7 +118,7 @@ def test_backfill_reads_the_recorder_off_the_event_loop_and_stores_a_seed(record
     assert call["significant_changes_only"] is False
     assert set(call["entities"]) == {CLIMATE, BEDROOM, WEATHER}
     assert call["end"] - call["start"] == timedelta(days=7)
-    seed = co.learning.preference_seed()
+    seed = co.learning._state.preference_seed
     assert seed is not None and seed["counts"] == result["counts"]
     # Six raises plus five 08:00 schedule lowers (the first row has no change before it); the schedule is removed.
     assert (result["counts"]["changes"], result["counts"]["schedule"], result["counts"]["observations"]) == (11, 5, 6)
@@ -123,6 +126,50 @@ def test_backfill_reads_the_recorder_off_the_event_loop_and_stores_a_seed(record
     assert all(BEDROOM in o["rooms"] and "thermostat" in o["rooms"] for o in seed["observations"])
     assert seed["summary"], "the evening raises make a bucket row"
     assert co.learning.preference_offsets() == {}, "nothing applies before Accept"
+
+
+def test_backfill_analyses_a_config_snapshot(recorder, monkeypatch):
+    # Thread safety: the analysis runs on an executor and must not read live coordinator state (config may change).
+    co, sch = _coordinator()
+    seen = {}
+    real = coord_mod.build_seed
+
+    def spy(*args, **kwargs):
+        seen.update(kwargs)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(coord_mod, "build_seed", spy)
+    _backfill(co, sch)  # the headless harness runs executor jobs inline; the snapshot is what makes them safe
+    assert seen["config"] == co.config and seen["config"] is not co.config
+    assert seen["config"]["room_temp_entities"] is not co.config["room_temp_entities"]
+    assert seen["asleep"](datetime(2026, 11, 16, 23, 0, tzinfo=UTC)) is True  # the snapshot's 22:30 bedtime
+    assert seen["live_since"] is None  # nothing recorded live yet
+
+
+def test_backfill_stops_where_live_recording_took_over(recorder):
+    co, sch = _coordinator()
+    full = _backfill(co, sch)["counts"]
+    since = NOW - timedelta(days=3)
+    co.learning._state.preference_open_episode = {"start": since.isoformat()}
+    cut = _backfill(co, sch)["counts"]
+    assert cut["live"] > 0 and cut["observations"] == full["observations"] - cut["live"]
+    assert all(datetime.fromisoformat(o["start"]) < since for o in co.learning._state.preference_seed["observations"])
+
+
+def test_an_invalid_seed_is_a_visible_failure_and_keeps_the_earlier_seed(recorder, monkeypatch, caplog):
+    co, sch = _coordinator()
+    _backfill(co, sch)
+    earlier = co.learning._state.preference_seed
+    monkeypatch.setattr(coord_mod, "build_seed", lambda *_a, **_k: {"observations": [], "summary": {}, "counts": {}})
+    caplog.clear()
+    with sch.installed():
+        resp = run_coro(ClimateAdvisorBackfillPreferencesView().post(_request(co, {"days": 7})))
+    assert resp.status == 422 and resp.json_data["error_code"] == "preference_seed_invalid"
+    assert co.learning._state.preference_seed is earlier
+    assert "Preference history seed rejected: reason=invalid_frame previous_seed_kept=True" in caplog.text
+    assert "Preference history backfill finished" not in caplog.text
+    with pytest.raises(PreferenceSeedInvalid):
+        _backfill(co, sch)
 
 
 def test_backfill_is_off_with_the_feature(recorder):
@@ -134,20 +181,20 @@ def test_backfill_is_off_with_the_feature(recorder):
 def test_accept_applies_the_offsets_now_within_the_cap_and_discard_deletes(recorder):
     co, sch = _coordinator()
     _backfill(co, sch)
-    seed = co.learning.preference_seed()
-    key = "cool|evening|weekday|-"
+    seed = co.learning._state.preference_seed
+    key = "cool|evening|weekday"  # band "-" only: one row, the three-part key
     assert seed["summary"][key]["offset_f"] == pytest.approx(3.0), "73 F against the 70 F comfort floor"
     co.config["preference_max_offset_f"] = 1.0  # the occupant lowered the cap before accepting
     with sch.installed():
         result = run_coro(co.async_accept_preference_seed([key]))
     assert result["applied"] == [key]
     assert co.learning.preference_offsets()[key] == pytest.approx(1.0)
-    assert co.learning.preference_seed() is None
+    assert co.learning._state.preference_seed is None
     _backfill(co, sch)
     with sch.installed():
         assert run_coro(co.async_discard_preference_seed()) is True
         assert run_coro(co.async_discard_preference_seed()) is False
-    assert co.learning.preference_seed() is None
+    assert co.learning._state.preference_seed is None
 
 
 # ── the dashboard endpoints ─────────────────────────────────────────────────────────────────────────────────────────
@@ -189,6 +236,22 @@ def test_backfill_view_runs_and_reports_counts(recorder):
 def test_seed_view_rejects_bad_bodies(body):
     resp = asyncio.run(ClimateAdvisorPreferenceSeedView().post(_request(MagicMock(), body)))
     assert resp.status == 400
+
+
+def test_seed_view_fails_visibly_when_the_seed_cannot_be_applied(recorder, caplog):
+    co, sch = _coordinator()
+    _backfill(co, sch)
+    co.learning.accept_preference_seed = MagicMock(side_effect=KeyError("offset_f"))
+    with sch.installed():
+        resp = run_coro(ClimateAdvisorPreferenceSeedView().post(_request(co, {"action": "accept"})))
+    assert resp.status == 500
+    assert resp.json_data["error_code"] == "preference_seed_failed"
+    assert resp.json_data["error_msg"]["key"] == "errors.preference_seed_failed"
+    assert "Preference history seed failed: action=accept" in caplog.text
+    # The dashboard's request() turns a coded error body (``error``/``error_msg``) into the toast text, so the
+    # Analysis tab shows this sentence rather than "HTTP 500".
+    core = (Path(__file__).parents[1] / "custom_components/climate_advisor/frontend/nd_core.js").read_text("utf-8")
+    assert "msg = ND.text(b, 'message') || ND.text(b, 'error') || msg;" in core
 
 
 def test_seed_view_reports_a_missing_seed(recorder):
@@ -233,8 +296,23 @@ def test_the_service_backfills_the_named_zone_and_refuses_while_off(recorder):
     recorder.data = {on["climate_entity"]: recorder.data[CLIMATE], WEATHER: recorder.data[WEATHER]}
     with scheduler.installed():
         run_coro(fake_hass.services.async_call(DOMAIN, "backfill_preferences", {"entry_id": on["entry"].entry_id}))
-        assert on["coordinator"].learning.preference_seed() is not None
+        assert on["coordinator"].learning._state.preference_seed is not None
         assert recorder.calls[0]["end"] - recorder.calls[0]["start"] == timedelta(days=30), "the default window"
         with pytest.raises(ServiceValidationError):
             run_coro(fake_hass.services.async_call(DOMAIN, "backfill_preferences", {"entry_id": off["entry"].entry_id}))
-    assert off["coordinator"].learning.preference_seed() is None
+    assert off["coordinator"].learning._state.preference_seed is None
+
+
+def test_the_service_reports_an_invalid_seed(recorder, monkeypatch):
+    from homeassistant.exceptions import HomeAssistantError
+
+    from tools.sim_harness.build_coordinator import build_headless_multi_zone
+
+    zones, fake_hass, scheduler = build_headless_multi_zone(zone_count=1)
+    zone = zones["zone_0"]
+    zone["coordinator"].config.update(CONFIG)
+    recorder.data = {zone["climate_entity"]: recorder.data[CLIMATE], WEATHER: recorder.data[WEATHER]}
+    monkeypatch.setattr(coord_mod, "build_seed", lambda *_a, **_k: {"observations": [], "summary": {}, "counts": {}})
+    with scheduler.installed(), pytest.raises(HomeAssistantError) as err:
+        run_coro(fake_hass.services.async_call(DOMAIN, "backfill_preferences", {"entry_id": zone["entry"].entry_id}))
+    assert err.value.translation_key == "preference_seed_invalid"

@@ -885,6 +885,9 @@
     },
     "preference_learning_off": {
       "message": "A aprendizagem de preferências está desativada para esta zona. Ative-a primeiro nas opções do Climate Advisor."
+    },
+    "preference_seed_invalid": {
+      "message": "A análise do histórico não produziu uma proposta válida; nada foi guardado. Os detalhes estão no registo."
     }
   }
 }

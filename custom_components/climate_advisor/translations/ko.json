@@ -885,6 +885,9 @@
     },
     "preference_learning_off": {
       "message": "이 구역의 선호 학습이 꺼져 있습니다. 먼저 Climate Advisor 옵션에서 켜세요."
+    },
+    "preference_seed_invalid": {
+      "message": "기록 분석에서 유효한 제안이 나오지 않아 아무것도 저장되지 않았습니다. 자세한 내용은 로그를 확인하세요."
     }
   }
 }

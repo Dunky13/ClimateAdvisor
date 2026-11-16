@@ -32,6 +32,8 @@
   "errors.preference_seed_action": "action tem de ser «accept» ou «discard»",
   "errors.preference_seed_built": "Histórico analisado ({days} dias). Alterações dos ocupantes encontradas: {observations}. Alterações do horário removidas: {schedule}.",
   "errors.preference_seed_discarded": "Proposta do histórico descartada.",
+  "errors.preference_seed_failed": "Não foi possível processar a proposta do histórico ({error}).",
+  "errors.preference_seed_invalid": "A análise do histórico não produziu uma proposta válida; nada foi guardado. Os detalhes estão no registo.",
   "errors.preference_seed_none": "Não há nenhuma proposta do histórico para rever.",
   "errors.preferences_off": "A aprendizagem de preferências está desativada.",
   "errors.preferences_reset": "Preferências aprendidas apagadas.",

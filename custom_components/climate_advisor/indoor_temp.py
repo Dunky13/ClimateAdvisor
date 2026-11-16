@@ -244,7 +244,7 @@ def resolve_remote_indoor_temp_f(
     state = hass.states.get(entity_id)
     val_f, reason = read_sensor_state_f(state, unit)
     if reason is not None:
-        _LOGGER.debug("Remote indoor sensor %s unusable: reason=%s", entity_id, reason)
+        _LOGGER.debug("Remote indoor sensor unusable: entity=%s reason=%s", entity_id, reason)
         return None, reason
     checked = _check_plausible(val_f, entity_id)
     if checked is None:
@@ -352,7 +352,7 @@ def resolve_indoor_temp_with_provenance(
         else:
             val_f, room_reason = resolve_remote_indoor_temp_f(hass=hass, unit=unit, entity_id=room_entity, now=now)
             if val_f is not None:
-                _LOGGER.debug("Using steering room sensor entity=%s value=%.1f°F", room_entity, val_f)
+                _LOGGER.debug("Steering room sensor used: entity=%s value_f=%.1f", room_entity, val_f)
                 return IndoorTempReading(
                     val_f,
                     room_entity,

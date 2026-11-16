@@ -885,6 +885,9 @@
     },
     "preference_learning_off": {
       "message": "此区域的偏好学习已关闭。请先在 Climate Advisor 选项中开启。"
+    },
+    "preference_seed_invalid": {
+      "message": "历史分析未得到有效的建议，因此未保存任何内容。详情请查看日志。"
     }
   }
 }

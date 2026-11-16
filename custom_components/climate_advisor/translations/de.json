@@ -885,6 +885,9 @@
     },
     "preference_learning_off": {
       "message": "Das Präferenzlernen ist für diese Zone ausgeschaltet. Schalte es zuerst in den Climate-Advisor-Optionen ein."
+    },
+    "preference_seed_invalid": {
+      "message": "Die Verlaufsanalyse hat keinen brauchbaren Vorschlag ergeben; es wurde nichts gespeichert. Details stehen im Protokoll."
     }
   }
 }

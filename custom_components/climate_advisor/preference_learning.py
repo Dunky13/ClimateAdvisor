@@ -17,9 +17,9 @@ Spec: docs/preference-learning-spec.md.
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta, tzinfo
 from statistics import median
 from typing import Any, NamedTuple
 
@@ -73,6 +73,7 @@ RAISE_WINDOW = 60  # the most recent raise samples of a part of day that are sco
 MIN_RAISE_SAMPLES = 10
 MIN_BACKGROUND_SAMPLES = 10
 BACKGROUND_RESERVOIR = 200
+BACKGROUND_INTERVAL = timedelta(minutes=30)  # one background sample per room per 30-minute slot
 MAD_FLOOR_F = 0.1
 CHOOSE_MAX_RATIO = 0.7
 CHOOSE_MIN_MARGIN = 0.15
@@ -87,6 +88,10 @@ _NOON_MIN = 12 * 60
 _AFTERNOON_END_MIN = 17 * 60
 
 
+def _clamp(value: float, limit: float) -> float:
+    return max(-limit, min(limit, value))
+
+
 def _minutes(value: Any) -> int | None:
     """``"HH:MM"`` / ``"HH:MM:SS"`` as minutes after midnight, else None (unset or malformed)."""
     try:
@@ -94,30 +99,6 @@ def _minutes(value: Any) -> int | None:
         return int(parts[0]) * 60 + int(parts[1])
     except ValueError, IndexError, TypeError:
         return None
-
-
-def in_sleep_window(local: datetime, sleep_time: str | None, wake_time: str | None) -> bool:
-    """True when ``local`` is inside the ``sleep_time`` -> ``wake_time`` ("HH:MM") window.
-
-    Same semantics as ``automation._in_sleep_window`` (this module may not import it: it is hass-free; predictor_v4
-    and preference_backfill use this one): the window
-    wraps midnight when bedtime is after wake time, does not wrap when bedtime is after midnight, equal or
-    malformed times are an empty window. A test pins the two together.
-    """
-    if not sleep_time or not wake_time:
-        return False
-    try:
-        sh, sm = (int(x) for x in str(sleep_time).split(":")[:2])
-        wh, wm = (int(x) for x in str(wake_time).split(":")[:2])
-        now_m = local.hour * 60 + local.minute
-    except ValueError, AttributeError:
-        return False
-    s_m, w_m = sh * 60 + sm, wh * 60 + wm
-    if s_m == w_m:
-        return False
-    if s_m < w_m:
-        return s_m <= now_m < w_m
-    return now_m >= s_m or now_m < w_m
 
 
 def part_of_day(at: datetime, wake_time: Any, sleep_time: Any, *, in_sleep_window: bool) -> tuple[str, date]:
@@ -232,9 +213,20 @@ def base_key(key: str) -> str:
     return "|".join(key.split("|")[:3])
 
 
+def bucket_band(key: str) -> str | None:
+    """A bucket key's humidity band; None for a three-part key (or a malformed one)."""
+    parsed = parse_bucket(key)
+    return None if parsed is None else parsed[3]
+
+
 def with_band(key: str) -> str:
     """A bucket key as a four-part key: a three-part (phase 1) key gets band ``-``."""
-    return key if key.count("|") == 3 else f"{key}|{BAND_NONE}"
+    return key if bucket_band(key) is not None else f"{key}|{BAND_NONE}"
+
+
+def seed_row_blocked(key: str, refs: Mapping[str, str | None]) -> bool:
+    """True when a seed row's part of day is steered by a room now: the history (``ref`` null) is another frame."""
+    return refs.get(bucket_parts(key)[1]) is not None
 
 
 def humidity_band(rh: Any, current: str | None = None) -> str:
@@ -258,6 +250,19 @@ def humidity_band(rh: Any, current: str | None = None) -> str:
     return BAND_NORMAL
 
 
+def stored_offset(offsets: Mapping[str, Any], bucket: str) -> float:
+    """A bucket's stored offset: the four-part key, else its band-agnostic three-part key, else 0 (unclamped).
+
+    ``offsets`` maps a key to the offset or to its stored entry (``{"offset_f": ...}``).
+    """
+    raw = offsets.get(bucket)
+    if raw is None and bucket_band(bucket) is not None:
+        raw = offsets.get(base_key(bucket))
+    if isinstance(raw, Mapping):
+        raw = raw.get("offset_f")
+    return float(raw or 0.0)
+
+
 @dataclass(frozen=True)
 class PreferenceView:
     """What the band resolver needs: the learned offsets and the cap, read-only.
@@ -279,10 +284,7 @@ class PreferenceView:
 
         A four-part key falls back to its band-agnostic three-part key, then 0.
         """
-        raw = self.offsets.get(bucket)
-        if raw is None and bucket.count("|") == 3:
-            raw = self.offsets.get(base_key(bucket))
-        return max(-self.max_offset_f, min(self.max_offset_f, float(raw or 0.0)))
+        return _clamp(stored_offset(self.offsets, bucket), self.max_offset_f)
 
     def offset_at(
         self, at: datetime, day_type: str, config: Mapping[str, Any], *, in_sleep_window: bool
@@ -406,18 +408,17 @@ def mad(values: list[float]) -> float:
 
 
 def is_whole_series(values_f: list[float], unit: str) -> bool:
-    """True when every reading, in the user's unit, is a whole number (a whole-degree sensor), given 5+ readings.
+    """True when every reading (5+) is a whole number in ``unit``, the unit the readings were taken in.
 
-    Readings are stored in degrees F rounded to 2 decimals; a whole Celsius reading is not whole in F, so the test
-    is made in the unit the sensor reports in (the configured unit, as the sensor reads do).
+    The ``indoor_temp._is_whole`` rule applied in the unit a room sensor's state was read in (``temp_unit``: the
+    reader converts every state from it). A sensor's native unit is not in its state: Home Assistant converts a
+    whole-C sensor on a F system to 69.8, 71.6, so it is judged by those F readings (not whole), and a 0.1-C sensor
+    reading 21.1 C (69.98 F) is never mistaken for a whole-F one. The tolerance covers the 0.01 F storage rounding.
     """
     if len(values_f) < 5:
         return False
-    for v in values_f:
-        shown = (v - 32.0) / 1.8 if unit == "celsius" else v
-        if abs(shown - round(shown)) >= 0.02:
-            return False
-    return True
+    native = (lambda v: (v - 32.0) / 1.8) if unit == "celsius" else (lambda v: v)
+    return all(abs(x - round(x)) < 0.01 for x in map(native, values_f))
 
 
 def raise_samples(observations: list[dict], part: str) -> dict[str, list[float]]:
@@ -466,8 +467,32 @@ def score_rooms(
 
 
 def observations_in_frame(observations: list[dict], refs: Mapping[str, str | None]) -> list[dict]:
-    """The observations recorded under the reference their part of day uses now (``ref`` missing reads as None)."""
-    return [o for o in observations if o.get("ref") == refs.get(bucket_parts(o["bucket"])[1])]
+    """The observations recorded under the reference their part of day uses now (``ref`` missing reads as None).
+
+    A ``context_only`` observation (history the user did not accept as offsets) never counts towards an offset.
+    """
+    return [
+        o for o in observations if not o.get("context_only") and o.get("ref") == refs.get(bucket_parts(o["bucket"])[1])
+    ]
+
+
+def heat_gate_reasons(mode: Any, presets: Iterable[Any]) -> list[str]:
+    """Why a setpoint change is not a heating-comfort change: ``[]`` when the mode is heat and no state is in eco.
+
+    The one gate the live recorder and the history backfill share.
+    """
+    reasons = [] if str(mode) == "heat" else ["mode not heat"]
+    if any(str(p or "").lower() == "eco" for p in presets):
+        reasons.append("eco preset")
+    return reasons
+
+
+def episode_context(ref: str | None, band: str, rooms: Mapping[str, float], rh: Any) -> dict[str, Any]:
+    """The phase 3 context an episode captures at open (see ``extend_episode``), ``rh`` rounded to 0.1 %."""
+    context: dict[str, Any] = {"ref": ref, "band": band, "rooms": dict(rooms)}
+    if is_finite_number(rh):
+        context["rh"] = round(float(rh), 1)
+    return context
 
 
 # --------------------------------------------------------------------------------------------------
@@ -546,6 +571,7 @@ def close_episode(episode: dict) -> dict | None:
     obs: dict[str, Any] = {
         "date": last.date().isoformat(),
         "time": f"{last.hour:02d}:{last.minute:02d}",
+        "start": episode["start"],  # the episode's identity: the same change history always gives the same start
         "bucket": episode["bucket"],
         "delta_f": round(float(episode["final_f"]) - float(episode["base_f"]), 2),
     }
@@ -553,6 +579,34 @@ def close_episode(episode: dict) -> dict | None:
         if key in episode and (key != "rooms" or float(episode["final_f"]) > float(episode["old_f"])):
             obs[key] = episode[key]
     return obs
+
+
+def observation_identity(observation: Mapping[str, Any]) -> str:
+    """One episode, whatever its bucket or band: its start, else (an observation from before 0.9.41.2) its close."""
+    start = observation.get("start")
+    return start if isinstance(start, str) else f"{observation.get('date')} {observation.get('time')}"
+
+
+def live_since(
+    observations: Iterable[Mapping[str, Any]], open_episode: Mapping[str, Any] | None, tz: tzinfo
+) -> datetime | None:
+    """The earliest moment live recording holds an episode for (the open one included); None without any.
+
+    A history seed must not count those episodes again. An observation from before 0.9.41.2 has no ``start``; its
+    close (``date`` + ``time`` in ``tz``) stands in, which the seed's 15-minute episode gap covers.
+    """
+    times = [datetime.fromisoformat(open_episode["start"])] if open_episode else []
+    for o in observations:
+        if o.get("source") == SOURCE_HISTORY:
+            continue
+        if is_aware_iso(o.get("start")):
+            times.append(datetime.fromisoformat(o["start"]))
+            continue
+        try:
+            times.append(datetime.combine(date.fromisoformat(o["date"]), time.fromisoformat(o["time"]), tzinfo=tz))
+        except KeyError, TypeError, ValueError:
+            continue
+    return min(times, default=None)
 
 
 def trim_observations(observations: list[dict], today: date) -> list[dict]:
@@ -577,10 +631,6 @@ def update_due(last_update: str | None, today: date) -> bool:
         return True
 
 
-def _clamp(value: float, limit: float) -> float:
-    return max(-limit, min(limit, value))
-
-
 def _sibling(key: str) -> str:
     """The same bucket in the other day class (a four-part key keeps its band)."""
     parts = key.split("|")
@@ -603,10 +653,14 @@ def _level_values(observations: list[dict]) -> dict[str, tuple[str, list[float]]
         by_band.setdefault(key, []).append(delta)
         by_base.setdefault(base_key(key), []).append(delta)
         by_day_type_part.setdefault(_day_type_part(key), []).append(delta)
+    banded = {base_key(k) for k in by_band if bucket_band(k) != BAND_NONE}
+    # A base with only band ``-`` observations: its ``-`` key would mirror the three-part key (same values), so only
+    # the three-part key is kept (the lookup falls back to it); no duplicate row or history record.
+    keys = {k for k in by_band if bucket_band(k) != BAND_NONE or base_key(k) in banded}
     out: dict[str, tuple[str, list[float]]] = {}
-    for key in set(by_band) | set(by_base) | {_sibling(k) for k in by_base}:
+    for key in keys | set(by_base) | {_sibling(k) for k in by_base}:
         candidates: list[tuple[str, list[float]]] = []
-        if key.count("|") == 3:
+        if bucket_band(key) is not None:
             candidates.append((LEVEL_BAND, by_band.get(key, [])))
         candidates.append((LEVEL_BUCKET, by_base.get(base_key(key), [])))
         candidates.append((LEVEL_DAYTYPE_PART, by_day_type_part.get(_day_type_part(key), [])))
@@ -634,12 +688,16 @@ def weekly_update(
     ``day_type|part_of_day`` across both day classes and every band (the phase 1 fallback); still fewer than 3
     means no change. The target is the median ``delta_f`` clamped to ``+-max_offset_f``; the offset moves toward
     it by at most ``step_f``, is clamped again and
-    rounded to 0.1 F. The caller passes only the observations of the current reference frame.
+    rounded to 0.1 F. A four-part key without an offset yet starts from its three-part key's offset (the value the
+    lookup applied until then), so a new band does not drop a learned offset back towards 0. A base with only band
+    ``-`` observations gets no ``-`` key (it would mirror the three-part key). The caller passes only the observations
+    of the current reference frame.
     """
     new_offsets: dict[str, dict] = {k: dict(v) for k, v in offsets.items()}
     changes: list[dict] = []
     for key, (level, values) in sorted(_level_values(observations).items()):
-        current = float(offsets.get(key, {}).get("offset_f", 0.0))
+        # A new four-part key starts from its three-part key's offset (what its lookup applied until now), not 0.
+        current = stored_offset(offsets, key)
         target = _clamp(float(median(values)), max_offset_f)
         new = _clamp(current + _clamp(target - current, step_f), max_offset_f)
         new = round(new, OFFSET_ROUND_DIGITS)

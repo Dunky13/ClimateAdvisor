@@ -32,6 +32,8 @@
   "errors.preference_seed_action": "action musi mieć wartość 'accept' lub 'discard'",
   "errors.preference_seed_built": "Przeanalizowano historię ({days} dni). Znalezione zmiany mieszkańców: {observations}. Usunięte zmiany harmonogramu: {schedule}.",
   "errors.preference_seed_discarded": "Propozycja z historii odrzucona.",
+  "errors.preference_seed_failed": "Nie udało się przetworzyć propozycji z historii ({error}).",
+  "errors.preference_seed_invalid": "Analiza historii nie dała poprawnej propozycji; nic nie zostało zapisane. Szczegóły są w dzienniku.",
   "errors.preference_seed_none": "Brak propozycji z historii do przejrzenia.",
   "errors.preferences_off": "Uczenie preferencji jest wyłączone.",
   "errors.preferences_reset": "Wyuczone preferencje wyczyszczono.",

@@ -15,7 +15,7 @@ import os
 import sys
 import tempfile
 import uuid
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import asdict, dataclass, field, fields
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -89,6 +89,11 @@ from .thermal_confidence import evidence_keep as _evidence_keep
 from .thermal_confidence import fit_agrees_with_prior as _fit_agrees_with_prior
 
 _LOGGER = logging.getLogger(__name__)
+
+
+class PreferenceSeedInvalid(ValueError):
+    """A history seed that does not validate (fork Dunky13#1): nothing is stored and an earlier seed is kept."""
+
 
 # Issue #1110: which shutdown path persisted the restart-cause diagnostics.
 SHUTDOWN_KIND_UNLOAD = "unload"  # config-entry unload (zone reload / repair / removal)
@@ -1433,7 +1438,7 @@ class LearningEngine:
         st = self._state
 
         def drop(what: str, why: Any) -> None:
-            _LOGGER.warning("Learning state: dropping invalid preference %s (%s)", what, why)
+            _LOGGER.warning("Preference state entry dropped: what=%s reason=%s", what, why)
 
         offsets = st.preference_offsets if isinstance(st.preference_offsets, dict) else {}
         if offsets is not st.preference_offsets:
@@ -1484,7 +1489,7 @@ class LearningEngine:
 
     @staticmethod
     def _strip_bad_context(entry: dict, drop: Any) -> None:
-        """Remove malformed phase 3 fields (``ref``, ``rh``, ``band``, ``rooms``, ``source``) from an entry."""
+        """Remove malformed phase 3 fields (``ref``, ``rh``, ``band``, ``rooms``, ``source``, ``start``)."""
         checks = {
             "ref": lambda v: v is None or (isinstance(v, str) and bool(v)),
             "rh": pref.is_finite_number,
@@ -1493,6 +1498,7 @@ class LearningEngine:
                 isinstance(v, dict) and all(isinstance(k, str) and pref.is_finite_number(t) for k, t in v.items())
             ),
             "source": lambda v: isinstance(v, str),
+            "start": pref.is_aware_iso,
         }
         for key, ok in checks.items():
             if key in entry and not ok(entry[key]):
@@ -1505,58 +1511,109 @@ class LearningEngine:
             and pref.is_iso_date(o.get("date"))
             and pref.parse_bucket(o.get("bucket")) is not None
             and pref.is_finite_number(o.get("delta_f"))
+            and isinstance(o.get("context_only", False), bool)  # a bad flag must not turn context into an offset
         ):
             return False
         o["bucket"] = pref.with_band(o["bucket"])
         self._strip_bad_context(o, drop)
         return True
 
+    @staticmethod
+    def _valid_background(raw: Any, what: str, drop: Any) -> dict:
+        """``{part: {entity: [finite temp_f, ...]}}`` from ``raw``; anything else is dropped with a WARNING."""
+        if not isinstance(raw, dict):
+            drop(what, "not a mapping")
+            return {}
+        out: dict = {}
+        for part, entities in raw.items():
+            if part not in pref.PARTS_OF_DAY or not isinstance(entities, dict):
+                drop(f"{what} part", part)
+                continue
+            out[part] = {}
+            for entity, temps in entities.items():
+                if not (isinstance(entity, str) and entity and isinstance(temps, list)):
+                    drop(f"{what} entity", entity)
+                    continue
+                values = [float(t) for t in temps if pref.is_finite_number(t)]
+                if len(values) != len(temps):
+                    drop(f"{what} readings", f"{entity}: {len(temps) - len(values)} not a number")
+                out[part][entity] = values[-pref.BACKGROUND_RESERVOIR :]
+        return out
+
+    @staticmethod
+    def _valid_learned_room(entry: Any) -> bool:
+        """True for a well-formed ``learned_rooms`` part entry (see the spec's Persistence section)."""
+
+        def optional_str(v: Any) -> bool:
+            return v is None or (isinstance(v, str) and bool(v))
+
+        def count(v: Any) -> bool:
+            return isinstance(v, int) and not isinstance(v, bool) and v >= 0
+
+        return (
+            isinstance(entry, dict)
+            and optional_str(entry.get("entity"))
+            and optional_str(entry.get("ref"))
+            and isinstance(entry.get("ratios", {}), dict)
+            and all(isinstance(k, str) and pref.is_finite_number(v) for k, v in entry.get("ratios", {}).items())
+            and isinstance(entry.get("counts", {}), dict)
+            and all(isinstance(k, str) and count(v) for k, v in entry.get("counts", {}).items())
+            and isinstance(entry.get("whole", []), list)
+            and all(isinstance(e, str) for e in entry.get("whole", []))
+            and count(entry.get("n", 0))
+            and (entry.get("updated") is None or pref.is_iso_date(entry.get("updated")))
+        )
+
+    def _valid_seed(self, seed: Any, drop: Any) -> dict | None:
+        """The history seed with invalid rows, observations and readings dropped; None when its frame is malformed."""
+        if not (
+            isinstance(seed, dict)
+            and isinstance(seed.get("observations"), list)
+            and isinstance(seed.get("summary"), dict)
+            and isinstance(seed.get("window"), dict)
+            and pref.is_aware_iso(seed["window"].get("start"))
+            and pref.is_aware_iso(seed["window"].get("end"))
+            and isinstance(seed["window"].get("days"), int)
+            and isinstance(seed.get("counts"), dict)
+            and all(isinstance(v, int) and not isinstance(v, bool) for v in seed["counts"].values())
+        ):
+            drop("history seed", "malformed")
+            return None
+        summary = {}
+        for key, row in seed["summary"].items():
+            if (
+                pref.parse_bucket(key) is None
+                or not isinstance(row, dict)
+                or not all(pref.is_finite_number(row.get(k)) for k in ("offset_f", "median_f"))
+                or not (isinstance(row.get("n"), int) and not isinstance(row.get("n"), bool))
+            ):
+                drop("history seed row", key)
+                continue
+            summary[key] = row
+        seed["summary"] = summary
+        kept = [o for o in seed["observations"] if self._valid_preference_observation(o, drop)]
+        if len(kept) != len(seed["observations"]):
+            drop("history seed observations", len(seed["observations"]) - len(kept))
+        seed["observations"] = kept
+        seed["background"] = self._valid_background(seed.get("background") or {}, "history seed background", drop)
+        return seed
+
     def _validate_room_state(self, drop: Any) -> None:
         """Validate ``room_background``, ``learned_rooms`` and ``preference_seed`` (phase 3)."""
         st = self._state
-        background: dict = {}
-        raw = st.room_background if isinstance(st.room_background, dict) else {}
-        if raw is not st.room_background:
-            drop("room background", "not a mapping")
-        for part, entities in raw.items():
-            if part not in pref.PARTS_OF_DAY or not isinstance(entities, dict):
-                drop("room background part", part)
-                continue
-            background[part] = {
-                e: [float(t) for t in temps if pref.is_finite_number(t)][-pref.BACKGROUND_RESERVOIR :]
-                for e, temps in entities.items()
-                if isinstance(e, str) and isinstance(temps, list)
-            }
-        st.room_background = background
+        st.room_background = self._valid_background(st.room_background, "room background", drop)
         learned: dict = {}
         raw = st.learned_rooms if isinstance(st.learned_rooms, dict) else {}
         if raw is not st.learned_rooms:
             drop("learned rooms", "not a mapping")
         for part, entry in raw.items():
-            if (
-                part not in pref.PARTS_OF_DAY
-                or not isinstance(entry, dict)
-                or not (entry.get("entity") is None or isinstance(entry.get("entity"), str))
-                or not (entry.get("ref") is None or isinstance(entry.get("ref"), str))
-                or not isinstance(entry.get("ratios", {}), dict)
-            ):
+            if part not in pref.PARTS_OF_DAY or not self._valid_learned_room(entry):
                 drop("learned room", part)
                 continue
             learned[part] = entry
         st.learned_rooms = learned
-        seed = st.preference_seed
-        if seed is None:
-            return
-        if not (
-            isinstance(seed, dict)
-            and isinstance(seed.get("observations"), list)
-            and isinstance(seed.get("summary"), dict)
-            and all(pref.parse_bucket(k) is not None for k in seed["summary"])
-        ):
-            drop("history seed", "malformed")
-            st.preference_seed = None
-            return
-        seed["observations"] = [o for o in seed["observations"] if self._valid_preference_observation(o, drop)]
+        if st.preference_seed is not None:
+            st.preference_seed = self._valid_seed(st.preference_seed, drop)
 
     # ------------------------------------------------------------------ preference learning (fork Dunky13#1)
 
@@ -1668,27 +1725,44 @@ class LearningEngine:
             values.append(round(float(temp), 2))
             del values[: -pref.BACKGROUND_RESERVOIR]
 
-    def reconcile_references(self, refs: Mapping[str, str | None], today: Any) -> list[str]:
+    def reconcile_references(
+        self,
+        refs: Mapping[str, str | None],
+        today: Any,
+        *,
+        legacy: Mapping[str, str | None],
+        rooms: Iterable[str] | None = None,
+    ) -> list[str]:
         """Record each part of day's current reference; restart a part's offsets from 0 when it changed.
 
         Returns the parts whose reference changed (the state needs saving when any part was new or changed). The first
-        reconcile of a part (no reference recorded yet: an install coming from phase 1) stamps that part's observations
-        that have no ``ref`` with the current reference, the frame they were recorded under.
+        reconcile of a part (no reference recorded yet: an install coming from phase 1) stamps the part and its
+        observations without a ``ref`` with ``legacy``, the phase 1 frame they were recorded under
+        (``references_by_part(config, None)``: the sleep sensor at night, else the thermostat); a pin already set then
+        restarts the part like any other change. ``rooms`` (the selected rooms) prunes the background reservoirs of
+        entities no longer selected.
         """
+        if rooms is not None:
+            keep = {*rooms, pref.REF_THERMOSTAT}
+            for part, entities in self._state.room_background.items():
+                gone = sorted(set(entities) - keep)
+                for entity in gone:
+                    del entities[entity]
+                if gone:
+                    _LOGGER.info("Preference room background pruned: part=%s entities=%s", part, gone)
         changed: list[str] = []
         for part in pref.PARTS_OF_DAY:
             ref = refs.get(part)
             entry = self._state.learned_rooms.setdefault(part, {"entity": None, "ratios": {}})
             if "ref" not in entry:
-                entry["ref"] = ref
+                entry["ref"] = legacy.get(part)
                 for obs in self._state.preference_observations:
                     if "ref" not in obs and pref.bucket_parts(obs["bucket"])[1] == part:
-                        obs["ref"] = ref
-                continue
+                        obs["ref"] = entry["ref"]
             if entry["ref"] == ref:
                 continue
             _LOGGER.info(
-                "Preference reference changed: part=%s old=%s new=%s; that part's offsets restart from 0",
+                "Preference reference changed, offsets restart from 0: part=%s old=%s new=%s",
                 part,
                 entry["ref"] or "thermostat",
                 ref or "thermostat",
@@ -1749,22 +1823,24 @@ class LearningEngine:
         *,
         max_offset_f: float,
         step_f: float,
+        unit: str,
         rooms: tuple[str, ...] = (),
-        unit: str = "fahrenheit",
-        references: Callable[[Mapping[str, str | None]], Mapping[str, str | None]] | None = None,
+        references: Callable[[Mapping[str, str | None] | None], Mapping[str, str | None]] | None = None,
     ) -> list[dict] | None:
         """The weekly update when due (7+ days since the last): the changes made (maybe none), None when not due.
 
         Phase 3: first the learned room per part of day is recomputed; ``references`` maps the learned rooms to each
-        part's reference (``preference_learning.references_by_part`` under the current config; None = the thermostat
-        everywhere). A part whose reference changed restarts from 0, and only the observations recorded under each
-        part's current reference count.
+        part's reference (``preference_learning.references_by_part`` under the current config; called with None for
+        the phase 1 frame; ``references`` None = the thermostat everywhere). ``unit`` is the configured ``temp_unit``
+        the room readings were taken in (whole-degree sensors are judged in it). A part whose reference changed restarts
+        from 0, and only the observations recorded under each part's current reference count.
         """
         if not pref.update_due(self._state.preference_last_update, today):
             return None
         self._update_learned_rooms(today, rooms, unit)
         refs = dict(references(self.learned_room_map())) if references is not None else {}
-        self.reconcile_references(refs, today)
+        legacy = dict(references(None)) if references is not None else {}
+        self.reconcile_references(refs, today, legacy=legacy, rooms=rooms)
         offsets, changes = pref.weekly_update(
             self._state.preference_offsets,
             pref.observations_in_frame(self._state.preference_observations, refs),
@@ -1796,20 +1872,66 @@ class LearningEngine:
     # ------------------------------------------------------------------ history seed (phase 3)
 
     def store_preference_seed(self, seed: dict) -> None:
-        """Keep a backfill result for review; it replaces any earlier unaccepted seed."""
+        """Keep a backfill result for review; it replaces any earlier unaccepted seed (invalid parts dropped).
+
+        Raises ``PreferenceSeedInvalid`` (and keeps any earlier seed) when the seed's frame does not validate."""
         replaced = self._state.preference_seed is not None
-        self._state.preference_seed = seed
+        kept = self._valid_seed(
+            seed, lambda what, why: _LOGGER.warning("History seed entry dropped: what=%s reason=%s", what, why)
+        )
+        if kept is None:
+            _LOGGER.warning("Preference history seed rejected: reason=invalid_frame previous_seed_kept=%s", replaced)
+            raise PreferenceSeedInvalid("the history seed has no valid window or counts")
+        self._state.preference_seed = kept
         _LOGGER.info(
             "Preference history seed stored: observations=%d buckets=%d window=%s replaced_previous=%s",
-            len(seed.get("observations", [])),
-            len(seed.get("summary", {})),
-            seed.get("window"),
+            len(kept.get("observations", [])),
+            len(kept.get("summary", {})),
+            kept.get("window"),
             replaced,
         )
 
-    def preference_seed(self) -> dict | None:
-        """The unaccepted history seed, if any."""
-        return self._state.preference_seed
+    def _import_seed_context(self, seed: dict, today: Any, real: Callable[[dict], bool], rooms: Iterable[str]) -> int:
+        """Merge the seed's room history into the live state, whatever the decision; returns the observations added.
+
+        Every seed observation for which ``real(o)`` holds joins as an observation (its ``ref`` decides the frame it
+        counts in); every other raise joins ``context_only``: its room temperatures feed the learned-room score, never
+        an offset. An episode already stored (same ``observation_identity``, whatever its bucket or band) is not added
+        again; a context-only copy (an earlier Discard) becomes real when it is accepted now. Room temperatures and
+        background reservoirs are limited to ``rooms`` (the rooms selected now) and the thermostat.
+        """
+        keep = {*rooms, pref.REF_THERMOSTAT}
+        stored = {pref.observation_identity(o): o for o in self._state.preference_observations}
+        joined: list[dict] = []
+        for o in seed.get("observations", []):
+            if isinstance(o.get("rooms"), dict):
+                o = {**o, "rooms": {e: t for e, t in o["rooms"].items() if e in keep}}
+            is_real = real(o)
+            if not is_real and not o.get("rooms"):
+                continue  # nothing to learn from but the offset the user declined
+            known = stored.get(pref.observation_identity(o))
+            if known is not None:
+                if is_real:
+                    known.pop("context_only", None)
+                continue
+            joined.append(o if is_real else {**o, "context_only": True})
+            stored[pref.observation_identity(o)] = joined[-1]
+        merged = sorted(
+            self._state.preference_observations + joined, key=lambda o: (str(o["date"]), str(o.get("time", "")))
+        )
+        self._state.preference_observations = pref.trim_observations(merged, today)
+        # shortcut: analysing the same window again after a Discard repeats its background samples (each reservoir
+        # keeps its newest 200); upgrade to per-sample timestamps if that skews the learned-room score in practice.
+        for part, entities in (seed.get("background") or {}).items():
+            live = self._state.room_background.setdefault(part, {})
+            for entity, temps in entities.items():
+                if entity in keep:
+                    live[entity] = (list(temps) + live.get(entity, []))[-pref.BACKGROUND_RESERVOIR :]
+        return len(joined)
+
+    def preference_live_since(self, tz: Any) -> datetime | None:
+        """Where live recording took over (``preference_learning.live_since``): a history seed stops before it."""
+        return pref.live_since(self._state.preference_observations, self._state.preference_open_episode, tz)
 
     def accept_preference_seed(
         self,
@@ -1818,12 +1940,16 @@ class LearningEngine:
         today: Any,
         refs: Mapping[str, str | None],
         max_offset_f: float,
+        rooms: Iterable[str],
     ) -> dict | None:
         """Apply the seed: the selected buckets' offsets now (cap only, no weekly step) and their observations join.
 
-        ``buckets`` None selects every row. A row of a part of day whose current reference is a room is skipped: the
-        history was steered by the thermostat (``ref`` null), a different frame. Returns ``{"applied", "skipped",
-        "observations"}``, or None when there is no seed.
+        ``buckets`` None selects every row. A row of a part of day whose current reference is a room is skipped
+        (``preference_learning.seed_row_blocked``): the history was steered by the thermostat (``ref`` null), a
+        different frame. Its observations are still kept, with that ``ref``, and count again if the part returns to
+        the thermostat; the room history of every row (also unticked ones) is imported as context, limited to
+        ``rooms`` (the rooms selected now). Returns
+        ``{"applied", "skipped", "observations"}``, or None when there is no seed.
         """
         seed = self._state.preference_seed
         if seed is None:
@@ -1833,10 +1959,10 @@ class LearningEngine:
         applied: list[str] = []
         skipped: list[str] = []
         for key in sorted(wanted):
-            if refs.get(pref.bucket_parts(key)[1]) is not None:
+            if pref.seed_row_blocked(key, refs):
                 skipped.append(key)
                 continue
-            row = summary[key]
+            row = summary[key]  # type-checked when stored and when loaded
             self._state.preference_offsets[key] = {
                 "offset_f": max(-max_offset_f, min(max_offset_f, float(row["offset_f"]))),
                 "n": row.get("n"),
@@ -1845,23 +1971,16 @@ class LearningEngine:
             }
             applied.append(key)
         accepted = set(applied)
-        existing = {(o["date"], o.get("time"), o["bucket"]) for o in self._state.preference_observations}
-        joined = [
-            o
-            for o in seed.get("observations", [])
-            if (o["bucket"] in accepted or pref.base_key(o["bucket"]) in accepted)
-            and (o["date"], o.get("time"), o["bucket"]) not in existing
-        ]
-        merged = sorted(
-            self._state.preference_observations + joined, key=lambda o: (str(o["date"]), str(o.get("time", "")))
+        joined = self._import_seed_context(
+            seed,
+            today,
+            lambda o: (
+                o["bucket"] in accepted
+                or pref.base_key(o["bucket"]) in accepted
+                or pref.seed_row_blocked(o["bucket"], refs)
+            ),
+            rooms,
         )
-        self._state.preference_observations = pref.trim_observations(merged, today)
-        for part, entities in (seed.get("background") or {}).items():
-            if part not in pref.PARTS_OF_DAY or not isinstance(entities, dict):
-                continue
-            live = self._state.room_background.setdefault(part, {})
-            for entity, temps in entities.items():
-                live[entity] = (list(temps) + live.get(entity, []))[-pref.BACKGROUND_RESERVOIR :]
         self._state.preference_seed = None
         self._add_preference_history(
             {"date": today.isoformat(), "kind": "seed_accepted", "buckets": applied, "skipped": skipped}
@@ -1870,17 +1989,19 @@ class LearningEngine:
             "Preference history seed accepted: applied=%s skipped_room_reference=%s observations_joined=%d",
             applied,
             skipped,
-            len(joined),
+            joined,
         )
-        return {"applied": applied, "skipped": skipped, "observations": len(joined)}
+        return {"applied": applied, "skipped": skipped, "observations": joined}
 
-    def discard_preference_seed(self, today: Any) -> bool:
-        """Delete the seed; True when there was one."""
-        if self._state.preference_seed is None:
+    def discard_preference_seed(self, today: Any, *, rooms: Iterable[str]) -> bool:
+        """Delete the seed's offsets; True when there was one. Its room history (of ``rooms``) is kept as context."""
+        seed = self._state.preference_seed
+        if seed is None:
             return False
+        joined = self._import_seed_context(seed, today, lambda _o: False, rooms)
         self._state.preference_seed = None
         self._add_preference_history({"date": today.isoformat(), "kind": "seed_discarded"})
-        _LOGGER.info("Preference history seed discarded")
+        _LOGGER.info("Preference history seed discarded: context_observations_kept=%d", joined)
         return True
 
     def preference_summary(self) -> dict[str, Any]:
@@ -1897,7 +2018,7 @@ class LearningEngine:
         ]
         return {
             "buckets": buckets,
-            "observation_count": len(self._state.preference_observations),
+            "observation_count": sum(1 for o in self._state.preference_observations if not o.get("context_only")),
             "last_update": self._state.preference_last_update,
             "learned_rooms": copy.deepcopy(self._state.learned_rooms),
             # The review needs the window, counts and per-bucket rows, not the raw observations and reservoirs.

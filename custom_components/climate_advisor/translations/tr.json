@@ -885,6 +885,9 @@
     },
     "preference_learning_off": {
       "message": "Bu bölge için tercih öğrenme kapalı. Önce Climate Advisor seçeneklerinden açın."
+    },
+    "preference_seed_invalid": {
+      "message": "Geçmiş analizi geçerli bir öneri üretmedi; hiçbir şey kaydedilmedi. Ayrıntılar günlükte."
     }
   }
 }

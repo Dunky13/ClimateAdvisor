@@ -885,6 +885,9 @@
     },
     "preference_learning_off": {
       "message": "Uczenie preferencji jest wyłączone dla tej strefy. Najpierw włącz je w opcjach Climate Advisor."
+    },
+    "preference_seed_invalid": {
+      "message": "Analiza historii nie dała poprawnej propozycji; nic nie zostało zapisane. Szczegóły są w dzienniku."
     }
   }
 }

@@ -79,6 +79,7 @@ from .const import (
     VERSION,
 )
 from .engine_inputs import decide, decide_sync
+from .learning import PreferenceSeedInvalid
 from .remote_offset import remote_offset_view_for
 from .status_text import code_of
 from .temperature import FAHRENHEIT, UNIT_SYMBOL, display_delta, display_temp
@@ -257,6 +258,8 @@ _ERROR_KEYS: dict[str, str] = {
     "backfill_days": "errors.backfill_days",
     "backfill_failed": "errors.backfill_failed",
     "preference_seed_none": "errors.preference_seed_none",
+    "preference_seed_failed": "errors.preference_seed_failed",
+    "preference_seed_invalid": "errors.preference_seed_invalid",
     "preference_seed_action": "errors.preference_seed_action",
 }
 
@@ -1253,6 +1256,8 @@ class ClimateAdvisorBackfillPreferencesView(HomeAssistantView):
                 return self.json(_error_body(hass, "backfill_days"), status_code=400)
             try:
                 result = await coordinator.async_backfill_preferences(days)
+            except PreferenceSeedInvalid:  # logged where it was rejected; any earlier seed is kept
+                return self.json(_error_body(hass, "preference_seed_invalid"), status_code=422)
             except Exception as err:
                 _LOGGER.error("Preference history backfill failed: days=%d", days, exc_info=True)
                 return self.json(_error_body(hass, "backfill_failed", error=type(err).__name__), status_code=500)
@@ -1296,11 +1301,18 @@ class ClimateAdvisorPreferenceSeedView(HomeAssistantView):
                 return self.json(_error_body(hass, "preference_seed_action"), status_code=400)
             if coordinator.preference_view() is None:
                 return self.json(_error_body(hass, "preferences_off"), status_code=409)
+            try:
+                if action == "discard":
+                    discarded = await coordinator.async_discard_preference_seed()
+                else:
+                    result = await coordinator.async_accept_preference_seed(buckets)
+            except Exception as err:
+                _LOGGER.error("Preference history seed failed: action=%s", action, exc_info=True)
+                return self.json(_error_body(hass, "preference_seed_failed", error=type(err).__name__), status_code=500)
             if action == "discard":
-                if not await coordinator.async_discard_preference_seed():
+                if not discarded:
                     return self.json(_error_body(hass, "preference_seed_none"), status_code=404)
                 return self.json({"status": "ok", **_msg_fields(hass, i18n.Msg("errors.preference_seed_discarded"))})
-            result = await coordinator.async_accept_preference_seed(buckets)
             if result is None:
                 return self.json(_error_body(hass, "preference_seed_none"), status_code=404)
             msg = i18n.Msg(

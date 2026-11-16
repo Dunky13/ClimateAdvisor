@@ -32,8 +32,6 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta, tzinfo
 from typing import Any
 
-from .preference_learning import in_sleep_window  # the hass-free sleep window, shared with the backfill
-
 V4_SCHEMA_VERSION = 1
 V4_STEP_MINUTES = 15
 
@@ -2648,6 +2646,27 @@ def _carried_words(f: Mapping[str, Any]) -> str:
 
 
 # --------------------------------------------------------------------------- the "_ca" line
+def in_sleep_window(local: datetime, sleep_time: str | None, wake_time: str | None) -> bool:
+    """True when ``local`` is inside the ``sleep_time`` -> ``wake_time`` ("HH:MM") window.
+
+    Same semantics as ``automation._in_sleep_window`` (this module may not import it: it is hass-free): the window
+    wraps midnight when bedtime is after wake time, does not wrap when bedtime is after midnight, equal or
+    malformed times are an empty window. A test pins the two together.
+    """
+    if not sleep_time or not wake_time:
+        return False
+    try:
+        sh, sm = (int(x) for x in str(sleep_time).split(":")[:2])
+        wh, wm = (int(x) for x in str(wake_time).split(":")[:2])
+        now_m = local.hour * 60 + local.minute
+    except ValueError, AttributeError:
+        return False
+    s_m, w_m = sh * 60 + sm, wh * 60 + wm
+    if s_m == w_m:
+        return False
+    if s_m < w_m:
+        return s_m <= now_m < w_m
+    return now_m >= s_m or now_m < w_m
 
 
 def ca_line(

@@ -32,6 +32,8 @@
   "errors.preference_seed_action": "يجب أن يكون action إما 'accept' أو 'discard'",
   "errors.preference_seed_built": "تم تحليل السجل ({days} يومًا). تغييرات الساكنين التي وُجدت: {observations}. تغييرات الجدول المحذوفة: {schedule}.",
   "errors.preference_seed_discarded": "تم تجاهل اقتراح السجل.",
+  "errors.preference_seed_failed": "تعذّرت معالجة الاقتراح المستند إلى السجل ({error}).",
+  "errors.preference_seed_invalid": "لم يُنتج تحليل السجل اقتراحاً صالحاً؛ لم يُحفظ شيء. التفاصيل في سجل الأحداث.",
   "errors.preference_seed_none": "لا يوجد اقتراح من السجل لمراجعته.",
   "errors.preferences_off": "تعلّم التفضيلات متوقف.",
   "errors.preferences_reset": "تم مسح التفضيلات المتعلَّمة.",

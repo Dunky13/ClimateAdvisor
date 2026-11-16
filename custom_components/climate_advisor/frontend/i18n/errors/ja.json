@@ -32,6 +32,8 @@
   "errors.preference_seed_action": "action は 'accept' または 'discard' にしてください",
   "errors.preference_seed_built": "履歴を分析しました（{days} 日分）。見つかった居住者の変更: {observations}。除外したスケジュールの変更: {schedule}。",
   "errors.preference_seed_discarded": "履歴の提案を破棄しました。",
+  "errors.preference_seed_failed": "履歴からの提案を処理できませんでした（{error}）。",
+  "errors.preference_seed_invalid": "履歴の分析から有効な提案が得られなかったため、何も保存されませんでした。詳細はログを確認してください。",
   "errors.preference_seed_none": "確認する履歴の提案はありません。",
   "errors.preferences_off": "好みの学習はオフです。",
   "errors.preferences_reset": "学習した好みを消去しました。",

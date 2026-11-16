@@ -2249,7 +2249,11 @@ class ClimateAdvisorOptionsFlow(config_entries.OptionsFlow):
                     vol.Optional(
                         CONF_ROOM_TEMP_ENTITIES, default=list(current.get(CONF_ROOM_TEMP_ENTITIES) or [])
                     ): selector.EntitySelector(
-                        selector.EntitySelectorConfig(domain="sensor", device_class="temperature", multiple=True)
+                        selector.EntitySelectorConfig(
+                            # A room may also be an input_number helper (the remote reader accepts both).
+                            filter=[{"domain": "sensor", "device_class": "temperature"}, {"domain": "input_number"}],
+                            multiple=True,
+                        )
                     ),
                     **{
                         vol.Required(key, default=current.get(key, DEFAULT_ROOM_PIN)): pin_selector
