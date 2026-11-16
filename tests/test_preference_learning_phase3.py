@@ -402,3 +402,177 @@ def test_seed_skips_days_without_outdoor_data_and_stale_rooms():
 def test_episode_exclusion_before_wake_applies_to_history():
     seed = _seed(config={**CONFIG, "wake_time": "07:00"})  # 06:40 is now within 60 minutes before wake
     assert all(o["time"] != "06:40" for o in seed["observations"])
+
+
+# ── learning engine state (phase 3) ─────────────────────────────────────────────────────────────────────
+
+
+def _engine(tmp_path):
+    from custom_components.climate_advisor.learning import LearningEngine
+
+    engine = LearningEngine(tmp_path)
+    engine.load_state()
+    return engine
+
+
+B4 = "cold|morning|weekday|-"
+
+
+def test_phase_one_state_loads_with_band_none_and_bad_phase_three_fields_are_stripped(tmp_path):
+    engine = _engine(tmp_path)
+    engine._state.preference_observations = [
+        {"date": "2026-11-01", "time": "08:00", "bucket": "cold|morning|weekday", "delta_f": 1.0},
+        {"date": "2026-11-02", "time": "08:00", "bucket": B4, "delta_f": 1.0, "rooms": {BED: "warm"}, "band": "x"},
+    ]
+    engine._state.preference_offsets = {"cold|morning|weekday": {"offset_f": 1.0}}
+    engine._state.room_background = {"morning": {BED: [64.0, "x", 65.0]}, "noon": {}}
+    engine._state.learned_rooms = {"morning": {"entity": BED, "ratios": {}, "ref": None}, "evening": "junk"}
+    engine._state.preference_seed = {"observations": "junk", "summary": {}}
+    engine.save_state()
+
+    reloaded = _engine(tmp_path)
+    obs = reloaded._state.preference_observations
+    assert [o["bucket"] for o in obs] == [B4, B4]
+    assert "rooms" not in obs[1] and "band" not in obs[1]
+    assert reloaded.preference_offsets() == {"cold|morning|weekday": 1.0}  # the band-agnostic level is kept as is
+    assert reloaded._state.room_background == {"morning": {BED: [64.0, 65.0]}}
+    assert reloaded.learned_room_map() == {"morning": BED}
+    assert reloaded._state.preference_seed is None
+
+
+def test_reset_preferences_clears_the_phase_three_state(tmp_path):
+    engine = _engine(tmp_path)
+    engine.sample_room_background("morning", {BED: 64.0})
+    engine._state.learned_rooms = {"morning": {"entity": BED, "ratios": {}}}
+    engine.store_preference_seed({"observations": [], "summary": {}})
+    engine.reset("preferences")
+    assert (engine._state.room_background, engine._state.learned_rooms, engine._state.preference_seed) == ({}, {}, None)
+
+
+def test_background_reservoir_keeps_the_newest_200(tmp_path):
+    engine = _engine(tmp_path)
+    for i in range(250):
+        engine.sample_room_background("night", {BED: float(i)})
+    assert engine._state.room_background["night"][BED] == [float(i) for i in range(50, 250)]
+
+
+def test_first_reconcile_stamps_legacy_observations_then_a_change_restarts_the_part(tmp_path):
+    engine = _engine(tmp_path)
+    engine._state.preference_observations = [{"date": "2026-11-01", "bucket": B4, "delta_f": 1.0}]
+    engine._state.preference_offsets = {
+        B4: {"offset_f": 1.0},
+        "cold|morning|weekday": {"offset_f": 1.0},
+        "cold|evening|weekday|-": {"offset_f": 0.5},
+    }
+    refs = {"night": BED, "morning": None, "afternoon": None, "evening": None}
+    assert engine.reconcile_references(refs, TODAY) == []
+    assert engine._state.preference_observations[0]["ref"] is None
+    assert engine.reconcile_references(refs, TODAY) == []
+    assert engine.reconcile_references({**refs, "morning": KID}, TODAY) == ["morning"]
+    assert engine.preference_offsets() == {"cold|evening|weekday|-": 0.5}
+    assert engine._state.preference_history[-1] == {
+        "date": "2026-11-16",
+        "kind": "reference",
+        "part": "morning",
+        "old_ref": None,
+        "new_ref": KID,
+    }
+    assert len(engine._state.preference_observations) == 1  # kept: counts again if the reference returns
+
+
+def _raise_obs(n: int, *, bed: float, spread_bed: float, therm_spread: float) -> list[dict]:
+    return [
+        {
+            "date": f"2026-11-{1 + i % 9:02d}",
+            "time": "07:00",
+            "bucket": B4,
+            "delta_f": 2.0,
+            "ref": None,
+            "rooms": {BED: bed + spread_bed * ((i % 5) - 2) / 2, "thermostat": 66 + therm_spread * ((i % 5) - 2) / 2},
+        }
+        for i in range(n)
+    ]
+
+
+def test_weekly_update_learns_a_room_and_restarts_that_part_in_the_room_frame(tmp_path, caplog):
+    engine = _engine(tmp_path)
+    engine._state.preference_observations = _raise_obs(12, bed=64.13, spread_bed=0.2, therm_spread=1.0)
+    for i in range(40):
+        engine.sample_room_background("morning", {BED: 64 + 1.2 * ((i % 5) - 2) / 2, "thermostat": 66 + ((i % 5) - 2)})
+    engine.reconcile_references(dict.fromkeys(pl.PARTS_OF_DAY), TODAY)
+    caplog.set_level("INFO")
+    rooms = (BED,)
+
+    def refs(learned):
+        return pl.references_by_part({**CONFIG, "room_temp_entities": list(rooms)}, learned)
+
+    changes = engine.run_preference_update(TODAY, max_offset_f=3.6, step_f=0.9, rooms=rooms, references=refs)
+    assert engine.learned_room_map()["morning"] == BED
+    assert engine._state.learned_rooms["morning"]["ref"] == BED
+    assert "Learned room changed: part=morning" in caplog.text
+    # The thermostat-frame observations no longer count for the morning: nothing learned there this week.
+    assert changes == [] and engine.preference_offsets() == {}
+
+
+def test_whole_degree_room_is_not_learned(tmp_path):
+    engine = _engine(tmp_path)
+    engine._state.preference_observations = _raise_obs(12, bed=_f(18), spread_bed=0.0, therm_spread=1.0)
+    for i in range(40):
+        engine.sample_room_background("morning", {BED: _f(17 + i % 3), "thermostat": 66 + ((i % 5) - 2)})
+    engine.run_preference_update(TODAY, max_offset_f=3.6, step_f=0.9, rooms=(BED,), unit="celsius")
+    assert engine.learned_room_map()["morning"] is None
+    assert engine._state.learned_rooms["morning"]["whole"] == [BED]
+
+
+def _seed_state(engine):
+    engine.store_preference_seed(
+        {
+            "window": {"days": 30},
+            "observations": [
+                {"date": "2026-10-20", "time": "07:00", "bucket": B4, "delta_f": 3.0, "source": "history"},
+                {"date": "2026-10-21", "time": "18:00", "bucket": "cold|evening|weekday|-", "delta_f": 5.0},
+            ],
+            "summary": {
+                B4: {"n": 3, "median_f": 3.0, "offset_f": 3.0, "level": "band"},
+                "cold|evening|weekday|-": {"n": 3, "median_f": 5.0, "offset_f": 5.0, "level": "band"},
+            },
+            "background": {"morning": {BED: [63.0, 64.0]}},
+        }
+    )
+
+
+def test_accepting_the_seed_applies_offsets_now_within_the_cap(tmp_path):
+    engine = _engine(tmp_path)
+    engine.sample_room_background("morning", {BED: 65.0})
+    _seed_state(engine)
+    result = engine.accept_preference_seed(None, today=TODAY, refs={}, max_offset_f=3.6)
+    assert result == {"applied": ["cold|evening|weekday|-", B4], "skipped": [], "observations": 2}
+    assert engine.preference_offsets() == {B4: 3.0, "cold|evening|weekday|-": 3.6}  # no 0.9 step; capped
+    assert engine._state.room_background["morning"][BED] == [63.0, 64.0, 65.0]  # history before live
+    assert engine.preference_seed() is None
+    assert engine._state.preference_history[-1]["kind"] == "seed_accepted"
+
+
+def test_accepting_skips_unselected_rows_and_parts_steered_by_a_room(tmp_path):
+    engine = _engine(tmp_path)
+    _seed_state(engine)
+    result = engine.accept_preference_seed([B4], today=TODAY, refs={"morning": BED}, max_offset_f=3.6)
+    assert result == {"applied": [], "skipped": [B4], "observations": 0}
+    assert engine.preference_offsets() == {}
+
+
+def test_accepting_twice_does_not_duplicate_observations(tmp_path):
+    engine = _engine(tmp_path)
+    _seed_state(engine)
+    engine.accept_preference_seed(None, today=TODAY, refs={}, max_offset_f=3.6)
+    _seed_state(engine)
+    assert engine.accept_preference_seed(None, today=TODAY, refs={}, max_offset_f=3.6)["observations"] == 0
+
+
+def test_discarding_the_seed(tmp_path):
+    engine = _engine(tmp_path)
+    assert not engine.discard_preference_seed(TODAY)
+    _seed_state(engine)
+    assert engine.discard_preference_seed(TODAY)
+    assert engine.preference_seed() is None and engine.preference_offsets() == {}
+    assert engine._state.preference_history[-1] == {"date": "2026-11-16", "kind": "seed_discarded"}
