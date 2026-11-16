@@ -309,7 +309,7 @@
   "activity.pre_cool_overshoot_temps": "사전 냉방 과냉 -- 실내 {indoor} < 하한 {floor}",
   "activity.pre_cool_suppressed_nat_vent": "사전 냉방 보류 -- 자연 환기로 이미 목표 달성",
   "activity.reason_band_edge_used": "{band} -- {edge} 경계 사용 ({target}에서 {shape})",
-  "activity.reason_band_select": "{ctx} 범위 [{floor}/{ceiling}] (날씨 유형={day_type}, 활성={active}{aggressive, select, yes {, 적극적} other {}}{has_tou, select, yes {, tou_expansion={tou}} other {}})",
+  "activity.reason_band_select": "{ctx} 범위 [{floor}/{ceiling}] (날씨 유형={day_type}, 활성={active}{aggressive, select, yes {, 적극적} other {}}{has_tou, select, yes {, tou_expansion={tou}} other {}}{has_pref, select, yes {, preference={pref_bucket} {pref}} other {}})",
   "activity.reason_bedtime_no_classification": "취침 시간 — 분류 없음",
   "activity.reason_bedtime_nv_not_active": "취침 시간 — 자연 환기 작동 안 함",
   "activity.reason_bedtime_sleep_band": "취침 시간 — 취침 범위 [{floor}/{ceiling}]",

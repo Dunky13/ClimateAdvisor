@@ -169,6 +169,7 @@
           "notifications": "Benachrichtigungen",
           "advanced": "Lernen & Verhalten",
           "classification_thresholds": "Schwellenwerte für Tagestypen",
+          "preference_learning": "Präferenzen lernen",
           "ai_settings": "Claude-KI-Einstellungen",
           "github_settings": "GitHub-Anbindung"
         }
@@ -447,6 +448,20 @@
           "threshold_warm": "Tage mit einer vorhergesagten Höchsttemperatur ab diesem Wert gelten als warm (Fenster empfohlen, keine Klimaanlage). Standard: 75 °F / 24 °C.",
           "threshold_mild": "Tage mit einer vorhergesagten Höchsttemperatur ab diesem Wert gelten als mild (angenehm, Fenster offen). Standard: 60 °F / 16 °C.",
           "threshold_cool": "Tage mit einer vorhergesagten Höchsttemperatur ab diesem Wert gelten als kühl (leichtes Heizen). Darunter ist es kalt (volles Heizen). Standard: 45 °F / 7 °C."
+        }
+      },
+      "preference_learning": {
+        "title": "Präferenzen lernen",
+        "description": "Climate Advisor lernt aus Ihren eigenen Thermostat-Änderungen, welche Heiztemperatur Sie wirklich möchten, getrennt nach Tagestyp, Tageszeit und Werktag oder Wochenende, und wendet sie innerhalb der unten stehenden sicheren Grenzen an. Nur Heizen. Die Kühlung wird nie verändert. Schalten Sie zuvor Thermostat-Zeitpläne und den Eco-Modus aus.",
+        "data": {
+          "preference_learning_enabled": "Meine Heizpräferenzen lernen",
+          "preference_max_offset_f": "Maximale gelernte Anpassung",
+          "preference_weekly_step_f": "Maximale Änderung pro Woche"
+        },
+        "data_description": {
+          "preference_learning_enabled": "Wenn aktiv, verschieben wiederholte Thermostat-Änderungen zu ähnlichen Zeiten die Heiztemperatur, die Climate Advisor für diese Zeit setzt. Standardmäßig aus.",
+          "preference_max_offset_f": "Um wie viel eine gelernte Anpassung die Heiztemperatur höchstens nach oben oder unten von Ihrem eingestellten Sollwert verschieben darf.",
+          "preference_weekly_step_f": "Um wie viel sich eine gelernte Anpassung pro Woche höchstens ändern darf."
         }
       },
       "ai_settings": {
@@ -757,7 +772,8 @@
         "all": "Alle gelernten Daten",
         "thermal_model": "Thermisches Modell",
         "weather_bias": "Abweichung der Wettervorhersage",
-        "suggestions": "Verworfene Vorschläge"
+        "suggestions": "Verworfene Vorschläge",
+        "preferences": "Gelernte Präferenzen"
       }
     },
     "schedule_applies_to": {

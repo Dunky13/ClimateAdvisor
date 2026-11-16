@@ -26,6 +26,7 @@
   "errors.night_strategy_not_ready": "خطة غرفة النوم لهذه الليلة ليست جاهزة بعد.",
   "errors.not_configured": "لم يتم إعداد إرسال المشكلات إلى GitHub.",
   "errors.not_loaded": "Climate Advisor غير محمّل",
+  "errors.preferences_reset": "تم مسح التفضيلات المتعلَّمة.",
   "errors.reclassify_triggered": "تم بدء إعادة التصنيف",
   "errors.resume_done": "تم الاستئناف بعد الإيقاف المؤقت. تم ضبط التدفئة والتبريد على {mode, select, none {غير متاح} heat {تدفئة} cool {تبريد} off {إيقاف} auto {تلقائي} heat_cool {تدفئة/تبريد} fan_only {مروحة فقط} other {{mode}}}. بدأت فترة الإيقاف المؤقت اليدوية.",
   "errors.resume_not_paused": "ليس في حالة إيقاف مؤقت حاليًا",

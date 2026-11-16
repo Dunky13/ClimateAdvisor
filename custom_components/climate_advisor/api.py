@@ -34,6 +34,7 @@ from .const import (
     API_LEARNING,
     API_NIGHT_STRATEGY,
     API_PREDICTION_ACCURACY,
+    API_RESET_PREFERENCES,
     API_RESPOND_SUGGESTION,
     API_RESUME_FROM_PAUSE,
     API_SEND_BRIEFING,
@@ -330,6 +331,78 @@ def _current_hold_payload(coordinator: Any) -> dict | None:
     return out if isinstance(out, dict) else None
 
 
+def _preferences_payload(coordinator: Any, unit: str) -> dict[str, Any]:
+    """The Analysis tab's preference-learning block: internal °F offsets converted to the display unit.
+
+    Each row's ``offset`` is the applied (cap-clamped) value; ``stored_offset`` is what the weekly update wrote, shown
+    beside it only when the two differ (the maximum was lowered since).
+    """
+    status = coordinator.preference_status()
+    if not isinstance(status, dict) or not status.get("enabled"):
+        return {"enabled": False}
+    return {
+        **status,
+        "active_offset": display_delta(status.get("active_offset_f"), unit),
+        "max_offset": display_delta(status.get("max_offset_f"), unit),
+        "buckets": [
+            {
+                **b,
+                "offset": display_delta(b["offset_f"], unit),
+                "stored_offset": display_delta(b["stored_offset_f"], unit),
+                "clamped": abs(b["stored_offset_f"] - b["offset_f"]) > 0.05,
+            }
+            for b in status.get("buckets", [])
+        ],
+    }
+
+
+def _preference_status_payload(hass: HomeAssistant, coordinator: Any, unit: str) -> dict[str, Any]:
+    """The Status tab's preference-learning block (fork Dunky13#1): state plus one sentence, only while enabled.
+
+    ``text`` names the armed heat floor against the configured one and why they differ; with no difference it says the
+    feature is on and the floor is unchanged right now.
+    """
+    status = coordinator.preference_status()
+    if not isinstance(status, dict) or not status.get("enabled"):
+        return {"enabled": False}
+    last = status.get("last_update")
+    try:
+        last_dt = datetime.combine(
+            datetime.fromisoformat(last).date(), datetime.min.time(), tzinfo=dt_util.DEFAULT_TIME_ZONE
+        )
+    except TypeError, ValueError:
+        last_dt = None
+    active_f = status.get("active_offset_f") or 0.0
+    bucket = status.get("bucket")
+    parts = str(bucket).split("|") if bucket else ["", "", ""]
+    common = {
+        "n": status.get("observation_count", 0),
+        "has_update": "yes" if last_dt is not None else "no",
+        "when": i18n.Date(last_dt) if last_dt is not None else "",
+    }
+    if active_f and status.get("armed_floor_f") is not None:
+        msg = i18n.Msg(
+            "status.preference.applied",
+            armed=i18n.Temp(status["armed_floor_f"], unit, 1),
+            configured=i18n.Temp(status["configured_floor_f"], unit, 1),
+            sign="+" if active_f > 0 else "-",
+            amount=i18n.TempDelta(abs(active_f), unit, 1),
+            part=parts[1],
+            day_class=parts[2],
+            **common,
+        )
+    else:
+        msg = i18n.Msg("status.preference.neutral", **common)
+    return {
+        "enabled": True,
+        "bucket": bucket,
+        "active_offset": display_delta(active_f, unit),
+        "observation_count": status.get("observation_count", 0),
+        "last_update": last,
+        **_msg_fields(hass, msg, "text"),
+    }
+
+
 class ClimateAdvisorStatusView(HomeAssistantView):
     """Return current system status."""
 
@@ -600,6 +673,7 @@ class ClimateAdvisorStatusView(HomeAssistantView):
                 "nat_vent_on_threshold": _nat_vent_on_threshold_display,
                 "nat_vent_off_threshold": _nat_vent_off_threshold_display,
                 **_text_fields("pre_cool_status", data.get("pre_cool_status"), _lang),
+                "preference_learning": _preference_status_payload(hass, coordinator, unit),  # fork Dunky13#1
                 "coordinator_healthy": _coordinator_healthy,
                 # Issue #796 PR9: dashboard zone selector. loadStatus() polls every
                 # cycle regardless of which tab is active, so this is the one
@@ -775,6 +849,8 @@ class ClimateAdvisorLearningView(HomeAssistantView):
                     "tomorrow_plan": tomorrow_plan,
                     "suggestions": suggestions,
                     "compliance": coordinator.learning.get_compliance_summary(),
+                    # Fork Dunky13#1: learned setpoint preferences (display-unit deltas; enabled False = off)
+                    "preferences": _preferences_payload(coordinator, unit),
                     "comfort_range_low": display_temp(coordinator.config.get("comfort_heat", 70), unit),
                     "comfort_range_high": display_temp(coordinator.config.get("comfort_cool", 75), unit),
                     "unit": unit,
@@ -906,20 +982,7 @@ class ClimateAdvisorRespondSuggestionView(HomeAssistantView):
             if action == "accept":
                 changes = coordinator.learning.accept_suggestion(suggestion_key)
                 await hass.async_add_executor_job(coordinator.learning.save_state)
-                coordinator.config.update(changes)
-                # Persist valid config keys to the config entry so changes survive reload
-                valid_keys = set(CONFIG_METADATA.keys())
-                entry_changes = {k: v for k, v in changes.items() if k in valid_keys}
-                if entry_changes:
-                    entries = hass.data.get(DOMAIN, {})
-                    entry_id = next((eid for eid, c in entries.items() if c is coordinator), None)
-                    if entry_id:
-                        config_entry = hass.config_entries.async_get_entry(entry_id)
-                        if config_entry:
-                            hass.config_entries.async_update_entry(
-                                config_entry,
-                                data={**config_entry.data, **entry_changes},
-                            )
+                apply_accepted_changes(hass, coordinator, changes)
                 return self.json({"status": "ok", "changes": changes})
             elif action == "dismiss":
                 coordinator.learning.dismiss_suggestion(suggestion_key)
@@ -1016,6 +1079,23 @@ class ClimateAdvisorConfigView(HomeAssistantView):
             return self.json({"settings": settings})
 
 
+def apply_accepted_changes(hass: HomeAssistant, coordinator: Any, changes: dict[str, Any]) -> None:
+    """Apply an accepted suggestion's config changes: the live config, and the config entry so they survive a reload.
+
+    The one path both the dashboard API and the ``respond_to_suggestion`` service use, so an accept persists the same
+    either way. Only keys in ``CONFIG_METADATA`` are persisted to the entry.
+    """
+    coordinator.config.update(changes)
+    entry_changes = {k: v for k, v in changes.items() if k in CONFIG_METADATA}
+    if not entry_changes:
+        return
+    entries = hass.data.get(DOMAIN, {})
+    entry_id = next((eid for eid, c in entries.items() if c is coordinator), None)
+    config_entry = hass.config_entries.async_get_entry(entry_id) if entry_id else None
+    if config_entry:
+        hass.config_entries.async_update_entry(config_entry, data={**config_entry.data, **entry_changes})
+
+
 def _schedule_reclassify_after_cancel(hass: HomeAssistant, coordinator: Any, ae: Any) -> None:
     """Re-run the full decision path shortly after a user cancels an override (Issue #508).
 
@@ -1086,6 +1166,29 @@ class ClimateAdvisorCancelOverrideView(HomeAssistantView):
                     **_msg_fields(hass, i18n.Msg("errors.cancel_done", what=what)),
                 }
             )
+
+
+class ClimateAdvisorResetPreferencesView(HomeAssistantView):
+    """Clear the learned setpoint preferences (fork Dunky13#1); nothing else in the learning state is touched."""
+
+    url = API_RESET_PREFERENCES
+    name = "api:climate_advisor:reset_preferences"
+    requires_auth = True
+
+    async def post(self, request: web.Request) -> web.Response:
+        hass = request.app["hass"]
+        coordinator, ambiguous_refused = _get_coordinator(hass, request)
+        if ambiguous_refused:
+            return self.json(_ambiguous_zone_payload(hass), status_code=400)
+        if not coordinator:
+            return self.json(_error_body(hass, "not_loaded"), status_code=503)
+
+        with log_capture.zone_scope(coordinator.zone_label):
+            await hass.async_add_executor_job(
+                log_capture.bind_zone_for_executor(coordinator.learning.reset), "preferences"
+            )
+            _LOGGER.info("Learned preferences reset from the dashboard")
+            return self.json({"status": "ok", **_msg_fields(hass, i18n.Msg("errors.preferences_reset"))})
 
 
 class ClimateAdvisorResumeFromPauseView(HomeAssistantView):
@@ -1870,6 +1973,7 @@ API_VIEWS = [
     ClimateAdvisorRespondSuggestionView,
     ClimateAdvisorConfigView,
     ClimateAdvisorCancelOverrideView,
+    ClimateAdvisorResetPreferencesView,
     ClimateAdvisorCancelFanOverrideView,
     ClimateAdvisorResumeFromPauseView,
     ClimateAdvisorToggleAutomationView,

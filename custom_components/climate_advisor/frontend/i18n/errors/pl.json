@@ -26,6 +26,7 @@
   "errors.night_strategy_not_ready": "Strategia dla sypialni na dzisiejszą noc nie jest jeszcze gotowa.",
   "errors.not_configured": "Wysyłanie zgłoszeń do GitHub nie jest skonfigurowane.",
   "errors.not_loaded": "Climate Advisor nie jest załadowany",
+  "errors.preferences_reset": "Wyuczone preferencje wyczyszczono.",
   "errors.reclassify_triggered": "Uruchomiono ponowną klasyfikację",
   "errors.resume_done": "Wznowiono z pauzy. HVAC ustawiony na: {mode, select, none {brak danych} heat {grzanie} cool {chłodzenie} off {wyłączono} auto {auto} heat_cool {grzanie/chłodzenie} fan_only {tylko wentylator} other {{mode}}}. Rozpoczęto okres wstrzymania po ręcznej zmianie.",
   "errors.resume_not_paused": "Nie jest obecnie wstrzymane",

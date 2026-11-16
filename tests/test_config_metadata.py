@@ -104,6 +104,10 @@ EXPECTED_KEYS = {
     "threshold_cool",
     "primary_engine",
     "shadow_engine",
+    # Fork Dunky13#1: setpoint preference learning
+    "preference_learning_enabled",
+    "preference_max_offset_f",
+    "preference_weekly_step_f",
 }
 
 VALID_CATEGORIES = {
@@ -208,6 +212,15 @@ class TestDefaultsRegistry:
             "comfort_deadband_cold_f",
         ):
             assert CONFIG_METADATA[key]["default"] == config_flow._DELTA_FIELDS_F[key][2], key
+        # Fork #1 (preference learning): one definition in const.py feeds the registry and the options form.
+        from custom_components.climate_advisor import const  # noqa: PLC0415
+
+        for key, const_default in (
+            (const.CONF_PREFERENCE_MAX_OFFSET_F, const.DEFAULT_PREFERENCE_MAX_OFFSET_F),
+            (const.CONF_PREFERENCE_WEEKLY_STEP_F, const.DEFAULT_PREFERENCE_WEEKLY_STEP_F),
+        ):
+            assert CONFIG_METADATA[key]["default"] == config_flow._DELTA_FIELDS_F[key][2] == const_default, key
+        assert CONFIG_METADATA[const.CONF_PREFERENCE_LEARNING_ENABLED]["default"] is False
 
 
 class TestConfigMetadataStructure:

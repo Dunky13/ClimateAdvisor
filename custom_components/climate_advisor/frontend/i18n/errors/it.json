@@ -26,6 +26,7 @@
   "errors.night_strategy_not_ready": "La strategia della camera da letto per stanotte non è ancora pronta.",
   "errors.not_configured": "L’invio di segnalazioni a GitHub non è configurato.",
   "errors.not_loaded": "Climate Advisor non caricato",
+  "errors.preferences_reset": "Preferenze apprese cancellate.",
   "errors.reclassify_triggered": "Riclassificazione avviata",
   "errors.resume_done": "Ripreso dalla pausa. Climatizzazione impostata su {mode, select, none {N/D} heat {riscaldamento} cool {freddo} off {spento} auto {auto} heat_cool {caldo/freddo} fan_only {solo ventilazione} other {{mode}}}. Periodo di pausa manuale avviato.",
   "errors.resume_not_paused": "Non attualmente in pausa",

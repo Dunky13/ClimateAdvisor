@@ -169,6 +169,7 @@
           "notifications": "Notifications",
           "advanced": "Apprentissage et comportement",
           "classification_thresholds": "Seuils des types de journée",
+          "preference_learning": "Apprentissage des préférences",
           "ai_settings": "Paramètres de l’IA Claude",
           "github_settings": "Intégration GitHub"
         }
@@ -447,6 +448,20 @@
           "threshold_warm": "Les journées dont la température maximale prévue atteint ou dépasse ce seuil sont classées Tièdes (fenêtres recommandées, pas de climatisation). Par défaut : 75°F / 24°C.",
           "threshold_mild": "Les journées dont la température maximale prévue atteint ou dépasse ce seuil sont classées Douces (confortables, fenêtres ouvertes). Par défaut : 60°F / 16°C.",
           "threshold_cool": "Les journées dont la température maximale prévue atteint ou dépasse ce seuil sont classées Fraîches (chauffage léger). En dessous, elles sont Froides (chauffage complet). Par défaut : 45°F / 7°C."
+        }
+      },
+      "preference_learning": {
+        "title": "Apprentissage des préférences",
+        "description": "Climate Advisor apprend la température de chauffage que vous souhaitez vraiment à partir de vos propres modifications du thermostat, selon le type de journée, le moment de la journée et la semaine ou le week-end, et l'applique dans les limites de sécurité ci-dessous. Chauffage uniquement. La climatisation n'est jamais modifiée. Désactivez d'abord toute programmation ou mode éco du thermostat.",
+        "data": {
+          "preference_learning_enabled": "Apprendre mes préférences de chauffage",
+          "preference_max_offset_f": "Ajustement appris maximal",
+          "preference_weekly_step_f": "Variation hebdomadaire maximale"
+        },
+        "data_description": {
+          "preference_learning_enabled": "Si activé, vos modifications répétées du thermostat à des moments similaires décalent la température de chauffage définie par Climate Advisor pour ce type de moment. Désactivé par défaut.",
+          "preference_max_offset_f": "Le décalage maximal, vers le haut ou le bas, qu'un ajustement appris peut appliquer à la température de chauffage configurée.",
+          "preference_weekly_step_f": "La variation maximale d'un ajustement appris par semaine."
         }
       },
       "ai_settings": {
@@ -757,7 +772,8 @@
         "all": "Toutes les données apprises",
         "thermal_model": "Modèle thermique",
         "weather_bias": "Biais des prévisions météo",
-        "suggestions": "Suggestions ignorées"
+        "suggestions": "Suggestions ignorées",
+        "preferences": "Préférences apprises"
       }
     },
     "schedule_applies_to": {

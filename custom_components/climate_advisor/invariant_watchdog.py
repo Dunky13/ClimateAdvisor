@@ -47,7 +47,7 @@ from __future__ import annotations
 import logging
 from bisect import bisect_left, bisect_right
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -280,10 +280,19 @@ class PromiseConfig:
     # Issue #1144: test worlds excuse an AC/fan overlap while automation is off (Climate Advisor commands nothing
     # then). Production's alert path passes False: it keeps alerting the occupant exactly as before.
     p2_excuse_observe_only: bool = True
+    # Fork Dunky13#1: the learned heat-floor offset the band resolver actually applies, ``(t, asleep) -> signed degF``,
+    # from the same view (None while preference learning is off). The heat floors below shift by it so P1 and P7 judge
+    # against the floor the thermostat was really armed with, not the configured one.
+    heat_offset_at: Callable[[datetime, bool], float] | None = field(default=None, compare=False, repr=False)
 
     @classmethod
     def from_config(
-        cls, config: dict[str, Any], *, p2_min_overlap_s: float = 0.0, p2_excuse_observe_only: bool = True
+        cls,
+        config: dict[str, Any],
+        *,
+        p2_min_overlap_s: float = 0.0,
+        p2_excuse_observe_only: bool = True,
+        heat_offset_at: Callable[[datetime, bool], float] | None = None,
     ) -> PromiseConfig:
         """Build the promise view of ``config``. ``p2_min_overlap_s`` is the AC/fan overlap P2 ignores.
 
@@ -307,6 +316,7 @@ class PromiseConfig:
             comfort_cool=_num(config, "comfort_cool", DEFAULT_COMFORT_COOL),
             sleep_heat=_num(config, CONF_SLEEP_HEAT, DEFAULT_SLEEP_HEAT),
             sleep_cool=_num(config, CONF_SLEEP_COOL, DEFAULT_SLEEP_COOL),
+            heat_offset_at=heat_offset_at,
             sleep_minute=_parse_minute(config.get("sleep_time")),
             wake_minute=_parse_minute(config.get("wake_time")),
             aggressive_savings=bool(config.get("aggressive_savings", False)),
@@ -339,10 +349,16 @@ class PromiseConfig:
                 return True
         return False
 
+    def _armed_floor(self, t: datetime, asleep: bool) -> float:
+        """The configured floor for one side of the sleep boundary plus the learned offset, capped at its ceiling."""
+        base, ceiling = (self.sleep_heat, self.sleep_cool) if asleep else (self.comfort_heat, self.comfort_cool)
+        offset = self.heat_offset_at(t, asleep) if self.heat_offset_at is not None else 0.0
+        return min(base + offset, ceiling) if offset else base
+
     def floor_hi(self, t: datetime) -> float:
         if self.in_transition(t):
-            return max(self.comfort_heat, self.sleep_heat)
-        return self.sleep_heat if self.in_sleep(t) else self.comfort_heat
+            return max(self._armed_floor(t, False), self._armed_floor(t, True))
+        return self._armed_floor(t, self.in_sleep(t))
 
     def ceiling_lo(self, t: datetime) -> float:
         if self.in_transition(t):
@@ -351,8 +367,8 @@ class PromiseConfig:
 
     def floor_lo(self, t: datetime) -> float:
         if self.in_transition(t):
-            return min(self.comfort_heat, self.sleep_heat)
-        return self.sleep_heat if self.in_sleep(t) else self.comfort_heat
+            return min(self._armed_floor(t, False), self._armed_floor(t, True))
+        return self._armed_floor(t, self.in_sleep(t))
 
     def ceiling_hi(self, t: datetime) -> float:
         if self.in_transition(t):

@@ -26,6 +26,7 @@
   "errors.night_strategy_not_ready": "De slaapkamerstrategie voor vannacht is nog niet klaar.",
   "errors.not_configured": "Het indienen van GitHub-issues is niet geconfigureerd.",
   "errors.not_loaded": "Climate Advisor niet geladen",
+  "errors.preferences_reset": "Geleerde voorkeuren gewist.",
   "errors.reclassify_triggered": "Herindeling gestart",
   "errors.resume_done": "Hervat vanuit pauze. HVAC ingesteld op {mode, select, none {n.v.t.} heat {verwarmen} cool {koelen} off {uit} auto {automatisch} heat_cool {verwarmen/koelen} fan_only {alleen ventilator} other {{mode}}}. Pauzeperiode na handmatige wijziging gestart.",
   "errors.resume_not_paused": "Momenteel niet gepauzeerd",

@@ -22,6 +22,7 @@ def _stub(day_type: str):
     stub.control_house_stepper = MagicMock(return_value=None)
     stub.control_thermal_model = MagicMock(return_value={"k_active_cool": -3.2, "k_passive": -0.05})
     stub._thermal_model = {}
+    stub.preference_view = MagicMock(return_value=None)
     stub._hourly_forecast_temps = []
     stub.config = {"comfort_cool": 76, "comfort_heat": 68}
     stub._stabilize_nat_vent_cutoff_reason = lambda plan: plan

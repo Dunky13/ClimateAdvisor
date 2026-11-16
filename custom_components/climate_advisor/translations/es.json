@@ -169,6 +169,7 @@
           "notifications": "Notificaciones",
           "advanced": "Aprendizaje y comportamiento",
           "classification_thresholds": "Umbrales de tipo de día",
+          "preference_learning": "Aprendizaje de preferencias",
           "ai_settings": "Ajustes de la IA de Claude",
           "github_settings": "Integración con GitHub"
         }
@@ -447,6 +448,20 @@
           "threshold_warm": "Los días con una máxima prevista igual o superior a esta temperatura se clasifican como Cálidos (se recomiendan ventanas, sin aire acondicionado). Por defecto: 75 °F / 24 °C.",
           "threshold_mild": "Los días con una máxima prevista igual o superior a esta temperatura se clasifican como Templados (agradables, ventanas abiertas). Por defecto: 60 °F / 16 °C.",
           "threshold_cool": "Los días con una máxima prevista igual o superior a esta temperatura se clasifican como Frescos (calefacción ligera). Por debajo son Fríos (calefacción completa). Por defecto: 45 °F / 7 °C."
+        }
+      },
+      "preference_learning": {
+        "title": "Aprendizaje de preferencias",
+        "description": "Climate Advisor aprende la temperatura de calefacción que realmente quieres a partir de tus propios cambios en el termostato, según el tipo de día, la parte del día y entre semana o fin de semana, y la aplica dentro de los límites seguros indicados abajo. Solo calefacción. La refrigeración nunca se modifica. Desactiva antes cualquier programación o modo eco del termostato.",
+        "data": {
+          "preference_learning_enabled": "Aprender mis preferencias de calefacción",
+          "preference_max_offset_f": "Ajuste aprendido máximo",
+          "preference_weekly_step_f": "Cambio semanal máximo"
+        },
+        "data_description": {
+          "preference_learning_enabled": "Si está activado, los cambios repetidos que haces en el termostato en momentos similares desplazan la temperatura de calefacción que Climate Advisor fija para ese tipo de momento. Desactivado por defecto.",
+          "preference_max_offset_f": "Lo máximo que un ajuste aprendido puede subir o bajar la temperatura de calefacción respecto a tu consigna configurada.",
+          "preference_weekly_step_f": "Lo máximo que puede cambiar un ajuste aprendido por semana."
         }
       },
       "ai_settings": {
@@ -757,7 +772,8 @@
         "all": "Todos los datos aprendidos",
         "thermal_model": "Modelo térmico",
         "weather_bias": "Sesgo de la previsión meteorológica",
-        "suggestions": "Sugerencias descartadas"
+        "suggestions": "Sugerencias descartadas",
+        "preferences": "Preferencias aprendidas"
       }
     },
     "schedule_applies_to": {

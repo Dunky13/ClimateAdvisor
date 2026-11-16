@@ -169,6 +169,7 @@
           "notifications": "Powiadomienia",
           "advanced": "Uczenie się i zachowanie",
           "classification_thresholds": "Progi typów dnia",
+          "preference_learning": "Uczenie preferencji",
           "ai_settings": "Ustawienia Claude AI",
           "github_settings": "Integracja z GitHub"
         }
@@ -447,6 +448,20 @@
           "threshold_warm": "Dni z prognozowaną temperaturą maksymalną równą tej wartości lub wyższą są klasyfikowane jako Ciepłe (zalecane okna, bez klimatyzacji). Domyślnie: 75 °F / 24 °C.",
           "threshold_mild": "Dni z prognozowaną temperaturą maksymalną równą tej wartości lub wyższą są klasyfikowane jako Łagodne (komfortowo, okna otwarte). Domyślnie: 60 °F / 16 °C.",
           "threshold_cool": "Dni z prognozowaną temperaturą maksymalną równą tej wartości lub wyższą są klasyfikowane jako Chłodne (lekkie ogrzewanie). Poniżej to Zimne (pełne ogrzewanie). Domyślnie: 45 °F / 7 °C."
+        }
+      },
+      "preference_learning": {
+        "title": "Uczenie preferencji",
+        "description": "Climate Advisor uczy się, jaką temperaturę ogrzewania naprawdę chcesz, na podstawie Twoich zmian na termostacie, osobno dla rodzaju dnia, pory dnia oraz dnia roboczego lub weekendu, i stosuje ją w bezpiecznych granicach poniżej. Tylko ogrzewanie. Chłodzenie nigdy nie jest zmieniane. Najpierw wyłącz harmonogram i tryb eco termostatu.",
+        "data": {
+          "preference_learning_enabled": "Ucz się moich preferencji ogrzewania",
+          "preference_max_offset_f": "Maksymalna wyuczona korekta",
+          "preference_weekly_step_f": "Maksymalna zmiana tygodniowo"
+        },
+        "data_description": {
+          "preference_learning_enabled": "Po włączeniu powtarzane zmiany na termostacie w podobnych porach przesuwają temperaturę ogrzewania ustawianą przez Climate Advisor dla tego rodzaju pory. Domyślnie wyłączone.",
+          "preference_max_offset_f": "O ile najwyżej wyuczona korekta może podnieść lub obniżyć temperaturę ogrzewania względem skonfigurowanej wartości.",
+          "preference_weekly_step_f": "O ile najwyżej wyuczona korekta może się zmienić w ciągu tygodnia."
         }
       },
       "ai_settings": {
@@ -757,7 +772,8 @@
         "all": "Wszystkie wyuczone dane",
         "thermal_model": "Model termiczny",
         "weather_bias": "Błąd prognozy pogody",
-        "suggestions": "Odrzucone sugestie"
+        "suggestions": "Odrzucone sugestie",
+        "preferences": "Wyuczone preferencje"
       }
     },
     "schedule_applies_to": {

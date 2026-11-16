@@ -136,8 +136,9 @@ def test_frequent_overrides_detail_with_and_without_peak_hour(tmp_path: Path) ->
     (text,) = e.generate_suggestions()
     assert text == (
         "You've manually adjusted the thermostat 11 times in the past two weeks "
-        "(mostly up by about 2°F, often around 7:00). Would you like Climate Advisor to adjust the comfort "
-        "setpoints, or add a scheduled temperature bump?"
+        "(mostly up by about 2°F, often around 7:00). "
+        "Accepting turns on automatic, bounded learning of your heating comfort temperature, "
+        "so Climate Advisor adapts to what you set."
     )
     # celsius engine: the delta is a scale-only TempDelta in the engine's unit
     e._temp_unit = "celsius"
@@ -147,9 +148,9 @@ def test_frequent_overrides_detail_with_and_without_peak_hour(tmp_path: Path) ->
     e._state.records[0]["override_details"] = []
     (bare,) = e.generate_suggestions()
     assert bare == (
-        "You've manually adjusted the thermostat 11 times in the past two weeks. This may indicate the comfort "
-        "setpoints don't match your preferences. Would you like Climate Advisor to analyze the override patterns "
-        "and suggest new setpoints?"
+        "You've manually adjusted the thermostat 11 times in the past two weeks. "
+        "Accepting turns on automatic, bounded learning of your heating comfort temperature, "
+        "so Climate Advisor adapts to what you set."
     )
 
 

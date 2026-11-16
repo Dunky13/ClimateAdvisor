@@ -26,6 +26,7 @@
   "errors.night_strategy_not_ready": "Стратегия для спальни на эту ночь ещё не готова.",
   "errors.not_configured": "Отправка обращений в GitHub не настроена.",
   "errors.not_loaded": "Climate Advisor не загружен",
+  "errors.preferences_reset": "Выученные предпочтения удалены.",
   "errors.reclassify_triggered": "Запущено повторное определение типа дня",
   "errors.resume_done": "Возобновлено после паузы. HVAC установлен на: {mode, select, none {нет данных} heat {обогрев} cool {охлаждение} off {выключено} auto {авто} heat_cool {обогрев/охлаждение} fan_only {только вентилятор} other {{mode}}}. Начат период паузы после ручного изменения.",
   "errors.resume_not_paused": "Сейчас не приостановлено",

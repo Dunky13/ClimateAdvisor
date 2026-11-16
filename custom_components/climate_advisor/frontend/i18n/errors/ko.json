@@ -26,6 +26,7 @@
   "errors.night_strategy_not_ready": "오늘 밤 침실 전략이 아직 준비되지 않았습니다.",
   "errors.not_configured": "GitHub 이슈 제출이 설정되어 있지 않습니다.",
   "errors.not_loaded": "Climate Advisor가 로드되지 않았습니다",
+  "errors.preferences_reset": "학습된 선호도를 지웠습니다.",
   "errors.reclassify_triggered": "재분류를 시작했습니다",
   "errors.resume_done": "일시 정지에서 재개했습니다. 냉난방을 {mode, select, none {해당 없음} heat {난방} cool {냉방} off {꺼짐} auto {자동} heat_cool {냉난방} fan_only {송풍} other {{mode}}}(으)로 설정했습니다. 수동 변경 후 일시 정지 시간이 시작되었습니다.",
   "errors.resume_not_paused": "현재 일시 정지 상태가 아닙니다",

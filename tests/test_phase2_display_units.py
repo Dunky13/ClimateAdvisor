@@ -209,6 +209,8 @@ class TestConfigViewTemperatureUnits:
         "comfort_deadband_mild_f",
         "comfort_deadband_cool_f",
         "comfort_deadband_cold_f",
+        "preference_max_offset_f",  # fork Dunky13#1
+        "preference_weekly_step_f",
     )
 
     def _settings(self, config: dict) -> dict[str, dict]:

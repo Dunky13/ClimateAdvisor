@@ -309,7 +309,7 @@
   "activity.pre_cool_overshoot_temps": "تجاوز التبريد المسبق -- الداخل {indoor} < الحد الأدنى {floor}",
   "activity.pre_cool_suppressed_nat_vent": "تم كبح التبريد المسبق -- التهوية الطبيعية حققت الهدف بالفعل",
   "activity.reason_band_edge_used": "{band} -- استُخدمت الحافة {edge} ({shape} عند {target})",
-  "activity.reason_band_select": "{ctx} النطاق [{floor}/{ceiling}] (اليوم={day_type}، النشط={active}{aggressive, select, yes {، حازم} other {}}{has_tou, select, yes {، tou_expansion={tou}} other {}})",
+  "activity.reason_band_select": "{ctx} النطاق [{floor}/{ceiling}] (اليوم={day_type}، النشط={active}{aggressive, select, yes {، حازم} other {}}{has_tou, select, yes {، tou_expansion={tou}} other {}}{has_pref, select, yes {, preference={pref_bucket} {pref}} other {}})",
   "activity.reason_bedtime_no_classification": "وقت النوم — لا يوجد تصنيف",
   "activity.reason_bedtime_nv_not_active": "وقت النوم — التهوية الطبيعية غير نشطة",
   "activity.reason_bedtime_sleep_band": "وقت النوم — نطاق النوم [{floor}/{ceiling}]",

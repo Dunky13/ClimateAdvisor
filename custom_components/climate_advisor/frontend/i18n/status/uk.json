@@ -184,6 +184,8 @@
   "status.pre_cool_status.scheduled": "Попереднє охолодження заплановано ({target} о {t})",
   "status.pre_cool_status.suppressed_achieved": "попереднє охолодження призупинено — природна вентиляція досягла {indoor} (ціль {target})",
   "status.pre_cool_status.suppressed_session": "попереднє охолодження призупинено — триває сесія природної вентиляції/вентилятора для всього будинку",
+  "status.preference.applied": "Нижня межа опалення {armed} замість заданої {configured}: вивчено {sign}{amount} для {part, select, night {ніч} morning {ранок} afternoon {день} evening {вечір} other {{part}}}, {day_class, select, weekday {будні} weekend {вихідні} other {{day_class}}} (спостережень: {n, number}{has_update, select, yes {, останнє оновлення: {when}} other {, оновлень ще не було}}).",
+  "status.preference.neutral": "Навчання уподобанням увімкнено; нижня межа опалення зараз не змінена (спостережень: {n, number}{has_update, select, yes {, останнє оновлення: {when}} other {, оновлень ще не було}}).",
   "status.promise.ac_whf_mutex": "{n}: кондиціонер і вентилятор для всього будинку ніколи разом",
   "status.promise.blind_fan_continue": "{n}: вентилятор без внутрішніх показань продовжує працювати",
   "status.promise.comfort_kept": "{n}: комфорт збережено",

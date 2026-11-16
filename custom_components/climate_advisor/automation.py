@@ -289,6 +289,7 @@ from .override_grace_lifecycle import (
     OverrideConfirmState,
     OverrideGraceLifecycleState,
 )
+from .preference_learning import PreferenceView
 from .record_text import MsgText, msg_of, msg_text
 from .remote_offset import (
     ClampLimit,
@@ -306,7 +307,7 @@ from .remote_offset import (
     startup_wait_s,
     step_f,
 )
-from .setpoint_combinations import vacation_edges
+from .setpoint_combinations import MIN_HEAT_COOL_GAP_F, vacation_edges
 from .setpoint_verify_decision import (
     ModeAlignmentOutcome,
     SetpointVerifyOutcome,
@@ -868,18 +869,119 @@ BAND_CONTEXTS: tuple[str, ...] = (
 )
 
 
-def awake_comfort_edges(config: dict, *, aggressive_savings: bool) -> tuple[float, float]:
+def awake_comfort_edges(
+    config: dict, *, aggressive_savings: bool, preference_offset_f: float = 0.0
+) -> tuple[float, float]:
     """The occupied-and-awake (home/guest) ``(floor, ceiling)`` the thermostat is armed with (Issue #1087).
 
     ``[comfort_heat, comfort_cool]``, widened on BOTH sides by ``CEILING_ESCALATION_SAVINGS_MARGIN_F``
     when aggressive savings is on. The ONE place the awake edges are derived: ``select_comfort_band()``
     arms them, and the chart's target band (which ramps to and from them) reads them here too, so
     neither can drift from the other.
+
+    ``preference_offset_f`` (fork Dunky13#1): the learned preference for the current bucket, added to the heat
+    floor only (never the ceiling), capped so the floor never passes the ceiling. 0.0 (feature off) is exact.
     """
     margin = CEILING_ESCALATION_SAVINGS_MARGIN_F if aggressive_savings else 0.0
     comfort_heat = float(config.get("comfort_heat", DEFAULT_COMFORT_HEAT))
     comfort_cool = float(config.get("comfort_cool", DEFAULT_COMFORT_COOL))
-    return comfort_heat - margin, comfort_cool + margin
+    floor, ceiling = comfort_heat - margin, comfort_cool + margin
+    return _floor_with_preference(floor, ceiling, preference_offset_f), ceiling
+
+
+_PREF_CLAMP_WARNED: set[tuple] = set()
+
+
+def _warn_once(key: tuple, message: str, *args: Any) -> None:
+    """WARNING for a learned-preference clamp, once per distinct situation (the band resolves many times a minute)."""
+    if key in _PREF_CLAMP_WARNED:
+        return
+    if len(_PREF_CLAMP_WARNED) > 256:
+        _PREF_CLAMP_WARNED.clear()
+    _PREF_CLAMP_WARNED.add(key)
+    _LOGGER.warning(message, *args)
+
+
+def _floor_with_preference(floor: float, ceiling: float, offset_f: float) -> float:
+    """``floor + offset_f`` held ``MIN_HEAT_COOL_GAP_F`` below ``ceiling`` (fork Dunky13#1); ``floor`` for a 0.0 offset.
+
+    The learned offset never squeezes the heat/cool gap below the minimum the setpoint warnings use (a dual-setpoint
+    thermostat rejects low == high); a band already narrower than that keeps its configured floor.
+    """
+    if not offset_f:
+        return floor
+    armed = floor + offset_f
+    limit = max(floor, ceiling - MIN_HEAT_COOL_GAP_F)
+    if armed > limit:
+        _warn_once(
+            ("ceiling", round(floor, 1), round(ceiling, 1), round(offset_f, 1)),
+            "Learned preference clamped to keep the heat/cool gap: floor=%.1fF offset=%+.1fF ceiling=%.1fF armed=%.1fF",
+            floor,
+            offset_f,
+            ceiling,
+            limit,
+        )
+        return limit
+    return armed
+
+
+def _preference_at(
+    preferences: PreferenceView | None,
+    at: datetime | None,
+    classification: DayClassification,
+    config: dict,
+    *,
+    in_sleep_window: bool,
+) -> tuple[float, str | None]:
+    """``(offset_f, bucket)`` for ``at`` (fork Dunky13#1); ``(0.0, None)`` with the feature off or no instant given."""
+    if not isinstance(preferences, PreferenceView) or at is None:  # isinstance: stubbed engines hand back mocks
+        return 0.0, None
+    offset, bucket = preferences.offset_at(at, str(classification.day_type), config, in_sleep_window=in_sleep_window)
+    stored = float(preferences.offsets.get(bucket, 0.0))
+    if abs(stored) > preferences.max_offset_f:
+        _warn_once(
+            ("cap", bucket, round(stored, 1), round(preferences.max_offset_f, 1)),
+            "Learned preference clamped by the offset cap: bucket=%s stored=%+.1fF cap=%.1fF applied=%+.1fF",
+            bucket,
+            stored,
+            preferences.max_offset_f,
+            offset,
+        )
+    return offset, bucket
+
+
+def _preference_offset_f(
+    preferences: PreferenceView | None,
+    at: datetime | None,
+    classification: DayClassification,
+    config: dict,
+    *,
+    in_sleep_window: bool,
+) -> float:
+    """The learned heat-floor offset for ``at``; 0.0 with the feature off or no instant given."""
+    return _preference_at(preferences, at, classification, config, in_sleep_window=in_sleep_window)[0]
+
+
+def learned_heat_floors(
+    config: dict, classification: DayClassification | None, preferences: PreferenceView | None, now: datetime
+) -> tuple[float, float]:
+    """``(comfort_heat, sleep_heat)`` as the ventilation and fan floors read them (fork Dunky13#1).
+
+    The configured values plus the learned offset of the awake / night bucket at ``now``, each capped at its own
+    ceiling like the band, so ventilation and the fan cycling never cool below the floor the thermostat is armed
+    with. With the feature off (or no classification) the values are exactly the configured ones. ``sleep_heat``
+    keeps its fallback to the configured ``comfort_heat``.
+    """
+    comfort = float(config.get("comfort_heat", DEFAULT_COMFORT_HEAT))
+    sleep = float(config.get(CONF_SLEEP_HEAT, comfort))
+    if classification is None:
+        return comfort, sleep
+    awake = _preference_offset_f(preferences, now, classification, config, in_sleep_window=False)
+    night = _preference_offset_f(preferences, now, classification, config, in_sleep_window=True)
+    return (
+        _floor_with_preference(comfort, float(config.get("comfort_cool", DEFAULT_COMFORT_COOL)), awake),
+        _floor_with_preference(sleep, float(config.get(CONF_SLEEP_COOL, DEFAULT_SLEEP_COOL)), night),
+    )
 
 
 def select_comfort_band(
@@ -890,6 +992,8 @@ def select_comfort_band(
     in_sleep_window: bool,
     aggressive_savings: bool,
     tou_expansion_f: float = 0.0,
+    at: datetime | None = None,
+    preferences: PreferenceView | None = None,
 ) -> ComfortBand:
     """Compute the comfort band for the current plan — pure, no HA state access.
 
@@ -924,11 +1028,18 @@ def select_comfort_band(
     matters for the duration of the TOU window itself. Ignored (no-op) for every other
     occupancy mode — Home/Guest's comfort band and the sleep band are untouched by this
     parameter regardless of its value.
+
+    ``at`` / ``preferences`` (fork Dunky13#1, preference learning): the instant and the learned offsets. The learned
+    offset for the instant's bucket is added to the HEAT FLOOR in exactly two branches, awake home/guest and the
+    sleep window; never to away, vacation or the ceiling. ``preferences=None`` (feature off, the default) or
+    ``at=None`` changes nothing. This is the one seam: the plan, chart, briefing, timeline and the written setpoint
+    all read the band through here.
     """
     setback_heat = float(config.get("setback_heat", DEFAULT_SETBACK_HEAT))
     setback_cool = float(config.get("setback_cool", DEFAULT_SETBACK_COOL))
     sleep_heat = float(config.get(CONF_SLEEP_HEAT, DEFAULT_SLEEP_HEAT))
     sleep_cool = float(config.get(CONF_SLEEP_COOL, DEFAULT_SLEEP_COOL))
+    _pref, _pref_bucket = 0.0, None  # the learned preference this band carries (awake home/guest and sleep only)
 
     if occupancy_mode == OCCUPANCY_VACATION:
         floor, ceiling = vacation_edges(config)  # Issue #1347: optional vacation setpoints, else away -/+ 3
@@ -939,13 +1050,16 @@ def select_comfort_band(
     elif in_sleep_window:
         active = "floor" if classification.hvac_mode == "heat" else "ceiling"
         floor, ceiling, ctx = sleep_heat, sleep_cool, "sleep"
+        _pref, _pref_bucket = _preference_at(preferences, at, classification, config, in_sleep_window=True)
+        floor = _floor_with_preference(floor, ceiling, _pref)
     else:
         # Occupied + awake (home/guest): the "lazy" comfort band — hold BOTH edges at comfort so the
         # thermostat pre-heats the morning to comfort_heat and cools the afternoon to comfort_cool.
         # (Suppression to a setback edge happens only away/asleep.) `active` is the day's dominant
         # edge for single-mode devices: floor on a heat day, ceiling otherwise.
         active = "floor" if classification.hvac_mode == "heat" else "ceiling"
-        floor, ceiling = awake_comfort_edges(config, aggressive_savings=aggressive_savings)
+        _pref, _pref_bucket = _preference_at(preferences, at, classification, config, in_sleep_window=False)
+        floor, ceiling = awake_comfort_edges(config, aggressive_savings=aggressive_savings, preference_offset_f=_pref)
         ctx = "comfort"
 
     # Issue #899: TOU away/vacation window expansion — widens only the edge matching the
@@ -977,6 +1091,9 @@ def select_comfort_band(
         aggressive=_yn_flag(aggressive_savings),
         has_tou=_yn_flag(tou_expansion_f),
         tou=f"{display_delta(tou_expansion_f, _unit, 1):.1f}" if tou_expansion_f else "",
+        has_pref=_yn_flag(_pref),
+        pref_bucket=_pref_bucket or "",
+        pref=f"{display_delta(_pref, _unit, 1):+.1f}" if _pref else "",
     )
     return ComfortBand(floor=floor, ceiling=ceiling, active=active, reason=reason, context=context)
 
@@ -1158,6 +1275,7 @@ def resolve_active_band(
     occupancy_mode: str,
     now: datetime,
     tou_expansion_f: float = 0.0,
+    preferences: PreferenceView | None = None,
 ) -> ComfortBand:
     """The comfort band the thermostat is armed with right now (Issue #1080).
 
@@ -1175,10 +1293,14 @@ def resolve_active_band(
         in_sleep_window=_in_sleep_window(now, config),
         aggressive_savings=bool(config.get("aggressive_savings", False)),
         tou_expansion_f=tou_expansion_f,
+        at=now,
+        preferences=preferences,
     )
 
 
-def band_resolver_for(classification: DayClassification, config: dict) -> Callable[[datetime, str], ComfortBand]:
+def band_resolver_for(
+    classification: DayClassification, config: dict, preferences: PreferenceView | None = None
+) -> Callable[[datetime, str], ComfortBand]:
     """``(instant, occupancy_mode) -> ComfortBand`` for the operation timeline (Issue #1230 R3a).
 
     The same ``select_comfort_band()`` call ``resolve_active_band()`` makes, but asked about any instant and
@@ -1193,6 +1315,8 @@ def band_resolver_for(classification: DayClassification, config: dict) -> Callab
             occupancy_mode=occupancy_mode,
             in_sleep_window=_in_sleep_window(at, config),
             aggressive_savings=bool(config.get("aggressive_savings", False)),
+            at=at,
+            preferences=preferences,
         )
 
     return _band
@@ -1246,6 +1370,7 @@ def active_thresholds_for(coordinator: Any, now: datetime | None = None) -> dict
             occupancy_mode=coordinator._occupancy_mode,
             now=now,
             tou_expansion_f=(ae._active_tou_av_window().expansion_f if ae is not None else 0.0),
+            preferences=_pref_fn() if callable(_pref_fn := getattr(coordinator, "preference_view", None)) else None,
         )
         # Issue #1371: a held overnight pre-cool is what the thermostat is armed with, so the status API and the
         # threshold sensors quote it (the same substitution apply_classification() makes).
@@ -1566,6 +1691,8 @@ def compute_bedtime_setback(
     config: dict,
     thermal_model: dict | None,
     c: DayClassification,
+    *,
+    preference_offset_f: float = 0.0,
 ) -> float:
     """Compute bedtime setback target temperature using thermal model if available.
 
@@ -1579,6 +1706,10 @@ def compute_bedtime_setback(
     away setback (Issue #1366): the engine's ``select_comfort_band()`` arms the raw sleep value, and
     the briefing and chart (this function's only consumers) must quote what the thermostat holds,
     even when sleep heat is set below away heat or sleep cool above away cool.
+
+    ``preference_offset_f`` (fork Dunky13#1): the learned night-bucket offset the engine's sleep band adds to the
+    heat floor (``select_comfort_band()``); added to the heat target here (capped at ``sleep_cool``, as the band
+    caps it at its ceiling) so the briefing and chart quote it too.
     """
     from .const import (
         CONF_MAX_SETBACK_DEPTH,
@@ -1600,7 +1731,10 @@ def compute_bedtime_setback(
         # Explicit sleep temp takes priority over adaptive calculation
         _explicit = config.get(CONF_SLEEP_HEAT)
         if _explicit is not None:
-            return float(_explicit)  # Issue #1366: unclamped, the raw value select_comfort_band() arms
+            # Issue #1366: unclamped, the raw value armed; the learned offset is capped at sleep_cool like the band
+            return _floor_with_preference(
+                float(_explicit), float(config.get(CONF_SLEEP_COOL, DEFAULT_SLEEP_COOL)), preference_offset_f
+            )
     elif hvac_mode == "cool":
         comfort = config.get("comfort_cool", DEFAULT_COMFORT_COOL)
         floor = config.get("setback_cool", DEFAULT_SETBACK_COOL)
@@ -1655,7 +1789,9 @@ def compute_bedtime_setback(
 
     if hvac_mode == "heat":
         raw = comfort - depth
-        return max(raw, floor)
+        return _floor_with_preference(
+            max(raw, floor), float(config.get(CONF_SLEEP_COOL, DEFAULT_SLEEP_COOL)), preference_offset_f
+        )
     else:  # cool
         raw = comfort + depth
         return min(raw, floor)
@@ -2644,6 +2780,9 @@ class AutomationEngine:
         # Issue #1517: likewise the primary engine's house model (an engine-neutral ``HouseStepper``) for the ceiling
         # guard's lead time; None on a bare engine or while the primary is still learning.
         self._control_stepper_provider: Callable[[], Any] | None = None
+        # Fork Dunky13#1: the coordinator's live provider of the learned setpoint preferences; None (a bare engine, or
+        # the feature off) reads every offset as 0, so the band is exactly upstream's.
+        self._preference_view_provider: Callable[[], PreferenceView | None] | None = None
         # Issue #1556/#1566: the coordinator's learned thermostat fan profile (``live_fan_profile`` over its profile
         # store); None on a bare engine (headless tools) = a name-only profile of the live fan_modes list.
         self._fan_profile_provider: Callable[[], FanProfile] | None = None
@@ -5577,6 +5716,8 @@ class AutomationEngine:
                 occupancy_mode=self._occupancy_mode,
                 in_sleep_window=_in_sleep_window(dt_util.now(), self.config),
                 aggressive_savings=bool(self.config.get("aggressive_savings", False)),
+                at=dt_util.now(),
+                preferences=self._preferences(),
             )
             # Issue #1371: an overnight pre-cool in force is kept, not overwritten by the plain sleep band.
             _held = self._hold_pre_cool_band(_band)
@@ -7773,6 +7914,7 @@ class AutomationEngine:
                 # Issue #1080: handle_occupancy_away/vacation arm the TOU-expanded band, so the
                 # read-only readers (status, incidents, override matching) must resolve it too.
                 tou_expansion_f=self._active_tou_av_window().expansion_f,
+                preferences=self._preferences(),
             )
             held = self._hold_pre_cool_band(band)
             return held if isinstance(held, ComfortBand) else band
@@ -9198,7 +9340,7 @@ class AutomationEngine:
             # Side effects (fan/HVAC calls, event emission, logging) stay here;
             # only the branching condition moved.
             if self._natural_vent_active:
-                comfort_heat = float(self.config.get("comfort_heat", DEFAULT_COMFORT_HEAT))
+                comfort_heat, _sleep_heat_floor = self._learned_heat_floors()
                 indoor = self._get_indoor_temp_f()
                 if indoor is not None and comfort_cool is not None and indoor > comfort_cool:
                     if self.config.get(CONF_FAN_MODE, FAN_MODE_DISABLED) == FAN_MODE_HVAC:
@@ -9251,7 +9393,7 @@ class AutomationEngine:
                         indoor=indoor,
                         outdoor=outdoor,
                         comfort_heat_raw=comfort_heat,
-                        sleep_heat=float(self.config.get(CONF_SLEEP_HEAT, comfort_heat)),
+                        sleep_heat=_sleep_heat_floor,
                         in_sleep_window=_in_sleep_window(dt_util.now(), self.config),
                         hysteresis=float(self.config.get(CONF_NAT_VENT_HYSTERESIS_F, NAT_VENT_HYSTERESIS_F)),
                         comfort_cool=comfort_cool,
@@ -9784,10 +9926,9 @@ class AutomationEngine:
                 await self._exit_nat_vent(reason=_R("reason_nv_force_closed"))
                 return
 
-            comfort_heat = float(self.config.get("comfort_heat", DEFAULT_COMFORT_HEAT))
+            comfort_heat, sleep_heat = self._learned_heat_floors()
             comfort_cool = float(self.config.get("comfort_cool", DEFAULT_COMFORT_COOL))
             hysteresis = float(self.config.get(CONF_NAT_VENT_HYSTERESIS_F, NAT_VENT_HYSTERESIS_F))
-            sleep_heat = float(self.config.get(CONF_SLEEP_HEAT, comfort_heat))
             in_sleep_window = _in_sleep_window(dt_util.now(), self.config)
             nat_vent_target = compute_nat_vent_target(
                 sleep_heat=sleep_heat,
@@ -10158,10 +10299,9 @@ class AutomationEngine:
                 )
             return
 
-        comfort_heat = float(self.config.get("comfort_heat", DEFAULT_COMFORT_HEAT))
+        comfort_heat, sleep_heat_ftc = self._learned_heat_floors()
         hysteresis_ftc = float(self.config.get(CONF_NAT_VENT_HYSTERESIS_F, NAT_VENT_HYSTERESIS_F))
         in_sleep_window = _in_sleep_window(dt_util.now(), self.config)
-        sleep_heat_ftc = float(self.config.get(CONF_SLEEP_HEAT, comfort_heat))
 
         # Issue #435 follow-up (architecture-reset Step 2): Check 1 + Check 2's decision
         # logic lives in one pure, independently-tested function
@@ -12676,6 +12816,8 @@ class AutomationEngine:
             occupancy_mode=self._occupancy_mode,
             in_sleep_window=True,
             aggressive_savings=bool(self.config.get("aggressive_savings", False)),
+            at=dt_util.now(),
+            preferences=self._preferences(),
         )
 
         # Issue #498: bedtime no longer decides for itself whether nat-vent/WHF "can still
@@ -12917,6 +13059,8 @@ class AutomationEngine:
             occupancy_mode=self._occupancy_mode,
             in_sleep_window=True,
             aggressive_savings=bool(self.config.get("aggressive_savings", False)),
+            at=dt_util.now(),
+            preferences=self._preferences(),
         )
         _pre_cool_band = ComfortBand(
             floor=_sleep_band.floor,
@@ -13065,7 +13209,7 @@ class AutomationEngine:
 
         # Morning pre-cool overshoot guard: warn if indoor is below comfort_heat (heat may fire)
         _current_indoor = indoor_temp
-        _comfort_heat = float(self.config.get("comfort_heat", DEFAULT_COMFORT_HEAT))
+        _comfort_heat = self._learned_heat_floors()[0]
         if _current_indoor is not None:
             if _current_indoor < _comfort_heat:
                 # Issue #874: a setpoint command issued moments ago (e.g. this same
@@ -13133,6 +13277,8 @@ class AutomationEngine:
             occupancy_mode=self._occupancy_mode,
             in_sleep_window=False,
             aggressive_savings=bool(self.config.get("aggressive_savings", False)),
+            at=dt_util.now(),
+            preferences=self._preferences(),
         )
         # Issue #591 (found via further investigation of wakeup_preserves_whf_manual_override):
         # handle_morning_wakeup() itself is reachable from multiple overlapping trigger paths,
@@ -14975,9 +15121,9 @@ class AutomationEngine:
         session's sleep-window off_threshold (``sleep_heat + hysteresis - hysteresis``),
         which is why this gap only showed up during the day.
         """
-        comfort_heat = float(self.config.get("comfort_heat", DEFAULT_COMFORT_HEAT))
+        comfort_heat, sleep_heat_floor = self._learned_heat_floors()
         if _in_sleep_window(dt_util.now(), self.config):
-            return float(self.config.get(CONF_SLEEP_HEAT, comfort_heat))
+            return sleep_heat_floor
         comfort_cool = float(self.config.get("comfort_cool", DEFAULT_COMFORT_COOL))
         hysteresis = float(self.config.get(CONF_NAT_VENT_HYSTERESIS_F, NAT_VENT_HYSTERESIS_F))
         nat_vent_target = compute_nat_vent_target(
@@ -15131,7 +15277,7 @@ class AutomationEngine:
         """
         from .nat_vent_fsm import NatVentFsmInputs
 
-        comfort_heat_raw = float(self.config.get("comfort_heat", DEFAULT_COMFORT_HEAT))
+        comfort_heat_raw, _sleep_heat = self._learned_heat_floors(now)
         _configured_hysteresis = float(self.config.get(CONF_NAT_VENT_HYSTERESIS_F, NAT_VENT_HYSTERESIS_F))
         _hysteresis = hysteresis if hysteresis is not None else _configured_hysteresis
         _paused_by_door = paused_by_door if paused_by_door is not None else bool(self._paused_by_door)
@@ -15141,7 +15287,6 @@ class AutomationEngine:
         if override_cleared:
             _override_active = bool(self._fan_override_active)
             _grace_active = False
-        _sleep_heat = float(self.config.get(CONF_SLEEP_HEAT, comfort_heat_raw))
         _in_sleep_window_val = _in_sleep_window(now, self.config)
         if apply_reactivation_floor:
             # Issue #775: pre-resolve through the same daytime cycling-off-threshold
@@ -15324,6 +15469,16 @@ class AutomationEngine:
         if provider is None:
             return base
         return provider(base) or {}
+
+    def _learned_heat_floors(self, now: datetime | None = None) -> tuple[float, float]:
+        """``(comfort_heat, sleep_heat)`` with the learned offsets, for the nat-vent / fan floors (fork Dunky13#1)."""
+        at = now if now is not None else dt_util.now()
+        return learned_heat_floors(self.config, self._current_classification, self._preferences(), at)
+
+    def _preferences(self) -> PreferenceView | None:
+        """The learned setpoint preferences to hand ``select_comfort_band()``; None = feature off (fork Dunky13#1)."""
+        provider = getattr(self, "_preference_view_provider", None)  # getattr: tests build engines via __new__
+        return provider() if provider is not None else None
 
     def _control_stepper(self) -> Any:
         """The primary engine's house model for lead times (Issue #1517), or None (no provider / still learning)."""
@@ -17895,7 +18050,7 @@ class AutomationEngine:
         # warm/mild day). ``handle_occupancy_home()`` has already set the occupancy to home, so this is the home band.
         family = self._comfort_restore_family(c) if c is not None else None
         if family in ("heat", "cool"):  # family is None without a classification
-            comfort_f = self.config["comfort_heat"] if family == "heat" else self.config["comfort_cool"]
+            comfort_f = self._learned_heat_floors()[0] if family == "heat" else self.config["comfort_cool"]
             setback_f = self.config["setback_heat"] if family == "heat" else self.config["setback_cool"]
         debounce_seconds = self.config.get(CONF_WELCOME_HOME_DEBOUNCE, DEFAULT_WELCOME_HOME_DEBOUNCE_SECONDS)
         seconds_since: float | None = None

@@ -26,6 +26,7 @@
   "errors.night_strategy_not_ready": "La stratégie de la chambre pour cette nuit n’est pas encore prête.",
   "errors.not_configured": "L’envoi de tickets GitHub n’est pas configuré.",
   "errors.not_loaded": "Climate Advisor n’est pas chargé",
+  "errors.preferences_reset": "Préférences apprises effacées.",
   "errors.reclassify_triggered": "Reclassification déclenchée",
   "errors.resume_done": "Reprise après la pause. Chauffage/climatisation réglé sur {mode, select, none {s.o.} heat {chauffage} cool {climatisation} off {éteint} auto {auto} heat_cool {chauffage/climatisation} fan_only {ventilation uniquement} other {{mode}}}. Pause après modification manuelle démarrée.",
   "errors.resume_not_paused": "Pas en pause actuellement",

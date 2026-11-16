@@ -14,8 +14,8 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from datetime import datetime, time
-from typing import Any
+from datetime import datetime, time, timedelta
+from typing import Any, NamedTuple
 
 from homeassistant.util import dt as dt_util
 
@@ -57,6 +57,7 @@ from .nat_vent_plan import (
     resolve_window_pair,
     resolve_with_fallback,
 )
+from .preference_learning import PreferenceView, bucket_parts
 from .temperature import FAHRENHEIT, format_temp, free_cooling_direction_ok, from_fahrenheit
 from .timeline_surfaces import TimelineWindows, operations_msgs, timeline_windows
 
@@ -99,6 +100,15 @@ def _clock(value: datetime | time) -> i18n.Time:
         return i18n.Time(value)
     ref = dt_util.now()
     return i18n.Time(datetime.combine(ref.date(), value, tzinfo=ref.tzinfo))
+
+
+_PREF_PART_KEYS = {
+    "night": "briefing.pref.part.night",
+    "morning": "briefing.pref.part.morning",
+    "afternoon": "briefing.pref.part.afternoon",
+    "evening": "briefing.pref.part.evening",
+}
+_PREF_CLASS_KEYS = {"weekday": "briefing.pref.class.weekday", "weekend": "briefing.pref.class.weekend"}
 
 
 def _slots(key: str, **slots: Any) -> i18n.Msg:
@@ -187,6 +197,9 @@ class _BriefingFacts:
     window_veto: str | None = None
     # Issue #1404: the time-of-use bank holding the house right now (``automation.CurrentHold`` with a bank), or None.
     current_hold: Any = None
+    # Fork Dunky13#1: the learned heat-floor offsets for the rest of today and tonight, ``((bucket, offset_f), ...)`` in
+    # time order, zero entries kept (the day class comes from them); empty with the feature off or an empty house.
+    preference: tuple[tuple[str, float], ...] = ()
 
 
 def _local(moment: datetime, now: datetime) -> datetime:
@@ -251,6 +264,70 @@ def _vacation_band_is_deeper(c: DayClassification, band: ComfortBand, config: di
     return floor_deeper and ceiling_deeper
 
 
+class _BriefingPreference(NamedTuple):
+    """The learned-preference inputs the briefing needs, resolved once (fork Dunky13#1)."""
+
+    offset_f: float  # awake offset the quoted awake band carries (the first awake part still ahead)
+    awake_at: datetime  # the instant the quoted awake band is read at (now, or the coming wake time while asleep)
+    bedtime_at: datetime  # the coming bedtime, for the quoted night band
+    remaining: tuple[tuple[str, float], ...]  # (bucket, offset_f) of every part of day from now to the next wake
+
+
+def _briefing_preference(
+    c: DayClassification,
+    config: dict,
+    preferences: PreferenceView | None,
+    *,
+    occupancy_mode: str,
+    now: datetime,
+) -> _BriefingPreference | None:
+    """Which learned offsets the briefing quotes, and at which instants; None = nothing learned applies.
+
+    The quoted awake figure is the awake band at ``now`` (or at the coming wake time while asleep) and the bedtime
+    figure the night band at the coming bedtime: the same instants and buckets the engine reads there
+    (``select_comfort_band(at=...)``), so the briefing, the chart and the written setpoint agree. ``remaining`` lists
+    every bucket from now to the next wake time so the preference line can state each part of day that applies.
+    """
+    if preferences is None or occupancy_mode in ("away", "vacation"):
+        return None
+    wake = _wall_clock(config.get("wake_time"))
+    sleep = _wall_clock(config.get("sleep_time"))
+    if wake is None or sleep is None:
+        return None
+    asleep = _in_sleep_window(now, config)
+    wake_at = now.replace(hour=wake.hour, minute=wake.minute, second=0, microsecond=0)
+    if wake_at <= now:
+        wake_at += timedelta(days=1)
+    awake_at = wake_at if asleep else now
+    bedtime_at = now.replace(hour=sleep.hour, minute=sleep.minute, second=0, microsecond=0)
+    if bedtime_at <= now:
+        bedtime_at += timedelta(days=1)
+    day_type = str(c.day_type)
+    remaining: list[tuple[str, float]] = []
+    at = now
+    end = (
+        bedtime_at if asleep else wake_at
+    )  # asleep: the rest of the night and the day ahead; awake: to tomorrow's wake
+    while at < end:
+        offset, bucket = preferences.offset_at(at, day_type, config, in_sleep_window=_in_sleep_window(at, config))
+        if all(b != bucket for b, _ in remaining):
+            remaining.append((bucket, offset))
+        at += timedelta(minutes=15)
+    offset, _bucket = preferences.offset_at(awake_at, day_type, config, in_sleep_window=False)
+    return _BriefingPreference(offset, awake_at, bedtime_at, tuple(remaining))
+
+
+def _wall_clock(value: Any) -> time | None:
+    """``"HH:MM[:SS]"`` or a ``time`` as a ``time``; None when unset or malformed."""
+    if isinstance(value, time):
+        return value
+    try:
+        parts = str(value).split(":")
+        return time(int(parts[0]), int(parts[1]))
+    except ValueError, IndexError, TypeError:
+        return None
+
+
 def _gather_briefing_facts(
     c: DayClassification,
     config: dict,
@@ -265,6 +342,7 @@ def _gather_briefing_facts(
     now: datetime | None = None,
     awake_edges: tuple[float, float] | None = None,
     windows: TimelineWindows | None = None,
+    preferences: PreferenceView | None = None,
 ) -> _BriefingFacts:
     """Gather the briefing's facts once (Issue #1231). ``config`` is the TLDR-shape dict built by
     ``generate_briefing()`` (comfort/setback/sleep_time/wake_time/aggressive_savings)."""
@@ -279,12 +357,21 @@ def _gather_briefing_facts(
     for key in ("sleep_heat", "sleep_cool", CONF_VACATION_HEAT, CONF_VACATION_COOL):
         if runtime_config and key in runtime_config:
             band_cfg[key] = runtime_config[key]
+    pref = _briefing_preference(c, band_cfg, preferences, occupancy_mode=occupancy_mode, now=now)
     band = select_comfort_band(
-        c, band_cfg, occupancy_mode=occupancy_mode, in_sleep_window=False, aggressive_savings=savings
+        c,
+        band_cfg,
+        occupancy_mode=occupancy_mode,
+        in_sleep_window=False,
+        aggressive_savings=savings,
+        at=pref.awake_at if pref else None,
+        preferences=preferences,
     )
     vacation_deeper = occupancy_mode == "vacation" and _vacation_band_is_deeper(c, band, config)
     awake_heat, awake_cool = (
-        awake_edges if awake_edges is not None else awake_comfort_edges(config, aggressive_savings=savings)
+        awake_edges
+        if awake_edges is not None
+        else awake_comfort_edges(config, aggressive_savings=savings, preference_offset_f=pref.offset_f if pref else 0.0)
     )
 
     # Bedtime: the edge handle_bedtime() arms at home is the sleep band's edge on this day's side. The adaptive
@@ -293,7 +380,13 @@ def _gather_briefing_facts(
     bedtime_target: float | None = None
     if not unoccupied and c.hvac_mode in ("heat", "cool"):
         asleep = select_comfort_band(
-            c, band_cfg, occupancy_mode="home", in_sleep_window=True, aggressive_savings=savings
+            c,
+            band_cfg,
+            occupancy_mode="home",
+            in_sleep_window=True,
+            aggressive_savings=savings,
+            at=pref.bedtime_at if pref else None,
+            preferences=preferences,
         )
         normal_bedtime = asleep.floor if c.hvac_mode == "heat" else asleep.ceiling
         adaptive = bedtime_setback_heat if c.hvac_mode == "heat" else bedtime_setback_cool
@@ -399,6 +492,7 @@ def _gather_briefing_facts(
         vacation_deeper=vacation_deeper,
         open_at=open_at,
         window_veto=window_veto,
+        preference=pref.remaining if pref is not None else (),
     )
 
 
@@ -434,6 +528,7 @@ def generate_briefing_msg(
     now: datetime | None = None,
     timeline: Any | None = None,
     current_hold: Any | None = None,
+    preferences: PreferenceView | None = None,
 ) -> i18n.Msg:
     """Build the daily climate briefing as ONE message (``briefing.full.<day type>``; ``briefing.tldr`` for
     ``verbosity="tldr_only"``). ``generate_briefing()`` renders it.
@@ -536,7 +631,12 @@ def generate_briefing_msg(
         "wake_time": wake_time,
         "aggressive_savings": _savings,
     }
-    awake_heat, awake_cool = awake_comfort_edges(config, aggressive_savings=_savings)
+    _pref = _briefing_preference(
+        c, config, preferences, occupancy_mode=occupancy_mode, now=now if now is not None else dt_util.now()
+    )
+    awake_heat, awake_cool = awake_comfort_edges(
+        config, aggressive_savings=_savings, preference_offset_f=_pref.offset_f if _pref else 0.0
+    )
     # Issue #535: comfort-floor awareness for the nat-vent cutoff prediction — the real
     # activation gate (decide_nat_vent_gate()) requires indoor > comfort_heat as one of
     # its four conditions, but this predictive curve scan historically only modeled the
@@ -634,6 +734,7 @@ def generate_briefing_msg(
         now=now,
         awake_edges=(awake_heat, awake_cool),
         windows=timeline_windows(timeline, (now or dt_util.now()).date()) if timeline is not None else None,
+        preferences=preferences,
     )
     if current_hold is not None and hasattr(current_hold, "band"):
         facts = replace(facts, current_hold=current_hold)
@@ -798,6 +899,7 @@ def _tldr_msg(
     hot_events: dict | None = None,
     facts: _BriefingFacts | None = None,
     now: datetime | None = None,
+    preferences: PreferenceView | None = None,
 ) -> i18n.Msg:
     """The TLDR summary table as ONE message (``briefing.tldr``); each row is its own whole message.
 
@@ -825,6 +927,7 @@ def _tldr_msg(
             mild_events=mild_events,
             hot_events=hot_events,
             now=now,
+            preferences=preferences,
         )
     sleep_time = config["sleep_time"]
     occupancy_mode = facts.occupancy_mode
@@ -944,6 +1047,40 @@ def _tldr_msg(
         )
     elif occupancy_mode == "guest":
         occupancy_row = i18n.Msg("briefing.tldr.occupancy_guest")
+    # Fork Dunky13#1: one line naming each learned offset still ahead today and tonight (non-zero ones only).
+    preference_row: i18n.Msg | None = None
+    _shown = [(b, o) for b, o in facts.preference if o]
+    if _shown:
+        _day_type, _first_part, _day_class = bucket_parts(_shown[0][0])
+        _awake = [bucket_parts(b) for b, _o in facts.preference if bucket_parts(b)[1] != "night"]
+        if _awake:
+            _day_type, _first_part, _day_class = _awake[0]
+        entries = []
+        for _bucket, _offset_f in _shown:
+            _, _part, _entry_class = bucket_parts(_bucket)
+            # an entry whose own day class differs from the header's (a Friday or Sunday night) names it
+            _mismatch = _entry_class != _day_class
+            _key = {
+                (False, False): "briefing.pref.entry",
+                (False, True): "briefing.pref.entry_class",
+                (True, False): "briefing.pref.entry_night",
+                (True, True): "briefing.pref.entry_night_class",
+            }[(_part == "night", _mismatch)]
+            entries.append(
+                i18n.Msg(
+                    _key,
+                    part=i18n.Msg(_PREF_PART_KEYS[_part]),
+                    sign="+" if _offset_f > 0 else "-",
+                    amount=i18n.TempDelta(abs(_offset_f), temp_unit, 1),
+                    **({"day_class": i18n.Msg(_PREF_CLASS_KEYS[_entry_class])} if _mismatch else {}),
+                )
+            )
+        preference_row = i18n.Msg(
+            "briefing.tldr.preference",
+            day_type=_day_type_msg(_day_type),
+            day_class=i18n.Msg(_PREF_CLASS_KEYS[_day_class]),
+            entries=i18n.ListOf(entries),
+        )
     return _slots(
         "briefing.tldr",
         day_type=day_type_row,
@@ -952,6 +1089,7 @@ def _tldr_msg(
         windows=windows_row,
         bedtime=bedtime_row,
         tomorrow=tomorrow_row,
+        preference=preference_row,
     )
 
 

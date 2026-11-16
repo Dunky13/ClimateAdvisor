@@ -75,7 +75,7 @@
   }
 
   function renderAll() {
-    renderKpis(); renderDays(); renderModel(); renderControl(); renderSuggestions(); renderAiLine(); loadHistory();
+    renderKpis(); renderDays(); renderModel(); renderControl(); renderSuggestions(); renderPreferences(); renderAiLine(); loadHistory();
   }
 
   // ---------- headline numbers ----------
@@ -351,6 +351,54 @@
       return '<div style="font-size:13px;display:flex;justify-content:space-between;gap:8px;border-top:1px solid var(--rule);padding-top:5px;margin-bottom:5px"><span>' +
         esc(String(p.label || p.promise).replace(/^(\d+): /, '#$1 ')) + '</span><span style="color:var(--ink2)">' + esc(p.last_hit ? T('promises.hits_last', { n: p.hits, when: ND.fmtDateTime(p.last_hit) }) : T('promises.hits', { n: p.hits })) + '</span></div>';
     }).join('') : '<div class="empty">' + esc(T('promises.none')) + '</div>';
+  }
+
+  // ---------- learned setpoint preferences (fork Dunky13#1): the applied offsets per situation, with a confirmed reset ----------
+  var PREF_PART = { night: 'pref.part.night', morning: 'pref.part.morning', afternoon: 'pref.part.afternoon', evening: 'pref.part.evening' };
+  var PREF_CLASS = { weekday: 'pref.class.weekday', weekend: 'pref.class.weekend' };
+  function prefLabel(bucket) {
+    var p = String(bucket).split('|');
+    return T(PREF_PART[p[1]]) + ' · ' + CAI18N.t('dashboard.status.day_type_' + p[0]) + ' · ' + T(PREF_CLASS[p[2]]);
+  }
+  function prefDate(s) { // 'YYYY-MM-DD' as a local calendar date (new Date(s) would read it as UTC and can show the day before)
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || ''));
+    return m ? CAI18N.fmt.dateYear(new Date(+m[1], +m[2] - 1, +m[3])) : '—';
+  }
+  function renderPreferences() {
+    var host = $('an-preferences'), L = D.learning;
+    if (!L) { err(host, D.errs[0] || T('no_data')); return; }
+    var P = L.preferences || {}, u = ND.sym(L.unit || ND.unit);
+    if (!P.enabled) { host.innerHTML = '<div class="empty">' + esc(T('pref.off')) + '</div>'; return; }
+    var sgn = function (v) { return (v > 0 ? '+' : '') + nf(v, 1) + ' ' + u; };
+    var head = '<div class="kv" style="grid-template-columns:1fr"><div>' +
+      esc(P.bucket ? T('pref.active', { offset: sgn(P.active_offset || 0), bucket: prefLabel(P.bucket) }) : T('pref.no_band')) + ' · ' +
+      esc(T('pref.totals', { n: P.observation_count || 0, when: P.last_update ? prefDate(P.last_update) : '—' })) + '</div></div>';
+    var rows = (P.buckets || []).map(function (b) {
+      // the applied (cap-clamped) offset; the stored one beside it only when the maximum was lowered below it
+      var off = esc(sgn(b.offset)) + (b.clamped ? ' <span class="small">' + esc(T('pref.stored', { offset: sgn(b.stored_offset) })) + '</span>' : '');
+      return '<tr><td>' + esc(prefLabel(b.bucket)) + '</td><td>' + off + '</td><td>' + esc(String(b.n == null ? '' : b.n)) +
+        '</td><td>' + esc(b.updated ? prefDate(b.updated) : '') + '</td></tr>';
+    }).join('');
+    var reset = '<div class="row" id="pref-reset-row" style="margin-top:8px"><button type="button" class="btn small" id="pref-reset-btn">' + esc(T('pref.reset')) + '</button></div>';
+    host.innerHTML = head + (rows ? '<table><thead><tr><th scope="col">' + esc(T('pref.col_bucket')) + '</th><th scope="col">' + esc(T('pref.col_offset')) +
+      '</th><th scope="col">' + esc(T('pref.col_n')) + '</th><th scope="col">' + esc(T('pref.col_updated')) + '</th></tr></thead><tbody>' + rows + '</tbody></table>'
+      : '<div class="empty">' + esc(T('pref.none')) + '</div>') + reset;
+  }
+  // Reset clears only the learned preferences (POST reset_preferences); one confirm step first, no native dialog.
+  function prefResetClick(e) {
+    var t = e.target.closest ? e.target.closest('button') : null;
+    if (!t) return;
+    var row = $('pref-reset-row');
+    if (t.id === 'pref-reset-btn') {
+      row.innerHTML = '<span class="small" role="alert">' + esc(T('pref.reset_confirm')) + '</span> <button type="button" class="btn small primary" id="pref-reset-yes">' +
+        esc(T('pref.reset_yes')) + '</button> <button type="button" class="btn small" id="pref-reset-no">' + esc(CAI18N.t('dashboard.core.gh_cancel')) + '</button>';
+      var yes = $('pref-reset-yes'); if (yes) yes.focus();
+    } else if (t.id === 'pref-reset-no') {
+      renderPreferences();
+    } else if (t.id === 'pref-reset-yes') {
+      t.disabled = true;
+      ND.runAction('reset_preferences', undefined, t).then(function () { return load(); });
+    }
   }
 
   // ---------- suggestions (respond_suggestion, exactly as classic) ----------
@@ -640,6 +688,7 @@
   // ---------- wiring ----------
   function init() {
     $('prediction-accuracy-link').addEventListener('click', function () { loadAccuracy(); ND.rememberReturnTab('analysis'); });
+    $('an-preferences').addEventListener('click', prefResetClick);
     $('report-type').addEventListener('change', updateReportType);
     $('run-report-btn').addEventListener('click', function () { return $('report-type').value === 'activity_record' ? runActivity() : runInvestigation(); });
     $('rep-copy').addEventListener('click', function () { var t = repText(); if (t) ND.copy(t); });

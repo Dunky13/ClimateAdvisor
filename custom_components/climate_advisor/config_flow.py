@@ -65,6 +65,9 @@ from .const import (
     CONF_NAT_VENT_SOFT_START_ENABLED,
     CONF_OUTDOOR_HUMIDITY_ENTITY,
     CONF_OVERRIDE_CONFIRM_PERIOD,
+    CONF_PREFERENCE_LEARNING_ENABLED,
+    CONF_PREFERENCE_MAX_OFFSET_F,
+    CONF_PREFERENCE_WEEKLY_STEP_F,
     CONF_PRIMARY_ENGINE,
     CONF_PUSH_BRIEFING,
     CONF_PUSH_DOOR_WINDOW_PAUSE,
@@ -104,6 +107,8 @@ from .const import (
     DEFAULT_MANUAL_GRACE_SECONDS,
     DEFAULT_NAT_VENT_SOFT_START_ENABLED,
     DEFAULT_OVERRIDE_CONFIRM_SECONDS,
+    DEFAULT_PREFERENCE_MAX_OFFSET_F,
+    DEFAULT_PREFERENCE_WEEKLY_STEP_F,
     DEFAULT_PRIMARY_ENGINE,
     DEFAULT_SENSOR_DEBOUNCE_SECONDS,
     DEFAULT_SETBACK_COOL,
@@ -257,6 +262,7 @@ OPTIONS_MENU_OPTIONS = [
     "notifications",
     "advanced",
     "classification_thresholds",
+    "preference_learning",
     "ai_settings",
     "github_settings",
 ]
@@ -412,9 +418,20 @@ _DELTA_FIELDS_F: dict[str, tuple[float, float, float]] = {
     "comfort_deadband_mild_f": (1.0, 5.0, 2.0),
     "comfort_deadband_cool_f": (1.0, 5.0, 2.0),
     "comfort_deadband_cold_f": (2.0, 8.0, 5.0),
+    # Fork Dunky13#1 (preference learning): 2 C / 0.5 C defaults, 0 to 3 C and 0.1 to 1 C ranges.
+    CONF_PREFERENCE_MAX_OFFSET_F: (0.0, 5.4, DEFAULT_PREFERENCE_MAX_OFFSET_F),
+    CONF_PREFERENCE_WEEKLY_STEP_F: (0.18, 1.8, DEFAULT_PREFERENCE_WEEKLY_STEP_F),
 }
 _DELTA_STEP_F = 0.5
 _DELTA_STEP_C = 0.1
+# Fields whose degF range and default are not on the 0.5 degF grid (0.18, 0.9, 3.6) step finely in both units.
+_DELTA_FINE_STEP_KEYS: frozenset[str] = frozenset({CONF_PREFERENCE_MAX_OFFSET_F, CONF_PREFERENCE_WEEKLY_STEP_F})
+_DELTA_FINE_STEP = 0.1
+
+
+def _unit_symbol(is_celsius: bool) -> str:
+    """The temperature unit symbol a number selector shows (one definition for every options step)."""
+    return "°C" if is_celsius else "°F"
 
 
 def delta_field_display(key: str, stored_f: float | None, is_celsius: bool) -> tuple[float, float, float, float]:
@@ -427,7 +444,7 @@ def delta_field_display(key: str, stored_f: float | None, is_celsius: bool) -> t
     lo_f, hi_f, default_f = _DELTA_FIELDS_F[key]
     value_f = default_f if stored_f is None else float(stored_f)
     if not is_celsius:
-        return value_f, lo_f, hi_f, _DELTA_STEP_F
+        return value_f, lo_f, hi_f, _DELTA_FINE_STEP if key in _DELTA_FINE_STEP_KEYS else _DELTA_STEP_F
     return (
         round(convert_delta(value_f, CELSIUS), 1),
         math.floor(convert_delta(lo_f, CELSIUS) * 10) / 10,
@@ -711,7 +728,7 @@ class ClimateAdvisorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         # Ranges and defaults depend on chosen unit — see setpoint_slider_ranges().
         ranges = setpoint_slider_ranges(is_celsius)
-        unit_label = "°C" if is_celsius else "°F"
+        unit_label = _unit_symbol(is_celsius)
         # A re-shown form (warnings) keeps what the occupant typed, so "Submit again" really resubmits it.
         shown_values = user_input or {}
 
@@ -1135,7 +1152,7 @@ class ClimateAdvisorOptionsFlow(config_entries.OptionsFlow):
         unit = current.get(CONF_TEMP_UNIT, FAHRENHEIT)
         is_celsius = unit == CELSIUS
 
-        unit_label = "°C" if is_celsius else "°F"
+        unit_label = _unit_symbol(is_celsius)
         slider = setpoint_slider_ranges(is_celsius)
         ranges = {k: (mn, mx, step) for k, (mn, mx, _default, step) in slider.items()}
         for key in _VACATION_KEYS:
@@ -1884,7 +1901,7 @@ class ClimateAdvisorOptionsFlow(config_entries.OptionsFlow):
 
         current = self.config_entry.data
         unit = current.get(CONF_TEMP_UNIT, FAHRENHEIT)
-        unit_label = "°C" if unit == CELSIUS else "°F"
+        unit_label = _unit_symbol(unit == CELSIUS)
 
         def _delta_selector(key: str) -> tuple[float, selector.NumberSelector]:
             default, lo, hi, step = delta_field_display(key, current.get(key), unit == CELSIUS)
@@ -2100,7 +2117,7 @@ class ClimateAdvisorOptionsFlow(config_entries.OptionsFlow):
                 await self._commit_section(converted)
                 return await self.async_step_init()
 
-        unit_label = "°C" if is_celsius else "°F"
+        unit_label = _unit_symbol(is_celsius)
         ranges = threshold_slider_ranges(is_celsius)
 
         def _thr(key: str, default_f: float) -> float:
@@ -2154,6 +2171,53 @@ class ClimateAdvisorOptionsFlow(config_entries.OptionsFlow):
                 }
             ),
             errors=errors,
+        )
+
+    # ---- Preference Learning (fork Dunky13#1) ----
+
+    async def async_step_preference_learning(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Setpoint preference learning: on/off and its two safety bounds (docs/preference-learning-spec.md)."""
+        current = self.config_entry.data
+        unit = current.get(CONF_TEMP_UNIT, FAHRENHEIT)
+
+        if user_input is not None:
+            await self._commit_section(delta_fields_to_fahrenheit(user_input, current, unit))
+            return await self.async_step_init()
+
+        unit_label = _unit_symbol(unit == CELSIUS)
+
+        def _delta_selector(key: str) -> tuple[float, selector.NumberSelector]:
+            default, lo, hi, step = delta_field_display(key, current.get(key), unit == CELSIUS)
+            return default, selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=lo,
+                    max=hi,
+                    step=step,
+                    unit_of_measurement=unit_label,
+                    mode=selector.NumberSelectorMode.BOX,
+                )
+            )
+
+        return self.async_show_form(
+            step_id="preference_learning",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_PREFERENCE_LEARNING_ENABLED,
+                        default=current.get(CONF_PREFERENCE_LEARNING_ENABLED, False),
+                    ): selector.BooleanSelector(),
+                    vol.Required(
+                        CONF_PREFERENCE_MAX_OFFSET_F,
+                        default=_delta_selector(CONF_PREFERENCE_MAX_OFFSET_F)[0],
+                    ): _delta_selector(CONF_PREFERENCE_MAX_OFFSET_F)[1],
+                    vol.Required(
+                        CONF_PREFERENCE_WEEKLY_STEP_F,
+                        default=_delta_selector(CONF_PREFERENCE_WEEKLY_STEP_F)[0],
+                    ): _delta_selector(CONF_PREFERENCE_WEEKLY_STEP_F)[1],
+                }
+            ),
         )
 
     # ---- AI Settings ----

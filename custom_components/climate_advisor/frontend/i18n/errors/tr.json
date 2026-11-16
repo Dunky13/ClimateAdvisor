@@ -26,6 +26,7 @@
   "errors.night_strategy_not_ready": "Bu geceki yatak odası stratejisi henüz hazır değil.",
   "errors.not_configured": "GitHub sorun bildirimi yapılandırılmamış.",
   "errors.not_loaded": "Climate Advisor yüklenmedi",
+  "errors.preferences_reset": "Öğrenilmiş tercihler silindi.",
   "errors.reclassify_triggered": "Yeniden sınıflandırma başlatıldı",
   "errors.resume_done": "Duraklatmadan devam edildi. HVAC şu moda ayarlandı: {mode, select, none {yok} heat {ısıtma} cool {soğutma} off {kapalı} auto {otomatik} heat_cool {ısıtma/soğutma} fan_only {sadece fan} other {{mode}}}. Manuel değişiklik sonrası duraklatma süresi başladı.",
   "errors.resume_not_paused": "Şu anda duraklatılmış değil",

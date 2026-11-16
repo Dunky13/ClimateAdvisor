@@ -114,6 +114,7 @@ async def async_get_diagnostics_payload(hass: HomeAssistant, entry: ConfigEntry)
                 "recent_hvac_events": hvac_events,
                 "chart_data_summary": _chart_data_summary(coordinator),
                 "learning_summary": coordinator.learning.get_compliance_summary(),
+                "preference_learning": coordinator.preference_status(),  # fork Dunky13#1
                 "config": dict(coordinator.config),
                 "briefing_state": {
                     "sent_today": coordinator._briefing_sent_today,

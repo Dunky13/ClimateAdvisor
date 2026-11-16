@@ -22,8 +22,10 @@ from typing import Any, TypedDict
 from homeassistant.util import dt as dt_util
 
 from . import i18n
+from . import preference_learning as pref
 from .const import (
     COMPLIANCE_THRESHOLD_LOW,
+    CONF_PREFERENCE_LEARNING_ENABLED,
     LEARNING_DB_FILE,
     MIN_DATA_POINTS_FOR_SUGGESTION,
     MIN_WEATHER_BIAS_OBSERVATIONS,
@@ -1254,6 +1256,13 @@ class LearningState:
     # unload/reload, async_shutdown) or "ha_stop" (EVENT_HOMEASSISTANT_STOP). None for
     # state persisted before #1110 (classifier falls back to hass.is_running).
     last_shutdown_kind: str | None = None
+    # Fork Dunky13#1 (setpoint preference learning, docs/preference-learning-spec.md). An upstream build drops these
+    # unknown keys on load, so downgrading to upstream discards the learned preferences.
+    preference_offsets: dict = field(default_factory=dict)  # {bucket: {"offset_f", "n", "level", "updated"}}
+    preference_observations: list = field(default_factory=list)  # {"date", "time", "bucket", "delta_f"}
+    preference_history: list = field(default_factory=list)  # one record per weekly offset change, capped
+    preference_last_update: str | None = None  # date of the last weekly update
+    preference_open_episode: dict | None = None  # the episode still open (survives a restart)
 
 
 class LearningEngine:
@@ -1406,10 +1415,209 @@ class LearningEngine:
                     self._state.user_initiated_restart = False
                 if self._state.last_shutdown_kind not in SHUTDOWN_KINDS:
                     self._state.last_shutdown_kind = None
+                self._validate_preference_state()
                 return
             except (json.JSONDecodeError, TypeError) as err:
                 _LOGGER.warning("Failed to load learning state, starting fresh: %s", err)
         self._state = LearningState()
+
+    def _validate_preference_state(self) -> None:
+        """Validate the preference fields (fork Dunky13#1): a bad entry is dropped with a WARNING, never the file."""
+        st = self._state
+
+        def drop(what: str, why: Any) -> None:
+            _LOGGER.warning("Learning state: dropping invalid preference %s (%s)", what, why)
+
+        offsets = st.preference_offsets if isinstance(st.preference_offsets, dict) else {}
+        if offsets is not st.preference_offsets:
+            drop("offsets", "not a mapping")
+        valid_offsets = {}
+        for k, v in offsets.items():
+            if pref.parse_bucket(k) is None or not isinstance(v, dict) or not pref.is_finite_number(v.get("offset_f")):
+                drop("offset", k)
+                continue
+            valid_offsets[k] = v
+        st.preference_offsets = valid_offsets
+        observations = st.preference_observations if isinstance(st.preference_observations, list) else []
+        if observations is not st.preference_observations:
+            drop("observations", "not a list")
+        valid_obs = []
+        for o in observations:
+            if (
+                isinstance(o, dict)
+                and pref.is_iso_date(o.get("date"))
+                and pref.parse_bucket(o.get("bucket")) is not None
+                and pref.is_finite_number(o.get("delta_f"))
+            ):
+                valid_obs.append(o)
+            else:
+                drop("observation", o)
+        st.preference_observations = valid_obs
+        history = st.preference_history if isinstance(st.preference_history, list) else []
+        if history is not st.preference_history:
+            drop("history", "not a list")
+        st.preference_history = [h for h in history if isinstance(h, dict)][-pref.MAX_HISTORY :]
+        if st.preference_last_update is not None and not pref.is_iso_date(st.preference_last_update):
+            drop("last update", st.preference_last_update)
+            st.preference_last_update = None
+        episode = st.preference_open_episode
+        if episode is None:
+            return
+        needed = ("start", "last", "bucket", "base_f", "target_f", "old_f", "final_f")
+        if not (
+            isinstance(episode, dict)
+            and all(k in episode for k in needed)
+            and pref.parse_bucket(episode["bucket"]) is not None
+            and pref.is_aware_iso(episode["start"])
+            and pref.is_aware_iso(episode["last"])
+            and all(pref.is_finite_number(episode[k]) for k in ("base_f", "target_f", "old_f", "final_f"))
+            and pref.is_finite_number(episode.setdefault("remote_f", 0.0))  # saved before the field existed: 0
+        ):
+            drop("open episode", episode)
+            st.preference_open_episode = None
+
+    # ------------------------------------------------------------------ preference learning (fork Dunky13#1)
+
+    def preference_offsets(self) -> dict[str, float]:
+        """``{bucket: offset_f}`` as stored (the cap is applied on read by ``PreferenceView``)."""
+        return {k: float(v["offset_f"]) for k, v in self._state.preference_offsets.items()}
+
+    def record_preference_change(
+        self,
+        *,
+        at: datetime,
+        old_f: float,
+        new_f: float,
+        bucket: str,
+        base_f: float,
+        target_f: float,
+        excluded: bool = False,
+        remote_f: float = 0.0,
+    ) -> bool:
+        """Fold one occupant setpoint change into the open episode; a closed episode becomes an observation.
+
+        ``old_f`` / ``new_f`` are the thermostat's reported setpoints; ``remote_f`` is the remote-sensor offset they
+        carry now (the episode keeps the value from when it opened).
+
+        ``excluded`` (a start inside the schedule-edge window) keeps a new episode from opening. Returns True when
+        the learning state changed (and needs saving).
+        """
+        had_episode = self._state.preference_open_episode is not None
+        episode, closed = pref.extend_episode(
+            self._state.preference_open_episode,
+            at=at,
+            old_f=old_f,
+            new_f=new_f,
+            bucket=bucket,
+            base_f=base_f,
+            target_f=target_f,
+            excluded=excluded,
+            remote_f=remote_f,
+        )
+        self._state.preference_open_episode = episode
+        self._add_preference_observation(closed, at.date())
+        if excluded and episode is None:
+            _LOGGER.info(
+                "Preference observation skipped: within 60 minutes of the wake time or bedtime (a schedule signal)"
+                " bucket=%s old=%.1fF new=%.1fF",
+                bucket,
+                old_f,
+                new_f,
+            )
+            return had_episode
+        _LOGGER.info(
+            "Preference change noted: bucket=%s old=%.1fF new=%.1fF base=%.1fF target=%.1fF closed_previous=%s",
+            bucket,
+            old_f,
+            new_f,
+            base_f,
+            target_f,
+            closed is not None,
+        )
+        return True
+
+    def discard_preference_episode(self) -> bool:
+        """Drop the open episode without recording it (the feature was switched off); True when one was open."""
+        episode = self._state.preference_open_episode
+        if episode is None:
+            return False
+        self._state.preference_open_episode = None
+        _LOGGER.info("Preference episode discarded: bucket=%s (the feature is off)", episode["bucket"])
+        return True
+
+    def flush_preference_episode(self, now: datetime) -> bool:
+        """Close the open episode once its 15 minutes have passed (lazy: no timer); True when state changed."""
+        episode = self._state.preference_open_episode
+        if episode is None or not pref.episode_expired(episode, now):
+            return False
+        self._state.preference_open_episode = None
+        observation = pref.close_episode(episode)
+        self._add_preference_observation(observation, now.date())
+        if observation is None:
+            _LOGGER.info("Preference episode discarded: bucket=%s (the occupant undid their change)", episode["bucket"])
+        return True
+
+    def _add_preference_observation(self, observation: dict | None, today: Any) -> None:
+        if observation is None:
+            return
+        self._state.preference_observations.append(observation)
+        self._state.preference_observations = pref.trim_observations(self._state.preference_observations, today)
+        _LOGGER.info(
+            "Preference observation recorded: bucket=%s delta=%+.1fF n_total=%d",
+            observation["bucket"],
+            observation["delta_f"],
+            len(self._state.preference_observations),
+        )
+
+    def run_preference_update(self, today: Any, *, max_offset_f: float, step_f: float) -> list[dict] | None:
+        """The weekly update when due (7+ days since the last): the changes made (maybe none), None when not due."""
+        if not pref.update_due(self._state.preference_last_update, today):
+            return None
+        offsets, changes = pref.weekly_update(
+            self._state.preference_offsets,
+            self._state.preference_observations,
+            max_offset_f=max_offset_f,
+            step_f=step_f,
+            today=today,
+        )
+        self._state.preference_offsets = offsets
+        self._state.preference_last_update = today.isoformat()
+        for change in changes:
+            _LOGGER.info(
+                "Preference offset changed: bucket=%s level=%s n=%d target=%.2fF old=%.2fF new=%.1fF",
+                change["bucket"],
+                change["level"],
+                change["n"],
+                change["target_f"],
+                change["old_f"],
+                change["new_f"],
+            )
+        self._state.preference_history = (self._state.preference_history + changes)[-pref.MAX_HISTORY :]
+        _LOGGER.info(
+            "Preference weekly update complete: buckets=%d changed=%d observations=%d",
+            len(offsets),
+            len(changes),
+            len(self._state.preference_observations),
+        )
+        return changes
+
+    def preference_summary(self) -> dict[str, Any]:
+        """Dashboard/status view: the bucket table (offset, n, last update) and the totals."""
+        buckets = [
+            {
+                "bucket": k,
+                "offset_f": float(v["offset_f"]),
+                "n": v.get("n"),
+                "level": v.get("level"),
+                "updated": v.get("updated"),
+            }
+            for k, v in sorted(self._state.preference_offsets.items())
+        ]
+        return {
+            "buckets": buckets,
+            "observation_count": len(self._state.preference_observations),
+            "last_update": self._state.preference_last_update,
+        }
 
     def save_state(self) -> None:
         """Persist learning state to disk (blocking I/O — run via executor).
@@ -2824,7 +3032,7 @@ class LearningEngine:
         if suggestion_key == "low_window_compliance":
             changes["disable_window_recommendations"] = True
         elif suggestion_key == "frequent_overrides":
-            changes["request_setpoint_analysis"] = True
+            changes[CONF_PREFERENCE_LEARNING_ENABLED] = True  # fork Dunky13#1: learn the preferred setpoint
         elif suggestion_key == "short_departures":
             changes["occupancy_setback_minutes"] = 5
         elif suggestion_key == "comfort_violations":
@@ -2871,7 +3079,7 @@ class LearningEngine:
         """Reset learning data for the given scope.
 
         Args:
-            scope: What to reset — "thermal_model", "weather_bias", "suggestions", or "all".
+            scope: What to reset — "thermal_model", "weather_bias", "suggestions", "preferences", or "all".
         """
         _LOGGER.info("Learning data reset requested: scope=%s", scope)
         if scope == "all":
@@ -2894,6 +3102,13 @@ class LearningEngine:
         elif scope == "suggestions":
             self._state.dismissed_suggestions = []
             self._state.active_suggestions = []
+            self.save_state()
+        elif scope == "preferences":
+            self._state.preference_offsets = {}
+            self._state.preference_observations = []
+            self._state.preference_history = []
+            self._state.preference_last_update = None
+            self._state.preference_open_episode = None
             self.save_state()
         else:
             _LOGGER.warning("reset() called with unknown scope %r — no action taken", scope)

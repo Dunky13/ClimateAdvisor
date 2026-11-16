@@ -26,6 +26,7 @@
   "errors.night_strategy_not_ready": "今夜の寝室の戦略はまだ準備できていません。",
   "errors.not_configured": "GitHub への課題送信が設定されていません。",
   "errors.not_loaded": "Climate Advisor が読み込まれていません",
+  "errors.preferences_reset": "学習した好みを消去しました。",
   "errors.reclassify_triggered": "再分類を開始しました",
   "errors.resume_done": "一時停止から再開しました。空調を{mode, select, none {該当なし} heat {暖房} cool {冷房} off {オフ} auto {自動} heat_cool {冷暖房} fan_only {ファンのみ} other {{mode}}}に設定しました。手動変更後の一時停止期間を開始しました。",
   "errors.resume_not_paused": "現在は一時停止していません",

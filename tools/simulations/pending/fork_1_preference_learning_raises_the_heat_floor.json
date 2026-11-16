@@ -1,0 +1,64 @@
+{
+  "name": "fork_1_preference_learning_raises_the_heat_floor",
+  "description": "Fork Dunky13#1 (setpoint preference learning, docs/preference-learning-spec.md). With the feature on and a learned +1.8F offset for the 'cold|evening|weekday' bucket, a cold Monday evening at home arms the heat floor at comfort_heat + 1.8 (68 -> 69.8F) instead of 68F. The ceiling is untouched.",
+  "source": "docs/preference-learning-spec.md, Phase 1: the offset shifts the heat floor only, awake home or guest, never the ceiling.",
+  "notes": [
+    "Occupant impact: the household keeps nudging the evening heat up by about two degrees; once learned, the thermostat is armed there without the nudge.",
+    "Seeded through the scenario key preference_offsets (harness) with preference_learning_enabled in config.",
+    "(a) Effectiveness: with the seam ignoring the offset the floor stays 68.0 and the assertion fails.",
+    "(c) Occupant outcome if this fails to catch a regression: the learned preference silently stops applying, or leaks into the ceiling."
+  ],
+  "use_coordinator": true,
+  "preference_offsets": {
+    "cold|evening|weekday": 1.8
+  },
+  "config": {
+    "comfort_heat": 68,
+    "comfort_cool": 74,
+    "sleep_heat": 62,
+    "sleep_cool": 72,
+    "sleep_time": "22:30",
+    "wake_time": "07:00",
+    "setback_heat": 58,
+    "setback_cool": 82,
+    "fan_mode": "disabled",
+    "preference_learning_enabled": true,
+    "preference_max_offset_f": 3.6
+  },
+  "events": [
+    {
+      "time": "2026-11-16T18:00:00",
+      "type": "temp_update",
+      "indoor_f": 66.0,
+      "outdoor_f": 35.0,
+      "note": "Monday 18:00, indoor 66F: below both the plain and the learned floor."
+    },
+    {
+      "time": "2026-11-16T18:00:00",
+      "type": "classification",
+      "day_type": "cold",
+      "hvac_mode": "heat",
+      "windows_recommended": false,
+      "note": "Cold-day classification (classifier hvac_mode=heat for a cold day)."
+    }
+  ],
+  "assertions": [
+    {
+      "at": "2026-11-16T18:00:00",
+      "expect": "expect_band",
+      "expect_band": {
+        "floor": 69.8,
+        "ceiling": 74.0
+      },
+      "track": "logic",
+      "simulator_support": true,
+      "reason": "The learned +1.8F shifts the awake heat floor from 68 to 69.8F; the 74F ceiling is unchanged."
+    }
+  ],
+  "verdict": {
+    "type": "positive",
+    "summary": "A learned evening offset raises the armed heat floor and leaves the ceiling alone.",
+    "observed_behavior": "Floor 69.8F, ceiling 74F armed for the cold weekday evening.",
+    "expected_behavior": "comfort_heat plus the bucket's learned offset, capped at the ceiling; the ceiling is not shifted."
+  }
+}

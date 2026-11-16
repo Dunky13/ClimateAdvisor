@@ -791,6 +791,8 @@ Instead of just counting overrides, analyze their direction and timing:
 - "You consistently raise the temperature 2°F around 3pm" → suggest a scheduled bump
 - "You lower the temperature every night before your usual bedtime" → suggest moving bedtime setback earlier
 
+> **Fork status (0.9.41.1):** phase 1 of this item is implemented as setpoint preference learning: it learns a heat-floor offset per day type, part of the day and weekday/weekend and applies it automatically within bounds. See [preference-learning-spec.md](preference-learning-spec.md). Learned wake and bed times (phase 2) and room sensors (phase 3) are planned there.
+
 ### Energy Cost Integration
 With utility rate data, convert runtime minutes to estimated cost and show daily/weekly/monthly savings compared to "no automation" baseline.
 
@@ -799,7 +801,7 @@ With utility rate data, convert runtime minutes to estimated cost and show daily
 | Suggestion Key | Config Changes |
 |---------------|---------------|
 | `low_window_compliance` | `disable_window_recommendations: true` |
-| `frequent_overrides` | `request_setpoint_analysis: true` |
+| `frequent_overrides` | `preference_learning_enabled: true` (fork 0.9.41.1; turns on automatic, bounded setpoint preference learning, see [preference-learning-spec.md](preference-learning-spec.md)) |
 | `short_departures` | `occupancy_setback_minutes: 5` |
 | `comfort_violations` | `setback_modifier: +2`, `morning_preheat_offset_minutes: 15` |
 | `frequent_door_pauses` | `door_pause_seconds: 300` |

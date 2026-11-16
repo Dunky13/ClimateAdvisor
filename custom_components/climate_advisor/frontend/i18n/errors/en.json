@@ -26,6 +26,7 @@
   "errors.night_strategy_not_ready": "Tonight's bedroom strategy is not ready yet.",
   "errors.not_configured": "GitHub issue submission is not configured.",
   "errors.not_loaded": "Climate Advisor not loaded",
+  "errors.preferences_reset": "Learned preferences cleared.",
   "errors.reclassify_triggered": "Reclassification triggered",
   "errors.resume_done": "Resumed from pause. HVAC set to {mode, select, none {N/A} heat {heat} cool {cool} off {off} auto {auto} heat_cool {heat_cool} fan_only {fan_only} other {{mode}}}. Manual grace period started.",
   "errors.resume_not_paused": "Not currently paused",

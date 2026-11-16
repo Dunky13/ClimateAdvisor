@@ -72,3 +72,4 @@ reset_learning_data:
             - "thermal_model"
             - "weather_bias"
             - "suggestions"
+            - "preferences"

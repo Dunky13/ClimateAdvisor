@@ -169,6 +169,7 @@
           "notifications": "Notifiche",
           "advanced": "Apprendimento e comportamento",
           "classification_thresholds": "Soglie dei tipi di giornata",
+          "preference_learning": "Apprendimento delle preferenze",
           "ai_settings": "Impostazioni IA di Claude",
           "github_settings": "Integrazione GitHub"
         }
@@ -447,6 +448,20 @@
           "threshold_warm": "Le giornate con massima prevista pari o superiore a questa temperatura sono classificate come Tiepide (finestre consigliate, niente condizionatore). Predefinito: 75 °F / 24 °C.",
           "threshold_mild": "Le giornate con massima prevista pari o superiore a questa temperatura sono classificate come Miti (confortevoli, finestre aperte). Predefinito: 60 °F / 16 °C.",
           "threshold_cool": "Le giornate con massima prevista pari o superiore a questa temperatura sono classificate come Fresche (riscaldamento leggero). Sotto questa soglia sono Fredde (riscaldamento completo). Predefinito: 45 °F / 7 °C."
+        }
+      },
+      "preference_learning": {
+        "title": "Apprendimento delle preferenze",
+        "description": "Climate Advisor impara la temperatura di riscaldamento che vuoi davvero dalle tue modifiche al termostato, per tipo di giornata, momento della giornata e giorno feriale o fine settimana, e la applica entro i limiti di sicurezza qui sotto. Solo riscaldamento. Il raffrescamento non viene mai modificato. Disattiva prima qualsiasi programma o modalità eco del termostato.",
+        "data": {
+          "preference_learning_enabled": "Impara le mie preferenze di riscaldamento",
+          "preference_max_offset_f": "Regolazione appresa massima",
+          "preference_weekly_step_f": "Variazione settimanale massima"
+        },
+        "data_description": {
+          "preference_learning_enabled": "Se attivo, le modifiche ripetute al termostato in momenti simili spostano la temperatura di riscaldamento impostata da Climate Advisor per quel tipo di momento. Disattivato per impostazione predefinita.",
+          "preference_max_offset_f": "Il massimo di cui una regolazione appresa può alzare o abbassare la temperatura di riscaldamento rispetto al valore configurato.",
+          "preference_weekly_step_f": "Il massimo di cui una regolazione appresa può cambiare ogni settimana."
         }
       },
       "ai_settings": {
@@ -757,7 +772,8 @@
         "all": "Tutti i dati appresi",
         "thermal_model": "Modello termico",
         "weather_bias": "Scostamento delle previsioni meteo",
-        "suggestions": "Suggerimenti ignorati"
+        "suggestions": "Suggerimenti ignorati",
+        "preferences": "Preferenze apprese"
       }
     },
     "schedule_applies_to": {

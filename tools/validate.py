@@ -37,7 +37,7 @@ REQUIRED_MANIFEST_KEYS = {
     "iot_class",
 }
 
-SEMVER_PATTERN = re.compile(r"^\d+\.\d+\.\d+$")
+SEMVER_PATTERN = re.compile(r"^\d+\.\d+\.\d+(\.\d+)?$")  # X.Y.Z, plus the fork revision (0.9.41.1)
 
 HARDCODED_UNIT_EXCEPTION_PHRASES: list[str] = []
 
@@ -115,7 +115,7 @@ def check_manifest(component_dir):
 
     # Check version is valid semver
     if "version" in manifest and not SEMVER_PATTERN.match(manifest["version"]):
-        result.error(f"Version '{manifest['version']}' is not valid semver (expected X.Y.Z)")
+        result.error(f"Version '{manifest['version']}' is not valid semver (expected X.Y.Z or X.Y.Z.N)")
 
     # Check config_flow is boolean
     if "config_flow" in manifest and not isinstance(manifest["config_flow"], bool):

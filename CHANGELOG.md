@@ -3,6 +3,17 @@
 All notable changes to Climate Advisor are documented here.
 This project follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) conventions.
 
+## [0.9.41.1] — 2026-11-16
+
+### Added (fork feature, off by default)
+- Feat #1: preference learning, phase 1. Climate Advisor can learn the heating temperature you actually want from your own thermostat changes, separately per kind of day (hot to cold), part of the day (night, morning, afternoon, evening) and weekday or weekend, and arm it itself so the nudging stops.
+  - **What you'll notice:** nothing, until you turn it on under Settings, Learning & prediction, Learn Setpoint Preferences. Then repeated changes you make at similar times (heating mode, at home or with guests, Climate Advisor in control, Nest Eco off) shift the heating floor for that kind of time by at most 2 °C from your setpoint, and by at most 0.5 °C per week. Both limits are settings. The cooling ceiling, away, vacation and setback temperatures never change.
+  - **Where it shows:** the Analysis tab lists every learned adjustment (offset, samples, last update); the morning briefing adds a "Learned preference" line when one is active; the chart, the next-action text and the thermostat itself all use the same adjusted floor. Clear it with the Reset learned preferences button on the Analysis tab (it asks first), or the Reset learning data service, scope "Learned preferences".
+  - **Accepting the "frequent overrides" suggestion** now turns preference learning on.
+  - **Thermostat setup:** on a Google Nest, turn off the Nest schedule, Eco temperatures, Home/Away Assist and Auto-Schedule first (see the README).
+  - **Downgrading** to upstream Climate Advisor discards the learned preferences (upstream drops the new stored fields on load).
+  - Spec: `docs/preference-learning-spec.md`. Phases 2 (learned wake and bed times) and 3 (room sensors) are planned.
+
 ## [0.9.41] — 2026-11-15
 
 ### Fixed

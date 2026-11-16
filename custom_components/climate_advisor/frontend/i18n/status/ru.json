@@ -184,6 +184,8 @@
   "status.pre_cool_status.scheduled": "Предварительное охлаждение запланировано ({target} в {t})",
   "status.pre_cool_status.suppressed_achieved": "предварительное охлаждение подавлено — естественная вентиляция достигла {indoor} (цель {target})",
   "status.pre_cool_status.suppressed_session": "предварительное охлаждение подавлено — идёт сеанс естественной вентиляции/вентилятора для всего дома",
+  "status.preference.applied": "Нижняя граница отопления {armed} вместо заданной {configured}: выучено {sign}{amount} для {part, select, night {ночь} morning {утро} afternoon {день} evening {вечер} other {{part}}}, {day_class, select, weekday {будни} weekend {выходные} other {{day_class}}} (наблюдений: {n, number}{has_update, select, yes {, последнее обновление: {when}} other {, обновлений ещё не было}}).",
+  "status.preference.neutral": "Обучение предпочтениям включено; нижняя граница отопления сейчас не изменена (наблюдений: {n, number}{has_update, select, yes {, последнее обновление: {when}} other {, обновлений ещё не было}}).",
   "status.promise.ac_whf_mutex": "{n}: кондиционер и вентилятор для всего дома никогда вместе",
   "status.promise.blind_fan_continue": "{n}: вентилятор без внутренних показаний продолжает работать",
   "status.promise.comfort_kept": "{n}: комфорт сохранён",

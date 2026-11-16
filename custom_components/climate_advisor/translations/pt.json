@@ -169,6 +169,7 @@
           "notifications": "Notificações",
           "advanced": "Aprendizagem e comportamento",
           "classification_thresholds": "Limites por tipo de dia",
+          "preference_learning": "Aprendizagem de preferências",
           "ai_settings": "Definições de IA Claude",
           "github_settings": "Integração com o GitHub"
         }
@@ -447,6 +448,20 @@
           "threshold_warm": "Os dias com máxima prevista igual ou superior a esta temperatura são classificados como Mornos (janelas recomendadas, sem ar condicionado). Predefinição: 75°F / 24°C.",
           "threshold_mild": "Os dias com máxima prevista igual ou superior a esta temperatura são classificados como Amenos (confortáveis, janelas abertas). Predefinição: 60°F / 16°C.",
           "threshold_cool": "Os dias com máxima prevista igual ou superior a esta temperatura são classificados como Frescos (aquecimento ligeiro). Abaixo disto é Frio (aquecimento total). Predefinição: 45°F / 7°C."
+        }
+      },
+      "preference_learning": {
+        "title": "Aprendizagem de preferências",
+        "description": "O Climate Advisor aprende a temperatura de aquecimento que realmente deseja a partir das suas próprias alterações no termóstato, por tipo de dia, parte do dia e dia útil ou fim de semana, e aplica-a dentro dos limites seguros abaixo. Apenas aquecimento. O arrefecimento nunca é alterado. Desative primeiro qualquer horário ou modo eco do termóstato.",
+        "data": {
+          "preference_learning_enabled": "Aprender as minhas preferências de aquecimento",
+          "preference_max_offset_f": "Ajuste aprendido máximo",
+          "preference_weekly_step_f": "Alteração semanal máxima"
+        },
+        "data_description": {
+          "preference_learning_enabled": "Quando ativo, as alterações repetidas que faz no termóstato em momentos semelhantes deslocam a temperatura de aquecimento definida pelo Climate Advisor para esse tipo de momento. Desativado por predefinição.",
+          "preference_max_offset_f": "O máximo que um ajuste aprendido pode subir ou descer a temperatura de aquecimento em relação ao valor configurado.",
+          "preference_weekly_step_f": "O máximo que um ajuste aprendido pode mudar por semana."
         }
       },
       "ai_settings": {
@@ -757,7 +772,8 @@
         "all": "Todos os dados aprendidos",
         "thermal_model": "Modelo térmico",
         "weather_bias": "Desvio da previsão meteorológica",
-        "suggestions": "Sugestões dispensadas"
+        "suggestions": "Sugestões dispensadas",
+        "preferences": "Preferências aprendidas"
       }
     },
     "schedule_applies_to": {

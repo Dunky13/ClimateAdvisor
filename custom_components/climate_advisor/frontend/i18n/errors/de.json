@@ -26,6 +26,7 @@
   "errors.night_strategy_not_ready": "Die Schlafzimmerstrategie für heute Nacht ist noch nicht bereit.",
   "errors.not_configured": "Das Senden von GitHub-Issues ist nicht eingerichtet.",
   "errors.not_loaded": "Climate Advisor nicht geladen",
+  "errors.preferences_reset": "Gelernte Präferenzen gelöscht.",
   "errors.reclassify_triggered": "Neuklassifizierung ausgelöst",
   "errors.resume_done": "Nach der Pause fortgesetzt. Klimatisierung auf {mode, select, none {k. A.} heat {Heizbetrieb} cool {Kühlbetrieb} off {Aus} auto {Auto} heat_cool {Heizen/Kühlen} fan_only {Nur Lüftung} other {{mode}}} gestellt. Pausenzeit nach manueller Änderung gestartet.",
   "errors.resume_not_paused": "Derzeit nicht pausiert",

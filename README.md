@@ -142,6 +142,12 @@ Climate Advisor is the scheduler and the thermostat is the executor. Set the the
 - **Set holds to last until changed.** On an Ecobee: Hold Action → Until I change it.
 - **Single-mode systems:** heat-only and cool-only thermostats work, with Climate Advisor using the one mode the device has. These setups are less tested than heat-and-cool systems.
 
+### Preference learning (fork feature, off by default)
+
+Climate Advisor can learn the heating temperature you actually want from your own thermostat changes, per kind of day, part of the day and weekday or weekend, and apply it within safe limits (default at most 2 °C from your setpoint, at most 0.5 °C per week; heating only). Enable it under **Settings, Learning & prediction, Learn Setpoint Preferences**. Learned adjustments show on the Analysis tab, which has a **Reset learned preferences** button (with a confirmation); the Reset learning data service (scope "Learned preferences") does the same. Details: [preference-learning-spec](docs/preference-learning-spec.md).
+
+Learning is only meaningful when Climate Advisor is the only thing that sets the temperature apart from you. On a Google Nest, turn off the Nest schedule, Eco temperatures, Home/Away Assist and Auto-Schedule in the Google Home app before enabling automation and preference learning.
+
 ### Multiple zones
 
 Each thermostat is its own zone: a separate config entry with its own learning, thermal model, dashboard data and settings. Nothing is shared between zones.
@@ -217,6 +223,7 @@ The panel is backed by a REST API; see [rest-api](docs/rest-api.md).
 | Thermal model v3 | [thermal-model-v3-spec](docs/thermal-model-v3-spec.md) |
 | The plan behind Next 24 hours, Next Action and the briefing | [operation-timeline-spec](docs/operation-timeline-spec.md) |
 | Tonight in the bedroom | [night-strategy-spec](docs/night-strategy-spec.md) |
+| Preference learning (fork feature) | [preference-learning-spec](docs/preference-learning-spec.md) |
 | AI features | [ai-integration](docs/ai-integration.md) |
 | Release history | [CHANGELOG](CHANGELOG.md) |
 

@@ -503,6 +503,12 @@ class FakeHassSession:
         # primary engine (``config.primary_engine``, harness default v3) reads it for the decisions' rates and path.
         if "v4_model" in scenario and isinstance(scenario["v4_model"], dict) and coordinator is not None:
             pin_scenario_v4_model(coordinator, scenario["v4_model"])
+        # Fork #1 (preference learning): ``preference_offsets`` {bucket: offset_f} seeds the learned setpoint
+        # preferences; they apply only when the scenario config also sets ``preference_learning_enabled``.
+        if isinstance(scenario.get("preference_offsets"), dict) and coordinator is not None:
+            coordinator.learning._state.preference_offsets = {
+                bucket: {"offset_f": float(offset)} for bucket, offset in scenario["preference_offsets"].items()
+            }
         if "hourly_forecast" in scenario and isinstance(scenario["hourly_forecast"], list) and coordinator is not None:
             # Production's coordinator owns the forecast (_refresh_hourly_forecast); the engine holds no copy.
             coordinator._hourly_forecast_temps = scenario["hourly_forecast"]

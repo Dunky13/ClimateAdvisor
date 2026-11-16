@@ -309,7 +309,7 @@
   "activity.pre_cool_overshoot_temps": "Предварительное охлаждение переборщило -- в помещении {indoor} < нижняя граница {floor}",
   "activity.pre_cool_suppressed_nat_vent": "Предварительное охлаждение подавлено -- естественная вентиляция уже достигла цели",
   "activity.reason_band_edge_used": "{band} -- использована граница {edge} ({shape} при {target})",
-  "activity.reason_band_select": "диапазон {ctx} [{floor}/{ceiling}] (день={day_type}, активный={active}{aggressive, select, yes {, агрессивный} other {}}{has_tou, select, yes {, tou_expansion={tou}} other {}})",
+  "activity.reason_band_select": "диапазон {ctx} [{floor}/{ceiling}] (день={day_type}, активный={active}{aggressive, select, yes {, агрессивный} other {}}{has_tou, select, yes {, tou_expansion={tou}} other {}}{has_pref, select, yes {, preference={pref_bucket} {pref}} other {}})",
   "activity.reason_bedtime_no_classification": "время отхода ко сну — нет классификации",
   "activity.reason_bedtime_nv_not_active": "время отхода ко сну — естественная вентиляция неактивна",
   "activity.reason_bedtime_sleep_band": "время отхода ко сну — диапазон для сна [{floor}/{ceiling}]",
