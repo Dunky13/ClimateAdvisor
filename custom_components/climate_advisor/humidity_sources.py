@@ -44,7 +44,8 @@ _FALLBACK_ATTR: dict[str, tuple[str, str] | None] = {
 Discover = Callable[[str, bool], tuple[str, ...]]
 
 
-def _valid_rh(raw: Any) -> float | None:
+def valid_rh(raw: Any) -> float | None:
+    """A relative humidity % (finite, 0-100), else None."""
     if raw is None or isinstance(raw, bool):
         return None
     try:
@@ -63,7 +64,7 @@ def read_humidity_state(hass: Any, entity_id: str | None) -> float | None:
     st = hass.states.get(entity_id)
     if st is None:
         return None
-    return _valid_rh(st.state)
+    return valid_rh(st.state)
 
 
 def _read_fallback(hass: Any, role: str, entity_id: str | None) -> float | None:
@@ -73,7 +74,7 @@ def _read_fallback(hass: Any, role: str, entity_id: str | None) -> float | None:
     st = hass.states.get(entity_id)
     if st is None:
         return None
-    return _valid_rh(st.attributes.get(spec[1]))
+    return valid_rh(st.attributes.get(spec[1]))
 
 
 def resolve_humidity(

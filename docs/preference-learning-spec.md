@@ -2,7 +2,8 @@
 
 # Preference Learning (fork feature, Dunky13#1)
 
-Status: phase 1 specified, phases 2 and 3 planned. Fork-only feature; upstream is gunkl/ClimateAdvisor.
+Status: phase 1 shipped (0.9.41.1); phase 3 (rooms, humidity, history backfill) implemented in 0.9.41.2; phase 2
+planned. Fork-only feature; upstream is gunkl/ClimateAdvisor.
 
 ## Goal
 
@@ -21,6 +22,10 @@ bounds. This implements the "Override Pattern Analysis" future-work item in
 | D3 | The user can select one or more indoor room temperature sensors in setup/options; CA learns which room matters in which part of the day (for example bedroom at night and in the morning, living room in the afternoon). |
 | D4 | Delivered in phases: phase 1 = setpoint preference learning (D1, D2 without wake/bed times). Phase 2 = learned weekday/weekend wake and bed times. Phase 3 = multi-room sensors (D3). Each phase is its own PR, stacked when the base is unmerged. |
 | D5 | Heating only. The target install is a heat-only thermostat (Google Nest, heat/off). Cooling preferences are out of scope; the cooling ceiling is never changed. |
+| D6 | (2026-11-16) Rooms steer the thermostat: CA learns which room the occupants react to per part of the day and nudges the one thermostat setpoint so that room reaches the learned comfort temperature. Bounded like D1. |
+| D7 | (2026-11-16) Humidity is a learning dimension from the start (dry air feels colder), accepting that buckets need more observations. |
+| D8 | (2026-11-16) History backfill: past setpoint changes become a proposed seed the user reviews and accepts on the dashboard; recurring thermostat-schedule changes are filtered out. Room and humidity history is imported as context. |
+| D9 | (2026-11-16) Phase 3 (rooms, humidity, backfill) ships before phase 2 (wake and bed times). |
 
 ## Phase 1: setpoint preference learning
 
@@ -203,11 +208,245 @@ Separate weekday and weekend wake and bed times, learned from when the occupant'
 lowers happen, bounded by a maximum shift per week. Requires a date-aware sleep window, re-registered wake/bed
 timers, and rerouting the ~15 direct parsers of `wake_time` / `sleep_time`. Specified before implementation. The
 pre-wake and pre-bed episodes that phase 1 excludes from setpoint learning (the 60-minute schedule-edge window) are
-the input for these learned wake and bed times.
+the input for these learned wake and bed times. Ships after phase 3 (D9).
 
-## Phase 3: room sensors (planned)
+## Phase 3: rooms, humidity and history backfill
 
-The user selects room temperature sensors (multi-select, options and setup). CA records every room's temperature at
-each observation and learns per part of day which room the occupants react to, generalising the existing bedroom
-sensor swap in `indoor_temp.resolve_indoor_temp_with_provenance` and the remote offset. Specified before
-implementation.
+Implements D3, D6, D7 and D8. Fork version `0.9.41.2`.
+
+### Evidence from the target install (2026-11-16)
+
+Recorder history of `climate.living_room` (30 days, 2026-10-17 to 2026-11-16, raw resolution) and the room sensors
+was analysed before this spec was written:
+
+- The Nest schedule is fixed and recognisable: 01:30 15.9, 06:15 16.0, 07:15 16.8, 08:45 15.9, 21:30 16.1 and about
+  23:59 18.0 °C, each within ±2 minutes on every day. After removing those, 85 occupant episodes remain (bursts of
+  dial changes grouped with the phase 1 15-minute rule): morning raises to 19.5 to 21 °C, daytime raises to about
+  20 °C, evening lowers to 16 to 17 °C.
+- Room temperatures at the moment of a raise (hourly means): morning, thermostat MAD 0.59 °C (n=40), living room
+  0.54, bedroom 0.42, child's bedroom 0.39; afternoon, thermostat 0.50 (n=11), child's bedroom 0.19 (n=9). The rooms
+  move together; no room is a clear winner yet. The learned-room choice therefore needs a confidence gate and a
+  manual pin per part of day.
+- The Daikin room sensors report whole degrees and the Daikin units are independent heat sources in their rooms.
+- The InfluxDB bucket (`ha_raw_90d`) would add about 60 days before 2026-10-17, which precede the heating season.
+  The backfill reads the Home Assistant recorder only (in process, no credentials, raw resolution). InfluxDB is not
+  used; revisit only if a recorder's retention is too short to cover a heating season.
+
+### Off by default
+
+Everything in this phase requires `preference_learning_enabled`. With no room selected and no humidity source, every
+output is identical to phase 1 and all golden simulations stay unchanged.
+
+### Settings (options flow step `preference_learning`)
+
+| Key | Type | Default | Notes |
+|-----|------|---------|-------|
+| `room_temp_entities` | list of entity ids | `[]` | Multi-select, `sensor` with device class temperature (and `input_number`). Help text: do not pick a sensor built into another heater or AC unit. |
+| `room_pin_night` / `room_pin_morning` / `room_pin_afternoon` / `room_pin_evening` | string | `"auto"` | `"auto"`, `"thermostat"`, or one of `room_temp_entities`. Validated against the selection; a stale entity reverts to `"auto"` with a warning log. |
+
+Humidity needs no setting: each room's humidity is found with the existing Issue #1414 resolver
+(`coordinator._humidity_role_inputs` and its same-device search), passing the room's temperature entity as the
+source; when the room has no humidity sensor the indoor chain applies (configured `indoor_humidity_entity`, then the
+climate entity's `current_humidity`).
+
+### Steering reference per part of day
+
+The **reference** for a moment is the entity whose temperature the comfort target is measured against:
+
+1. In the sleep window, a configured `sleep_indoor_temp_entity` always wins (existing behaviour, explicit user choice).
+2. Otherwise the part of day's pin: `"thermostat"` means none; an entity means that room.
+3. `"auto"` uses the learned room for that part of day when one is confident (below), else the thermostat.
+
+When the reference is a room and its reading is usable (present, numeric, plausible, not stale: the same checks as
+`_resolve_sleep_indoor_temp_f`, generalised), `resolve_indoor_temp_with_provenance` returns that room's reading as the
+comfort-facing value with a new context `REMOTE_CONTEXT_ROOM`, and the existing remote-offset outer loop
+(`remote_offset.py`, `AutomationEngine.remote_offset_check` / `_remote_offset_for_write`) steers the thermostat
+setpoint so that room reaches the target, with the same step, cap, startup wait and opposite-edge clamp it uses for
+the sleep sensor. On any failure the thermostat reading is used, exactly as the sleep swap falls back today. The
+reference is resolved by one pure function (`steering_reference(at, …)`) that every caller uses; no caller compares
+`in_sleep_window` with `sleep_indoor_temp_entity` on its own any more.
+
+Every place the sleep-only remote context reaches today must accept the room context. Known touchpoints (grep before
+editing; counts at 0.9.41.1): `indoor_temp.py` (`resolve_indoor_temp_with_provenance`, `_resolve_sleep_indoor_temp_f`,
+`REMOTE_CONTEXT_SLEEP`), `remote_offset.py` (`context_label`, `remote_offset_msg`, views), `automation.py`
+(`remote_offset_check`, `_remote_offset_for_write`, 26 `in_sleep_window=` call sites), `coordinator.py` (26
+`sleep_indoor_temp_entity`, 14 `in_sleep_window=`, `heat_offset_at`), `invariant_watchdog.py` (`heat_offset_at`,
+`_armed_floor`, promises P1 and P7), `briefing.py`, `scheduler.py`, `operation_timeline.py`, `prediction_accuracy.py`,
+`nat_vent_*`, `fan_*`, `ai_skills_context.py`, `api.py`, `frontend/nd_settings.js`. The watchdog must treat a room
+context exactly like the sleep context (the phase 1 review found it disabling P1).
+
+### Learned room
+
+Per part of day (night, morning, afternoon, evening; day class and day type are not split, to keep enough data):
+
+- **Raise samples.** When an episode with `final − old > 0` closes, the temperature of every selected room at episode
+  open is stored with the observation (`rooms: {entity_id: temp_f}`, captured at open like `remote_f`).
+- **Background samples.** At every 30-minute refresh, each selected room's usable reading is appended to a per room,
+  per part-of-day reservoir (most recent 200 readings).
+- **Score.** For a room with at least 10 raise samples in the part of day among the most recent 60:
+  `ratio = MAD(raise temps) / MAD(background temps)` (MAD floor 0.1 °F). A low ratio means the occupants turn the heat
+  up when that room reaches a consistent temperature, more consistently than that room normally varies. The
+  thermostat's own reading is scored the same way.
+- **Choice.** The room with the lowest ratio is chosen when its ratio is at most 0.7 and at least 0.15 lower than the
+  thermostat's ratio. Otherwise the thermostat stays the reference. Sensors that report whole degrees (`_is_whole`)
+  are scored and shown but never chosen automatically (resolution, and the Daikin case above); they can be pinned.
+- Recomputed in the weekly update; a change of the chosen room is logged at INFO and added to `preference_history`.
+
+### Reference frames for learned offsets
+
+An observation's `delta_f` is only meaningful against the reference it was recorded under: the rooms on this install
+differ by up to 2 °C from the thermostat. Each observation stores `ref` (the reference entity at episode open, `null`
+for the thermostat). The weekly update and the seed only use observations whose `ref` equals the bucket's current
+reference. When a part of day's reference changes, that part of day's offsets restart from 0 (logged); old
+observations are kept and count again if the reference returns.
+
+### Humidity dimension
+
+- Band of the reference humidity at episode open: `dry` below 40 % RH, `normal` 40 to 60, `humid` above 60, `-` when
+  no humidity is known. A band change needs the reading to pass the edge by 2 % RH (hysteresis against the band in
+  force).
+- The bucket key gains a fourth part: `day_type|part_of_day|day_class|band`. Phase 1 keys with three parts load as
+  band `-`.
+- Weekly update levels: the four-part key (at least 3 observations); else the band-agnostic three-part key across
+  bands; else `day_type|part_of_day` across day classes and bands (the phase 1 fallback). Offsets are stored for each
+  four-part key with observations and for each three-part key.
+- Application looks up the current four-part key, then the three-part key, then 0, with the phase 1 clamps.
+
+### History backfill and seed
+
+Service `climate_advisor.backfill_preferences` (`entry_id`, `days` default 30, 1 to 400) and an "Analyse history"
+button on the Analysis tab. Runs on the recorder executor (`recorder.get_instance(hass).async_add_executor_job`) and
+never blocks the event loop.
+
+1. Read from the recorder for the window: the climate entity's states (setpoint, `preset_mode`, mode, context), every
+   selected room's temperature and humidity states, and the outdoor temperature (the configured outdoor sensor, else
+   the weather entity's `temperature` attribute).
+2. Keep changes with mode `heat` and no `eco` preset. A change whose context has a `user_id` was made in Home
+   Assistant by a person and is always kept.
+3. **Schedule filter.** A change is the thermostat's schedule when the same setpoint (±0.1 °C) is set within ±10
+   minutes of the same clock time on at least 40 % of the days in the window and on at least 4 days. Unit-tested
+   against the schedule above.
+4. Group the rest into episodes (15 minutes), compute `old` and `final`, discard undos, apply the phase 1 60-minute
+   wake and bed exclusion. Occupancy is not known historically; it is assumed home (stated in the UI).
+5. For each episode: bucket from the date's day type (daily outdoor high through `classify_day`), part of day, day
+   class and humidity band; `delta_f` against today's configured base floor for that moment; `ref = null`; room
+   temperatures at episode open from the nearest reading at or before it (at most 30 minutes old). Background
+   reservoirs are filled from the same room histories.
+6. The result is stored as `preference_seed`: the observations (marked `"source": "history"`), a per-bucket summary
+   (n, median delta, the offset it would set) and the window. It replaces any earlier unaccepted seed.
+
+Review (Analysis tab): one row per bucket with n, median and resulting offset, a checkbox per row (default checked)
+and Accept / Discard. **Accept applies the selected buckets' offsets immediately**, clamped to
+`preference_max_offset_f` but not limited by the weekly step: accepting is an explicit user decision, and the UI says
+"applies these offsets now". The accepted observations join `preference_observations`; later weekly updates treat
+them like any other. Discard deletes the seed. Both are logged and recorded in `preference_history`.
+
+### Persistence
+
+New `LearningState` fields: `room_background` (`{part: {entity: [temp_f, …]}}`), `learned_rooms`
+(`{part: {"entity": str|null, "ratios": {entity: float}, "n": int, "updated": date}}`), `preference_seed` (object or
+null). Observations gain optional `rooms`, `ref`, `rh`, `band`, `source`. Validate in `load_state`; the `preferences`
+reset scope clears all of them.
+
+### Visibility
+
+- Status tab: the thermostat-card line names the reference ("Steering by Bedroom (learned) 19.6 °C, thermostat
+  +0.5 °C") and the humidity band.
+- Analysis tab: per part of day the reference, its source (pinned, learned, sleep sensor, thermostat) and every
+  candidate's ratio and n; the bucket table gains the band column; the seed review panel.
+- Diagnostics: the new state (room entity ids are not secrets; nothing new to redact).
+- Briefing: the learned-preference line names the room when the reference is a room.
+- All text through i18n in all 16 languages.
+
+### Tests
+
+- Pure: `steering_reference` precedence (sleep sensor, pin, auto, fallback); learned-room score with the gate, the
+  whole-degree exclusion and the MAD floor; band with hysteresis; four-part keys and the three-level fallback;
+  three-part keys loading as band `-`; schedule filter on the recorded Nest schedule (all six slots removed, the
+  occupant bursts kept); episode building from history; seed summary.
+- Engine: the room context drives the remote-offset loop like the sleep context and falls back on a stale room;
+  watchdog P1/P7 with a room context; offsets restart when the reference changes.
+- Coordinator: observations carry `rooms`, `ref`, `rh`, `band`; backfill service reads the recorder off the event
+  loop; accept applies offsets now within the cap; discard.
+- Consistency: with a room reference and an offset active, chart band, briefing, Status line and written setpoint
+  agree. Golden simulations unchanged.
+
+### Implementation notes (phase 3, as built)
+
+- `steering_reference` (pure, `preference_learning.py`) is the one source; the coordinator passes the room to
+  `resolve_indoor_temp_with_provenance(room_entity=)` (`steering_room`), which sets `REMOTE_CONTEXT_ROOM` only while
+  the thermostat heats (heat mode, or off on a heat-only unit; D5) and reports `room_reason` (`not_heating`, `stale`,
+  `unavailable`) when it falls back. The watchdog's readings and heat offset come from the same reading and view, so
+  P1/P7 parity with the sleep context holds by construction.
+- Where the night is steered by a room instead of a sleep sensor, the operation timeline's plan holds the
+  thermostat's room the room gap away from the band (`night_room_gap_f`), heat edge only (D5). The v4 predictor's
+  node inputs, the v4 night strategy, the sleep-sensor health check and future `ca_swaps` breaks stay sleep-sensor
+  only: v4 models the bedroom node, and a failing room is announced by the indoor-source note (`room_unusable`)
+  rather than a health episode. Recorded `ca_swaps` rows already break on the room, and `prediction_accuracy` breaks
+  on the chart log's recorded `band_sensor`, which already names the steering room. The chart's predicted-indoor line
+  follows the v4 bedroom node; routing a room into it would mean modelling a per-room node in v4, out of proportion
+  for this phase. Rooms steering the morning, afternoon or evening are not modelled in the plan; the band itself (the
+  target) is the shared seam.
+- No separate entity-health episodes for room sensors: a stale or unavailable room is a fall-back to the thermostat,
+  logged on change, like the sleep sensor's.
+- Seed rows for a part of day that a room steers are shown disabled and set no offset on Accept (their history
+  deltas were measured at the thermostat, not in the room); their observations still join with `ref = null`, so they
+  count once the thermostat steers that part again.
+- Accept and Discard both keep the seed's room context: the background is merged into `room_background`, and raises
+  with room temperatures that do not join as observations are kept with `context_only: true`. Context-only raises
+  feed the learned-room score only, never an offset or the observation count; a later Accept of the same bucket turns
+  them into observations. Accept requests a coordinator refresh so the new floors are armed at once. Analysing the
+  same window again after a Discard repeats its background readings (a commented shortcut; each reservoir keeps its
+  newest 200). Imported room temperatures and background readings are limited to the rooms selected at import (and
+  the thermostat).
+- No raise counts twice. Every observation now stores its episode `start`; an import skips an episode already stored
+  under that start whatever its bucket or band (an observation from before 0.9.41.2 is identified by its close,
+  `date` + `time`). The seed also stops where live recording took over (`live_since`: the earliest live episode start,
+  the open episode included; the close of an older observation without `start`): a history episode that ends at or
+  after 15 minutes before it is left out (`counts.live`), because it would have been part of that live episode.
+- A seed without a valid window or counts is refused: nothing is stored, an earlier seed is kept, a WARNING is logged,
+  the Analysis tab shows `preference_seed_invalid` (HTTP 422) and the service raises the translated
+  `preference_seed_invalid` error.
+- With a sleep sensor configured at analysis time, history changes in the sleep window are left out
+  (`counts.sleep_sensor`) rather than tagged with the sleep sensor: that sensor's remote offset moved the setpoint the
+  thermostat reported and the recorder does not keep the offset, so their delta is known in neither frame (reference
+  frames: "only meaningful against the reference it was recorded under"). Live recording, which knows the offset,
+  learns those nights.
+- Background samples are taken at most once per 30 minutes per part of day (one minute of slack for a refresh that
+  fires slightly early), not on every coordinator update; the humidity band and the room readings are refreshed on
+  every update. The thermostat is sampled with the rooms so its ratio can be scored.
+- An episode records the reference actually used at open: the room only while the room steered (`remote_context`
+  set); a stale room or a cooling thermostat records `ref = null`. The same heat gate (mode heat, no eco preset)
+  decides both live recording and the history filter.
+- The first reconcile after the upgrade stamps each part, and its observations without a `ref`, with the phase 1
+  frame they were recorded under (`references_by_part(config, None)`: the sleep sensor at night, else the
+  thermostat). When the current reference differs (a pin set at upgrade), that part restarts like any other change.
+  Reconcile also prunes background reservoirs of rooms no longer selected.
+- Band levels: a band that appears for a bucket gets both its band row and a `-` row, each starting from the bucket's
+  current learned offset (a three-part phase 1 key counts), never from 0. A `-` row is written only when the bucket
+  also has a real band; an install without humidity keeps the three-part key alone (no mirror row). Application
+  reads the four-part key, then the three-part key.
+- Whole-degree detection (`is_whole_series`) judges a room's readings in the configured `temp_unit`, the unit every
+  sensor state is read in (`read_sensor_state_f`). A sensor's native unit is not in its state: Home Assistant converts
+  a whole-°C sensor on a °F system to 69.8, 71.6 °F, so that sensor is not recognised as whole there (it can still be
+  pinned); on a °C system (the target install's Daikin sensors) it is. A 0.1 °C sensor reading 21.1 °C (69.98 °F) is
+  never mistaken for a whole-°F one.
+- The room picker accepts temperature sensors and `input_number` helpers (the remote reader reads both).
+- Loading drops malformed learned rooms, seed rows, seed observations and background readings with a WARNING; a seed
+  without a valid window or counts is dropped whole. A failed Accept or Discard returns an error to the Analysis tab
+  (`preference_seed_failed`) instead of failing silently.
+- The backfill analyses a deep copy of the config taken when it starts, so an options change during the run cannot
+  mix two configurations.
+- Recorder history rows carry no context, so the `user_id` keep rule rarely applies to history; the schedule filter
+  does the work.
+- The history humidity source is today's humidity source for the thermostat's room (entity or `entity#attribute`);
+  when it is not usable, history observations get band `-`.
+- Pins use a selector with `custom_value`, so a room added in the same form validates against the submitted
+  selection.
+- The briefing names a room only on a heating day (rooms never steer cooling).
+- No lock against two concurrent backfills; the second replaces the first seed.
+- The schedule filter keeps ±10 minutes. The test fixture adds the late 18.0 °C slot firing early on a few days
+  (23:15, 23:18, 23:22, 23:45, 23:46, 23:54, 23:56): the ones within 10 minutes of the usual 23:59 are removed with
+  the slot; the others survive as occupant episodes. With bedtime 23:00 they land in the night bucket with
+  `delta_f = 0` against an 18 °C sleep floor, so they teach no offset. With a bedtime of 00:00 the 60-minute bed
+  exclusion drops them all. With a sleep sensor configured they fall in the sleep window and are left out.

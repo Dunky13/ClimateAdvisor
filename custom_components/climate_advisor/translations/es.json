@@ -456,12 +456,22 @@
         "data": {
           "preference_learning_enabled": "Aprender mis preferencias de calefacción",
           "preference_max_offset_f": "Ajuste aprendido máximo",
-          "preference_weekly_step_f": "Cambio semanal máximo"
+          "preference_weekly_step_f": "Cambio semanal máximo",
+          "room_temp_entities": "Sensores de habitación",
+          "room_pin_night": "Habitación por la noche",
+          "room_pin_morning": "Habitación por la mañana",
+          "room_pin_afternoon": "Habitación por la tarde",
+          "room_pin_evening": "Habitación al anochecer"
         },
         "data_description": {
           "preference_learning_enabled": "Si está activado, los cambios repetidos que haces en el termostato en momentos similares desplazan la temperatura de calefacción que Climate Advisor fija para ese tipo de momento. Desactivado por defecto.",
           "preference_max_offset_f": "Lo máximo que un ajuste aprendido puede subir o bajar la temperatura de calefacción respecto a tu consigna configurada.",
-          "preference_weekly_step_f": "Lo máximo que puede cambiar un ajuste aprendido por semana."
+          "preference_weekly_step_f": "Lo máximo que puede cambiar un ajuste aprendido por semana.",
+          "room_temp_entities": "Opcional. Sensores de temperatura de habitación con los que Climate Advisor puede dirigir la calefacción en cada parte del día. Solo calefacción. No elijas un sensor integrado en otro calefactor o aire acondicionado.",
+          "room_pin_night": "Automático deja que Climate Advisor elija la habitación cuya temperatura mejor se ajusta a tus cambios. Termostato mantiene la lectura del propio termostato. O elige uno de los sensores de habitación de arriba.",
+          "room_pin_morning": "Automático deja que Climate Advisor elija la habitación cuya temperatura mejor se ajusta a tus cambios. Termostato mantiene la lectura del propio termostato. O elige uno de los sensores de habitación de arriba.",
+          "room_pin_afternoon": "Automático deja que Climate Advisor elija la habitación cuya temperatura mejor se ajusta a tus cambios. Termostato mantiene la lectura del propio termostato. O elige uno de los sensores de habitación de arriba.",
+          "room_pin_evening": "Automático deja que Climate Advisor elija la habitación cuya temperatura mejor se ajusta a tus cambios. Termostato mantiene la lectura del propio termostato. O elige uno de los sensores de habitación de arriba."
         }
       },
       "ai_settings": {
@@ -537,7 +547,8 @@
       "sleep_cool_above_away_warning": "La refrigeración para dormir es más alta que la refrigeración en ausencia, así que por la noche la casa puede estar más caliente que cuando no hay nadie. Envía de nuevo para conservarla.",
       "vacation_heat_above_away_warning": "La calefacción de vacaciones es más alta que la calefacción en ausencia, así que unas vacaciones consumen más energía que un día normal fuera. Envía de nuevo para conservarla.",
       "vacation_cool_below_away_warning": "La refrigeración de vacaciones es más fría que la refrigeración en ausencia, así que unas vacaciones consumen más energía que un día normal fuera. Envía de nuevo para conservarla.",
-      "vacation_freeze_warning": "Con este ajuste, la calefacción de vacaciones queda por debajo de 45 °F (7 °C). Las tuberías pueden congelarse durante un viaje largo. Envía de nuevo para conservarla."
+      "vacation_freeze_warning": "Con este ajuste, la calefacción de vacaciones queda por debajo de 45 °F (7 °C). Las tuberías pueden congelarse durante un viaje largo. Envía de nuevo para conservarla.",
+      "room_pin_not_selected": "Elige automático, termostato o uno de los sensores de habitación seleccionados arriba."
     }
   },
   "issues": {
@@ -782,6 +793,12 @@
         "cool": "Solo refrigeración",
         "heat": "Solo calefacción"
       }
+    },
+    "room_pin": {
+      "options": {
+        "auto": "Automático (aprendido)",
+        "thermostat": "Termostato"
+      }
     }
   },
   "services": {
@@ -846,11 +863,31 @@
           "description": "Qué datos restablecer. \"all\" borra todo. \"thermal_model\" borra las observaciones de sesiones de climatización. \"weather_bias\" borra los registros de precisión de la previsión. \"suggestions\" permite que vuelvan a aparecer las sugerencias descartadas antes."
         }
       }
+    },
+    "backfill_preferences": {
+      "name": "Analizar historial de preferencias",
+      "description": "Lee el historial del registrador y propone preferencias de consigna aprendidas para revisarlas en la pestaña Análisis del panel. Nada cambia hasta que aceptes la propuesta. Requiere el aprendizaje de preferencias activado.",
+      "fields": {
+        "entry_id": {
+          "name": "Zona",
+          "description": "La zona de Climate Advisor (entrada de configuración) a la que se aplica esta llamada. Obligatorio desde la incidencia #796: con más de una zona configurada, el registro de servicios de HA no tiene otra forma de saber a qué zona va dirigida la llamada."
+        },
+        "days": {
+          "name": "Días",
+          "description": "Cuántos días de historial analizar (de 1 a 400)."
+        }
+      }
     }
   },
   "exceptions": {
     "unknown_zone": {
       "message": "entry_id de zona de Climate Advisor desconocido o no cargado: «{entry_id}». Comprueba en Ajustes > Dispositivos y servicios cuál es la zona correcta."
+    },
+    "preference_learning_off": {
+      "message": "El aprendizaje de preferencias está desactivado para esta zona. Actívalo primero en las opciones de Climate Advisor."
+    },
+    "preference_seed_invalid": {
+      "message": "El análisis del historial no dio una propuesta válida; no se guardó nada. Los detalles están en el registro."
     }
   }
 }

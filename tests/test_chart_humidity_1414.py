@@ -570,6 +570,7 @@ _ALLOWED_MODULES = {
     "coordinator.py",
     "const.py",
     "config_flow.py",
+    "preference_backfill.py",  # fork Dunky13#1 phase 3: parses recorded humidity for the preference band (opt-in)
 }
 
 
@@ -619,7 +620,23 @@ def test_in_the_coordinator_only_the_chart_paths_touch_it():
         "get_chart_data",
         "_humidity_role_inputs",
         "chart_capabilities",
+        "_reference_humidity",
+        "_role_humidity",
     }
+
+    # Fork Dunky13#1 phase 3: ``_reference_humidity`` (the comfort room's humidity) also picks the preference
+    # learning humidity band, opt-in and heating only. It feeds the chart row and that band (live, and the history
+    # backfill's choice of humidity source through ``_role_humidity``, the per-role read it shares), nothing else.
+    def callers(name: str) -> set[str]:
+        return {
+            fn.name
+            for fn in cls.body
+            if isinstance(fn, ast.FunctionDef | ast.AsyncFunctionDef)
+            and any(isinstance(n, ast.Attribute) and n.attr == name for n in ast.walk(fn))
+        }
+
+    assert callers("_reference_humidity") == {"_read_chart_humidity", "_refresh_preference_context"}
+    assert callers("_role_humidity") == {"_reference_humidity", "async_backfill_preferences"}
     # and _read_chart_context's output only ever goes into a chart_log row
     readers = set()
     for fn in cls.body:

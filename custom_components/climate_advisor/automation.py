@@ -289,7 +289,7 @@ from .override_grace_lifecycle import (
     OverrideConfirmState,
     OverrideGraceLifecycleState,
 )
-from .preference_learning import PreferenceView
+from .preference_learning import PreferenceView, selected_rooms, steering_room
 from .record_text import MsgText, msg_of, msg_text
 from .remote_offset import (
     ClampLimit,
@@ -7371,12 +7371,14 @@ class AutomationEngine:
     # are later increments (#1194 d, e).
 
     def _remote_sensor_configured(self) -> bool:
-        """Whether any remote-sensor context is configured at all (today: the sleep-window bedroom sensor).
+        """Whether any remote-sensor context is configured at all: the sleep-window bedroom sensor, or (fork
+        Dunky13#1 phase 3) a room the comfort target may be steered by while preference learning is on.
 
-        The offset machinery is inert, and costs nothing per write, on installs without one. A future remote-sensor
-        context adds its own configured-entity test here.
+        The offset machinery is inert, and costs nothing per write, on installs without one.
         """
-        return bool(self.config.get("sleep_indoor_temp_entity"))
+        if self.config.get("sleep_indoor_temp_entity"):
+            return True
+        return bool(selected_rooms(self.config)) and self._preferences() is not None
 
     def _remote_offset_gate(self) -> RemoteOffsetGate:
         """The ONE gate predicate of the outer loop (Issue #1194 b); the write path and the check both ask it.
@@ -21321,14 +21323,18 @@ class AutomationEngine:
         Shared by ``_get_indoor_temp_f()`` (value only) and ``_get_indoor_reading()`` (value + provenance) so
         the remote-sensor outer loop can never be reading a different sensor than the decisions are.
         """
+        now = dt_util.now()
+        asleep = _in_sleep_window(now, self.config)
         return {
             "hass": self.hass,
             "source": self.config.get("indoor_temp_source", TEMP_SOURCE_CLIMATE_FALLBACK),
             "unit": self._temp_unit,
             "indoor_temp_entity": self.config.get("indoor_temp_entity"),
             "climate_entity": self.climate_entity,
-            "in_sleep_window": _in_sleep_window(dt_util.now(), self.config),
+            "in_sleep_window": asleep,
             "sleep_indoor_temp_entity": self.config.get("sleep_indoor_temp_entity"),
+            # Fork Dunky13#1 phase 3: the steering room for this part of the day (None = thermostat / sleep sensor).
+            "room_entity": steering_room(now, self.config, in_sleep_window=asleep, view=self._preferences()),
             # Issue #1230 R1b: the coordinator's shared candidates + 'finer' latch (None headless / when off), so the
             # engine and the coordinator resolve the same value.
             "companion": (

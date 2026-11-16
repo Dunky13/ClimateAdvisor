@@ -6,5 +6,7 @@
   "errors.action_or_feedback_required": "action, feedback, accept, dismiss, correct and incorrect are literal field names/values; keep them.",
   "errors.suggestion_key_required": "suggestion_key is a literal field name; keep it.",
   "errors.resume_pending": "{mode} is the thermostat mode (heat, cool, ...) or 'none' when unknown; translate the mode words in the select.",
-  "errors.resume_done": "{mode} is the thermostat mode (heat, cool, ...) or 'none' (then N/A)."
+  "errors.resume_done": "{mode} is the thermostat mode (heat, cool, ...) or 'none' (then N/A).",
+  "errors.preference_seed_action": "'accept' and 'discard' are literal values; keep them in quotes.",
+  "errors.backfill_days": "days is a literal field name; keep it."
 }

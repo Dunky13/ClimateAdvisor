@@ -69,6 +69,7 @@
   "briefing.pref.entry_class": "{part} ({day_class}) {sign}{amount}",
   "briefing.pref.entry_night": "dziś w nocy {sign}{amount}",
   "briefing.pref.entry_night_class": "dziś w nocy ({day_class}) {sign}{amount}",
+  "briefing.pref.entry_room": "{entry} ({room})",
   "briefing.pref.part.afternoon": "popołudnie",
   "briefing.pref.part.evening": "wieczór",
   "briefing.pref.part.morning": "rano",

@@ -1451,6 +1451,11 @@ The open time is always `MILD_WINDOW_OPEN_HOUR` (10am). Only the close time is d
 
 > **Fork (0.9.41.1), preference learning:** `select_comfort_band(at=, preferences=)` adds the learned offset of the instant's bucket (`<day_type>|<part_of_day>|<weekday|weekend>`) to the HEAT FLOOR in exactly two branches, awake home/guest and the sleep window, capped at the ceiling. Away, vacation, setback and the ceiling never change, and with the feature off (`preferences=None`) the output is identical to upstream. Every consumer reads the floor through this seam: the chart (`_compute_target_band_schedule`), the briefing, `compute_bedtime_setback(preference_offset_f=)`, the next-automation text and the `climate.set_temperature` write. The offset also never leaves the heat floor closer than `MIN_HEAT_COOL_GAP_F` (4 °F) to the ceiling. The nat-vent plan, exit and reactivation floors, the fan cycling target and the welcome-home comfort target read the learned floor too (`learned_heat_floors`); raw reads that deliberately stay raw (cooling guards, validation, display of the configured value) are listed in [preference-learning-spec.md](preference-learning-spec.md). The invariant watchdog shifts its heat-floor promises (P1, P7) by the offset actually applied for the instant's bucket (`PromiseConfig.heat_offset_at`), not by the cap.
 
+> **Fork (0.9.41.2), humidity bands:** the bucket gains a fourth part, the humidity band in force (`dry` below 40 %,
+> `normal`, `humid` above 60 %, 2 % hysteresis; `-` when no reading). `PreferenceView.offset_for` reads the four-part
+> key, then the three-part key, then 0, so phase 1 offsets (three-part keys, loaded as band `-`) keep applying. The
+> seam, its two branches and the cap are unchanged.
+
 The home is held inside the comfort band continuously by the thermostat itself — recurring afternoon ceiling drift (Issues #136/#218/#247) becomes structurally impossible because the ceiling setpoint is always armed, not re-armed reactively 30 minutes later.
 
 > **`ComfortBand.active` is the day-type default edge, and since Issue #1066 it is only a tie-break.** `select_comfort_band()` still sole-owns `ComfortBand.floor`/`ComfortBand.ceiling`/`ComfortBand.active`, but which HVAC family is actually commanded is decided each evaluation by [§6f](#6f-comfort-family-nearest-edge-arming-issue-1066--supersedes-827843858867-settling-guard-issue-1073)'s nearest-edge selector from indoor temperature and the thermostat's real mode. `active` is used only when that mode is unknown. The band edges (and therefore the chart's Target Band) do not move; only which edge is armed does.
@@ -4302,6 +4307,15 @@ is set (today `"sleep"`, `REMOTE_CONTEXT_SLEEP`) exactly when the comfort-facing
 instead of `primary_value`. A future remote-sensor context sets it in `indoor_temp.py` and adds its configured-entity
 test to `AutomationEngine._remote_sensor_configured()`; nothing else changes. No separate toggle: on whenever the
 sleep sensor is configured, for that sensor's context. Installs without one run none of this.
+
+> **Fork (0.9.41.2), preference rooms:** the second context is `"room"` (`REMOTE_CONTEXT_ROOM`). With preference
+> learning on, `preference_learning.steering_reference` names the reference per part of the day (sleep sensor in the
+> sleep window, then the part's pin, then the learned room, then the thermostat); the coordinator passes a room to
+> `resolve_indoor_temp_with_provenance(room_entity=)`, which uses it only while the thermostat heats (heat mode, or off on
+> a heat-only unit) and falls back to `primary_value` on a stale or unavailable room (`room_reason`).
+> `_remote_sensor_configured()` is true while any room is selected, so the loop, step, cap, startup wait, exit grace and
+> watchdog readings are the sleep context's, unchanged. Learned offsets carry the reference they were measured against;
+> a part whose reference changes restarts its offsets from 0.
 
 **The single setpoint path.** `AutomationEngine._set_temperature_impl()` is the ONE place the offset is applied.
 Every CA setpoint writer reaches it (`_apply_comfort_band`, `_set_temperature_for_mode`, wake-up, bedtime, pre-cool,

@@ -51,6 +51,8 @@ _HELPER_BUILT_KEYS = {
             "vacation_heat",
             "vacation_cool",
         },
+        # Fork Dunky13#1 phase 3: the room pins are built in a loop over ROOM_PIN_KEYS.
+        "preference_learning": {"room_pin_night", "room_pin_morning", "room_pin_afternoon", "room_pin_evening"},
     },
     "config": {
         "setpoints": {"comfort_heat", "comfort_cool", "setback_heat", "setback_cool", "sleep_heat", "sleep_cool"},

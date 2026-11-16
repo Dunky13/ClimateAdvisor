@@ -356,13 +356,65 @@
   // ---------- learned setpoint preferences (fork Dunky13#1): the applied offsets per situation, with a confirmed reset ----------
   var PREF_PART = { night: 'pref.part.night', morning: 'pref.part.morning', afternoon: 'pref.part.afternoon', evening: 'pref.part.evening' };
   var PREF_CLASS = { weekday: 'pref.class.weekday', weekend: 'pref.class.weekend' };
+  // phase 3: the humidity band is the key's fourth part ('-' = humidity unknown); a three-part key is the band-agnostic level
+  var PREF_BAND = { dry: 'pref.band.dry', normal: 'pref.band.normal', humid: 'pref.band.humid', '-': 'pref.band.none' };
+  var PREF_SOURCE = { pinned: 'pref.source.pinned', learned: 'pref.source.learned', sleep_sensor: 'pref.source.sleep_sensor', thermostat: 'pref.source.thermostat' };
   function prefLabel(bucket) {
     var p = String(bucket).split('|');
     return T(PREF_PART[p[1]]) + ' · ' + CAI18N.t('dashboard.status.day_type_' + p[0]) + ' · ' + T(PREF_CLASS[p[2]]);
   }
+  function prefBand(bucket) {
+    var b = String(bucket).split('|')[3];
+    return b == null ? T('pref.band.any') : T(PREF_BAND[b] || 'pref.band.none');
+  }
   function prefDate(s) { // 'YYYY-MM-DD' as a local calendar date (new Date(s) would read it as UTC and can show the day before)
     var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || ''));
     return m ? CAI18N.fmt.dateYear(new Date(+m[1], +m[2] - 1, +m[3])) : '—';
+  }
+  function th(keys) {
+    return '<thead><tr>' + keys.map(function (k) { return '<th scope="col">' + esc(T(k)) + '</th>'; }).join('') + '</tr></thead>';
+  }
+  // Per part of the day: where the comfort target is measured, why, and every candidate's spread ratio ('—' until it
+  // has enough samples) and raise samples. Shown with rooms selected or any other reference (the sleep sensor at night).
+  function prefReferences(P) {
+    var names = {}, rooms = (P.rooms || []).map(function (r) { names[r.entity] = r.name || r.entity; return r.entity; });
+    var parts = P.parts || [];
+    if (!rooms.length && !parts.some(function (r) { return r.entity; })) return '';
+    var rows = parts.map(function (r) {
+      var ratios = r.ratios || {}, counts = r.counts || {}, seen = {};
+      var cands = rooms.concat(['thermostat'], Object.keys(ratios), Object.keys(counts)).filter(function (e) {
+        return seen[e] ? false : (seen[e] = true);
+      }).map(function (e) {
+        var whole = (r.whole || []).indexOf(e) >= 0 ? ' ' + T('pref.whole') : '';
+        return (e === 'thermostat' ? T('pref.thermostat') : names[e] || e) + ' ' + (ratios[e] == null ? '—' : nf(ratios[e], 2)) + ' (' + (counts[e] || 0) + ')' + whole;
+      }).join(', ');
+      return '<tr><td>' + esc(T(PREF_PART[r.part])) + '</td><td>' + esc(r.entity ? r.name || r.entity : T('pref.thermostat')) + '</td><td>' +
+        esc(T(PREF_SOURCE[r.source] || 'pref.source.thermostat')) + '</td><td>' + esc(cands || '—') + '</td></tr>';
+    }).join('');
+    return '<h3 class="sub" style="margin-top:10px">' + esc(T('pref.ref_title')) + '</h3><table>' + th(['pref.col_part', 'pref.col_ref', 'pref.col_source', 'pref.col_candidates']) +
+      '<tbody>' + rows + '</tbody></table>';
+  }
+  // The history seed: analyse, then review one row per situation (checked unless a room steers that part) and accept or discard.
+  function prefSeed(P, sgn) {
+    var S = P.seed;
+    if (!S) {
+      return '<h3 class="sub" style="margin-top:10px">' + esc(T('pref.seed_title')) + '</h3><div class="small">' + esc(T('pref.seed_none')) + '</div>' +
+        '<div class="row" style="margin-top:6px"><label class="small">' + esc(T('pref.seed_days')) +
+        ' <input type="number" id="pref-seed-days" min="1" max="400" step="1" value="30" style="width:5em"></label> ' +
+        '<button type="button" class="btn small" id="pref-seed-analyse">' + esc(T('pref.seed_analyse')) + '</button></div>';
+    }
+    var c = S.counts || {}, w = S.window || {};
+    var rows = (S.rows || []).map(function (r, i) {
+      var box = '<input type="checkbox" class="pref-seed-pick" data-bucket="' + esc(r.bucket) + '" id="pref-seed-' + i + '"' + (r.disabled ? ' disabled' : ' checked') + '>';
+      return '<tr><td>' + box + '</td><td><label for="pref-seed-' + i + '">' + esc(prefLabel(r.bucket)) + '</label>' +
+        (r.disabled ? ' <span class="small">' + esc(T('pref.seed_disabled')) + '</span>' : '') + '</td><td>' + esc(prefBand(r.bucket)) +
+        '</td><td>' + esc(String(r.n)) + '</td><td>' + esc(sgn(r.median)) + '</td><td>' + esc(sgn(r.offset)) + '</td></tr>';
+    }).join('');
+    return '<h3 class="sub" style="margin-top:10px">' + esc(T('pref.seed_title')) + '</h3><div class="small">' +
+      esc(T('pref.seed_summary', { days: w.days || 0, observations: c.observations || 0, schedule: c.schedule || 0 })) + '</div>' +
+      (rows ? '<table>' + th(['pref.seed_col_use', 'pref.col_bucket', 'pref.col_band', 'pref.col_n', 'pref.seed_col_median', 'pref.col_offset']) + '<tbody>' + rows + '</tbody></table>' : '') +
+      '<div class="row" style="margin-top:6px">' + (rows ? '<button type="button" class="btn small primary" id="pref-seed-accept">' + esc(T('pref.seed_accept')) + '</button> ' : '') +
+      '<button type="button" class="btn small" id="pref-seed-discard">' + esc(T('pref.seed_discard')) + '</button></div>';
   }
   function renderPreferences() {
     var host = $('an-preferences'), L = D.learning;
@@ -371,20 +423,20 @@
     if (!P.enabled) { host.innerHTML = '<div class="empty">' + esc(T('pref.off')) + '</div>'; return; }
     var sgn = function (v) { return (v > 0 ? '+' : '') + nf(v, 1) + ' ' + u; };
     var head = '<div class="kv" style="grid-template-columns:1fr"><div>' +
-      esc(P.bucket ? T('pref.active', { offset: sgn(P.active_offset || 0), bucket: prefLabel(P.bucket) }) : T('pref.no_band')) + ' · ' +
+      esc(P.bucket ? T('pref.active', { offset: sgn(P.active_offset || 0), bucket: prefLabel(P.bucket) + ' · ' + prefBand(P.bucket) }) : T('pref.no_band')) + ' · ' +
       esc(T('pref.totals', { n: P.observation_count || 0, when: P.last_update ? prefDate(P.last_update) : '—' })) + '</div></div>';
     var rows = (P.buckets || []).map(function (b) {
       // the applied (cap-clamped) offset; the stored one beside it only when the maximum was lowered below it
       var off = esc(sgn(b.offset)) + (b.clamped ? ' <span class="small">' + esc(T('pref.stored', { offset: sgn(b.stored_offset) })) + '</span>' : '');
-      return '<tr><td>' + esc(prefLabel(b.bucket)) + '</td><td>' + off + '</td><td>' + esc(String(b.n == null ? '' : b.n)) +
+      return '<tr><td>' + esc(prefLabel(b.bucket)) + '</td><td>' + esc(prefBand(b.bucket)) + '</td><td>' + off + '</td><td>' + esc(String(b.n == null ? '' : b.n)) +
         '</td><td>' + esc(b.updated ? prefDate(b.updated) : '') + '</td></tr>';
     }).join('');
     var reset = '<div class="row" id="pref-reset-row" style="margin-top:8px"><button type="button" class="btn small" id="pref-reset-btn">' + esc(T('pref.reset')) + '</button></div>';
-    host.innerHTML = head + (rows ? '<table><thead><tr><th scope="col">' + esc(T('pref.col_bucket')) + '</th><th scope="col">' + esc(T('pref.col_offset')) +
-      '</th><th scope="col">' + esc(T('pref.col_n')) + '</th><th scope="col">' + esc(T('pref.col_updated')) + '</th></tr></thead><tbody>' + rows + '</tbody></table>'
-      : '<div class="empty">' + esc(T('pref.none')) + '</div>') + reset;
+    host.innerHTML = head + (rows ? '<table>' + th(['pref.col_bucket', 'pref.col_band', 'pref.col_offset', 'pref.col_n', 'pref.col_updated']) + '<tbody>' + rows + '</tbody></table>'
+      : '<div class="empty">' + esc(T('pref.none')) + '</div>') + reset + prefReferences(P) + prefSeed(P, sgn);
   }
   // Reset clears only the learned preferences (POST reset_preferences); one confirm step first, no native dialog.
+  // The seed buttons POST backfill_preferences / preference_seed; each reloads the tab when done.
   function prefResetClick(e) {
     var t = e.target.closest ? e.target.closest('button') : null;
     if (!t) return;
@@ -398,6 +450,14 @@
     } else if (t.id === 'pref-reset-yes') {
       t.disabled = true;
       ND.runAction('reset_preferences', undefined, t).then(function () { return load(); });
+    } else if (t.id === 'pref-seed-analyse') {
+      var days = parseInt(($('pref-seed-days') || {}).value, 10);
+      ND.runAction('backfill_preferences', { days: days >= 1 && days <= 400 ? days : 30 }, t).then(function () { return load(); });
+    } else if (t.id === 'pref-seed-accept') {
+      var picks = Array.prototype.slice.call(document.querySelectorAll('.pref-seed-pick:checked')).map(function (b) { return b.getAttribute('data-bucket'); });
+      ND.runAction('preference_seed', { action: 'accept', buckets: picks }, t).then(function () { return load(); });
+    } else if (t.id === 'pref-seed-discard') {
+      ND.runAction('preference_seed', { action: 'discard' }, t).then(function () { return load(); });
     }
   }
 

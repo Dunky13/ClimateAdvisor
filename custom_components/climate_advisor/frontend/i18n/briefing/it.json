@@ -69,6 +69,7 @@
   "briefing.pref.entry_class": "{part} ({day_class}) {sign}{amount}",
   "briefing.pref.entry_night": "stanotte {sign}{amount}",
   "briefing.pref.entry_night_class": "stanotte ({day_class}) {sign}{amount}",
+  "briefing.pref.entry_room": "{entry} in {room}",
   "briefing.pref.part.afternoon": "pomeriggio",
   "briefing.pref.part.evening": "sera",
   "briefing.pref.part.morning": "mattina",

@@ -456,12 +456,22 @@
         "data": {
           "preference_learning_enabled": "Isıtma tercihlerimi öğren",
           "preference_max_offset_f": "En yüksek öğrenilmiş ayar",
-          "preference_weekly_step_f": "Haftalık en yüksek değişim"
+          "preference_weekly_step_f": "Haftalık en yüksek değişim",
+          "room_temp_entities": "Oda sensörleri",
+          "room_pin_night": "Gece için oda",
+          "room_pin_morning": "Sabah için oda",
+          "room_pin_afternoon": "Öğleden sonra için oda",
+          "room_pin_evening": "Akşam için oda"
         },
         "data_description": {
           "preference_learning_enabled": "Açıkken, benzer zamanlarda yaptığınız tekrarlı termostat değişiklikleri, Climate Advisor'ın o zaman türü için belirlediği ısıtma sıcaklığını kaydırır. Varsayılan olarak kapalıdır.",
           "preference_max_offset_f": "Öğrenilmiş bir ayarın ısıtma sıcaklığını yapılandırılmış değerden en fazla ne kadar yükseltebileceği veya düşürebileceği.",
-          "preference_weekly_step_f": "Öğrenilmiş bir ayarın haftada en fazla ne kadar değişebileceği."
+          "preference_weekly_step_f": "Öğrenilmiş bir ayarın haftada en fazla ne kadar değişebileceği.",
+          "room_temp_entities": "İsteğe bağlı. Climate Advisor'ın günün her bölümünde ısıtmayı yönlendirebileceği oda sıcaklık sensörleri. Yalnızca ısıtma. Başka bir ısıtıcıya veya klimaya yerleşik bir sensör seçmeyin.",
+          "room_pin_night": "Otomatik, Climate Advisor'ın sıcaklığı değişikliklerinize en iyi uyan odayı seçmesini sağlar. Termostat, termostatın kendi ölçümünü korur. Ya da yukarıdaki oda sensörlerinden birini seçin.",
+          "room_pin_morning": "Otomatik, Climate Advisor'ın sıcaklığı değişikliklerinize en iyi uyan odayı seçmesini sağlar. Termostat, termostatın kendi ölçümünü korur. Ya da yukarıdaki oda sensörlerinden birini seçin.",
+          "room_pin_afternoon": "Otomatik, Climate Advisor'ın sıcaklığı değişikliklerinize en iyi uyan odayı seçmesini sağlar. Termostat, termostatın kendi ölçümünü korur. Ya da yukarıdaki oda sensörlerinden birini seçin.",
+          "room_pin_evening": "Otomatik, Climate Advisor'ın sıcaklığı değişikliklerinize en iyi uyan odayı seçmesini sağlar. Termostat, termostatın kendi ölçümünü korur. Ya da yukarıdaki oda sensörlerinden birini seçin."
         }
       },
       "ai_settings": {
@@ -537,7 +547,8 @@
       "sleep_cool_above_away_warning": "Uyku soğutması evde yokken soğutmadan daha sıcak; bu yüzden gece boyunca evin, kimse yokken olduğundan daha fazla ısınmasına izin verilir. Korumak için yeniden gönderin.",
       "vacation_heat_above_away_warning": "Tatil ısıtması evde yokken ısıtmadan daha sıcak; bu yüzden tatil, normal bir dışarıda gününden daha fazla enerji harcar. Korumak için yeniden gönderin.",
       "vacation_cool_below_away_warning": "Tatil soğutması evde yokken soğutmadan daha serin; bu yüzden tatil, normal bir dışarıda gününden daha fazla enerji harcar. Korumak için yeniden gönderin.",
-      "vacation_freeze_warning": "Bu ayarla tatil ısıtması 45 °F (7 °C) altına düşer. Uzun bir yolculukta borular donabilir. Korumak için yeniden gönderin."
+      "vacation_freeze_warning": "Bu ayarla tatil ısıtması 45 °F (7 °C) altına düşer. Uzun bir yolculukta borular donabilir. Korumak için yeniden gönderin.",
+      "room_pin_not_selected": "Otomatik, termostat veya yukarıda seçilen oda sensörlerinden birini seçin."
     }
   },
   "issues": {
@@ -782,6 +793,12 @@
         "cool": "Yalnızca soğutma",
         "heat": "Yalnızca ısıtma"
       }
+    },
+    "room_pin": {
+      "options": {
+        "auto": "Otomatik (öğrenilmiş)",
+        "thermostat": "Termostat"
+      }
     }
   },
   "services": {
@@ -846,11 +863,31 @@
           "description": "Hangi verilerin sıfırlanacağı. \"all\" her şeyi siler. \"thermal_model\" HVAC oturum gözlemlerini temizler. \"weather_bias\" tahmin doğruluğu kayıtlarını temizler. \"suggestions\" daha önce reddedilen önerilerin yeniden görünmesine izin verir."
         }
       }
+    },
+    "backfill_preferences": {
+      "name": "Tercih geçmişini analiz et",
+      "description": "Kaydedici geçmişini okur ve öğrenilen ayar noktası tercihlerini panonun Analiz sekmesinde incelenmek üzere önerir. Öneriyi kabul edene kadar hiçbir şey değişmez. Tercih öğrenmenin açık olması gerekir.",
+      "fields": {
+        "entry_id": {
+          "name": "Bölge",
+          "description": "Bu çağrının geçerli olduğu Climate Advisor bölgesi (yapılandırma girdisi). Issue #796'dan beri zorunludur; birden fazla bölge yapılandırıldığında HA'nın hizmet kaydının bir çağrının hangi bölge için olduğunu bilmenin başka yolu yoktur."
+        },
+        "days": {
+          "name": "Gün",
+          "description": "Analiz edilecek geçmiş gün sayısı (1 ile 400 arası)."
+        }
+      }
     }
   },
   "exceptions": {
     "unknown_zone": {
       "message": "Bilinmeyen veya yüklenmemiş Climate Advisor bölgesi entry_id {entry_id}. Doğru bölge için Ayarlar > Cihazlar ve hizmetler bölümüne bakın."
+    },
+    "preference_learning_off": {
+      "message": "Bu bölge için tercih öğrenme kapalı. Önce Climate Advisor seçeneklerinden açın."
+    },
+    "preference_seed_invalid": {
+      "message": "Geçmiş analizi geçerli bir öneri üretmedi; hiçbir şey kaydedilmedi. Ayrıntılar günlükte."
     }
   }
 }

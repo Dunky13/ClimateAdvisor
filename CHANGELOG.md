@@ -3,6 +3,17 @@
 All notable changes to Climate Advisor are documented here.
 This project follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) conventions.
 
+## [0.9.41.2] — 2026-11-16
+
+### Added (fork feature, off by default)
+- Feat #1: preference learning, phase 3: rooms, humidity and history. Everything below needs Learn Setpoint Preferences on; with no room selected and no humidity reading, Climate Advisor behaves exactly as in 0.9.41.1.
+  - **Rooms:** under Settings, Learning & prediction, pick the temperature sensors (or number helpers) of the rooms you care about (**Preference Room Sensors**) and, per part of the day, whether Climate Advisor should measure comfort at the thermostat, in a room you choose, or let it learn which room you react to (**Room For The Night/Morning/Afternoon/Evening**, default "auto"). When a room steers, Climate Advisor nudges the one thermostat setpoint so that room reaches the comfort temperature, exactly as the bedroom sensor already does at night (same step, limit and fall-back to the thermostat when the room's sensor goes quiet). Heating only: a room never changes how cooling works. A configured bedroom sensor still wins during the sleep window.
+  - **Humidity:** learned adjustments are kept separately for dry (below 40 %), normal and humid (above 60 %) air, using the humidity reading Climate Advisor already uses for the thermostat's room. A situation with too few samples for its own humidity band uses the general adjustment.
+  - **History:** on the Analysis tab, **Analyse history** reads your thermostat's recorded history (default 30 days, from the Home Assistant recorder), removes the changes your thermostat's own schedule made, and proposes an adjustment per situation. Nothing changes until you choose **Apply these offsets now** (for the rows you keep ticked, within your maximum); **Discard** drops the proposal. The same analysis is available as the `climate_advisor.backfill_preferences` service.
+  - **Where it shows:** the Status tab says what the thermostat is steered by ("Steering by Bedroom (learned) 19.6 °C, thermostat +0.5 °C") and the humidity band; the Analysis tab shows, per part of the day, the room in use, why, and how well each candidate room tracks your changes, plus a humidity column; the briefing's Learned preference line names the room an adjustment is measured in.
+  - **Changing a room** for a part of the day restarts that part's learned adjustments from zero (they were measured somewhere else).
+  - Spec: `docs/preference-learning-spec.md`, Phase 3.
+
 ## [0.9.41.1] — 2026-11-16
 
 ### Added (fork feature, off by default)

@@ -708,6 +708,9 @@ class TimelineSnapshot:
     # missing). In the sleep window the house holds the BEDROOM at the band through the remote-sensor outer loop
     # (#1194), which moves the thermostat's setpoint by about this much; the plan simulates the thermostat's room.
     sleep_gap_f: float | None = None
+    # Fork Dunky13#1 phase 3: the thermostat's room minus the room that steers the night instead of a sleep sensor (None
+    # = no such room or a reading missing). Like ``sleep_gap_f`` but heat only: a room never steers cooling (D5).
+    night_room_gap_f: float | None = None
     primary_sensor_label: str = "thermostat"
     can_heat: bool = True
     can_cool: bool = True
@@ -1317,13 +1320,15 @@ def _sleep_loop_edges(snap: TimelineSnapshot, seg: Segment) -> tuple[float, floa
     beyond the live loop's limit (the cap, or the opposite band edge: ``remote_offset.max_magnitude_f``). Outside the
     sleep window, without a sleep sensor or without both readings, the band itself.
     """
-    gap = snap.sleep_gap_f
-    if not seg.asleep or snap.sleep_sensor_label is None or gap is None or not math.isfinite(gap):
+    gap, heat_only = snap.sleep_gap_f, False
+    if snap.sleep_sensor_label is None:
+        gap, heat_only = snap.night_room_gap_f, True  # fork Dunky13#1: a room steers the night (heat only, D5)
+    if not seg.asleep or gap is None or not math.isfinite(gap):
         return seg.floor, seg.ceiling
     cap = cap_f(snap.unit)
     up = min(max(gap, 0.0), max_magnitude_f("heat", seg.floor, floor=seg.floor, ceiling=seg.ceiling, cap_f=cap))
     down = min(max(-gap, 0.0), max_magnitude_f("cool", seg.ceiling, floor=seg.floor, ceiling=seg.ceiling, cap_f=cap))
-    return seg.floor + up, seg.ceiling - down
+    return seg.floor + up, seg.ceiling - (0.0 if heat_only else down)
 
 
 class _Simulator:

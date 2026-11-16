@@ -456,12 +456,22 @@
         "data": {
           "preference_learning_enabled": "Meine Heizpräferenzen lernen",
           "preference_max_offset_f": "Maximale gelernte Anpassung",
-          "preference_weekly_step_f": "Maximale Änderung pro Woche"
+          "preference_weekly_step_f": "Maximale Änderung pro Woche",
+          "room_temp_entities": "Raumsensoren",
+          "room_pin_night": "Raum für die Nacht",
+          "room_pin_morning": "Raum für den Morgen",
+          "room_pin_afternoon": "Raum für den Nachmittag",
+          "room_pin_evening": "Raum für den Abend"
         },
         "data_description": {
           "preference_learning_enabled": "Wenn aktiv, verschieben wiederholte Thermostat-Änderungen zu ähnlichen Zeiten die Heiztemperatur, die Climate Advisor für diese Zeit setzt. Standardmäßig aus.",
           "preference_max_offset_f": "Um wie viel eine gelernte Anpassung die Heiztemperatur höchstens nach oben oder unten von Ihrem eingestellten Sollwert verschieben darf.",
-          "preference_weekly_step_f": "Um wie viel sich eine gelernte Anpassung pro Woche höchstens ändern darf."
+          "preference_weekly_step_f": "Um wie viel sich eine gelernte Anpassung pro Woche höchstens ändern darf.",
+          "room_temp_entities": "Optional. Raumtemperatursensoren, nach denen Climate Advisor die Heizung je Tagesabschnitt steuern darf. Nur Heizen. Wähle keinen Sensor, der in ein anderes Heiz- oder Klimagerät eingebaut ist.",
+          "room_pin_night": "Automatisch lässt Climate Advisor den Raum wählen, dessen Temperatur am besten zu deinen Änderungen passt. Thermostat behält die Messung des Thermostats. Oder wähle einen der Raumsensoren oben.",
+          "room_pin_morning": "Automatisch lässt Climate Advisor den Raum wählen, dessen Temperatur am besten zu deinen Änderungen passt. Thermostat behält die Messung des Thermostats. Oder wähle einen der Raumsensoren oben.",
+          "room_pin_afternoon": "Automatisch lässt Climate Advisor den Raum wählen, dessen Temperatur am besten zu deinen Änderungen passt. Thermostat behält die Messung des Thermostats. Oder wähle einen der Raumsensoren oben.",
+          "room_pin_evening": "Automatisch lässt Climate Advisor den Raum wählen, dessen Temperatur am besten zu deinen Änderungen passt. Thermostat behält die Messung des Thermostats. Oder wähle einen der Raumsensoren oben."
         }
       },
       "ai_settings": {
@@ -537,7 +547,8 @@
       "sleep_cool_above_away_warning": "Die Schlafkühlung ist wärmer als die Abwesenheitskühlung. Nachts darf das Haus also wärmer werden als bei Abwesenheit. Sende erneut ab, um das beizubehalten.",
       "vacation_heat_above_away_warning": "Die Urlaubsheizung ist wärmer als die Abwesenheitsheizung. Ein Urlaub verbraucht also mehr Energie als ein normaler Tag außer Haus. Sende erneut ab, um das beizubehalten.",
       "vacation_cool_below_away_warning": "Die Urlaubskühlung ist kühler als die Abwesenheitskühlung. Ein Urlaub verbraucht also mehr Energie als ein normaler Tag außer Haus. Sende erneut ab, um das beizubehalten.",
-      "vacation_freeze_warning": "Mit dieser Einstellung liegt die Urlaubsheizung unter 45 °F (7 °C). Bei einer langen Reise können Leitungen einfrieren. Sende erneut ab, um das beizubehalten."
+      "vacation_freeze_warning": "Mit dieser Einstellung liegt die Urlaubsheizung unter 45 °F (7 °C). Bei einer langen Reise können Leitungen einfrieren. Sende erneut ab, um das beizubehalten.",
+      "room_pin_not_selected": "Wähle automatisch, Thermostat oder einen der oben ausgewählten Raumsensoren."
     }
   },
   "issues": {
@@ -782,6 +793,12 @@
         "cool": "Nur Kühlen",
         "heat": "Nur Heizen"
       }
+    },
+    "room_pin": {
+      "options": {
+        "auto": "Automatisch (gelernt)",
+        "thermostat": "Thermostat"
+      }
     }
   },
   "services": {
@@ -846,11 +863,31 @@
           "description": "Welche Daten zurückgesetzt werden. „all“ löscht alles. „thermal_model“ löscht die Beobachtungen der Heiz-/Kühlläufe. „weather_bias“ löscht die Aufzeichnungen zur Vorhersagegenauigkeit. „suggestions“ lässt zuvor verworfene Vorschläge wieder erscheinen."
         }
       }
+    },
+    "backfill_preferences": {
+      "name": "Präferenzverlauf analysieren",
+      "description": "Liest den Recorder-Verlauf und schlägt gelernte Sollwert-Präferenzen zur Prüfung im Analyse-Tab des Dashboards vor. Nichts ändert sich, bis du den Vorschlag annimmst. Erfordert eingeschaltetes Präferenzlernen.",
+      "fields": {
+        "entry_id": {
+          "name": "Zone",
+          "description": "Die Climate-Advisor-Zone (Konfigurationseintrag), für die dieser Aufruf gilt. Seit Issue #796 erforderlich — bei mehr als einer konfigurierten Zone kann die Dienstregistrierung von HA sonst nicht erkennen, für welche Zone ein Aufruf gedacht ist."
+        },
+        "days": {
+          "name": "Tage",
+          "description": "Wie viele Tage Verlauf analysiert werden (1 bis 400)."
+        }
+      }
     }
   },
   "exceptions": {
     "unknown_zone": {
       "message": "Unbekannte oder nicht geladene Climate-Advisor-Zone entry_id „{entry_id}“. Prüfe unter Einstellungen > Geräte & Dienste die richtige Zone."
+    },
+    "preference_learning_off": {
+      "message": "Das Präferenzlernen ist für diese Zone ausgeschaltet. Schalte es zuerst in den Climate-Advisor-Optionen ein."
+    },
+    "preference_seed_invalid": {
+      "message": "Die Verlaufsanalyse hat keinen brauchbaren Vorschlag ergeben; es wurde nichts gespeichert. Details stehen im Protokoll."
     }
   }
 }

@@ -6,7 +6,7 @@ DOMAIN = "climate_advisor"
 
 # Integration version — MUST match manifest.json "version" field.
 # A test in tests/test_version_sync.py enforces this.
-VERSION = "0.9.41.1"
+VERSION = "0.9.41.2"
 
 GITHUB_REPO = "gunkl/ClimateAdvisor"
 GITHUB_REPO_URL = "https://github.com/gunkl/ClimateAdvisor"
@@ -116,6 +116,25 @@ CONF_PREFERENCE_MAX_OFFSET_F = "preference_max_offset_f"
 CONF_PREFERENCE_WEEKLY_STEP_F = "preference_weekly_step_f"
 DEFAULT_PREFERENCE_MAX_OFFSET_F = 3.6  # 2 C
 DEFAULT_PREFERENCE_WEEKLY_STEP_F = 0.9  # 0.5 C
+# Fork Dunky13#1 phase 3: room temperature sensors the comfort target may be measured against, and the per part of day
+# pin ("auto" = the learned room when one is confident, "thermostat" = none, or one of the selected rooms).
+CONF_ROOM_TEMP_ENTITIES = "room_temp_entities"
+CONF_ROOM_PIN_NIGHT = "room_pin_night"
+CONF_ROOM_PIN_MORNING = "room_pin_morning"
+CONF_ROOM_PIN_AFTERNOON = "room_pin_afternoon"
+CONF_ROOM_PIN_EVENING = "room_pin_evening"
+ROOM_PIN_KEYS: dict[str, str] = {
+    "night": CONF_ROOM_PIN_NIGHT,
+    "morning": CONF_ROOM_PIN_MORNING,
+    "afternoon": CONF_ROOM_PIN_AFTERNOON,
+    "evening": CONF_ROOM_PIN_EVENING,
+}
+ROOM_PIN_AUTO = "auto"
+ROOM_PIN_THERMOSTAT = "thermostat"
+DEFAULT_ROOM_PIN = ROOM_PIN_AUTO
+BACKFILL_DAYS_DEFAULT = 30
+BACKFILL_DAYS_MIN = 1
+BACKFILL_DAYS_MAX = 400
 
 # TOU pre-conditioning fallback lead time (Issue #797) — used by resolve_tou_phase()
 # when the thermal model hasn't learned k_active_heat/k_active_cool yet. Bounds stay
@@ -722,6 +741,9 @@ REMOTE_OFFSET_EXIT_GRACE_S: float = REMOTE_OFFSET_MIN_WAIT_S
 SETPOINT_RETRY_DELAY_S: int = 900
 # The remote-context label carried by IndoorTempReading.remote_context for the sleep-window bedroom sensor.
 REMOTE_CONTEXT_SLEEP: str = "sleep"
+# Fork Dunky13#1 phase 3: the remote-context label for a room the comfort target is steered by (a pinned or learned
+# room for the part of day, preference learning on). Same outer loop as the sleep sensor.
+REMOTE_CONTEXT_ROOM: str = "room"
 
 # Sensor attributes
 ATTR_DAY_TYPE = "day_type"
@@ -799,6 +821,8 @@ API_RESPOND_SUGGESTION = f"{API_BASE}/respond_suggestion"
 API_CONFIG = f"{API_BASE}/config"
 API_CANCEL_OVERRIDE = f"{API_BASE}/cancel_override"
 API_RESET_PREFERENCES = f"{API_BASE}/reset_preferences"  # fork Dunky13#1: clears only the learned setpoint preferences
+API_BACKFILL_PREFERENCES = f"{API_BASE}/backfill_preferences"  # fork Dunky13#1 phase 3: analyse recorder history
+API_PREFERENCE_SEED = f"{API_BASE}/preference_seed"  # fork Dunky13#1 phase 3: accept / discard the history seed
 API_CANCEL_FAN_OVERRIDE = f"{API_BASE}/cancel_fan_override"
 API_RESUME_FROM_PAUSE = f"{API_BASE}/resume_from_pause"
 API_TOGGLE_AUTOMATION = f"{API_BASE}/toggle_automation"
@@ -1353,6 +1377,34 @@ CONFIG_METADATA = {
         "description": "Largest change to one learned preference in a single weekly update.",
         "category": "advanced",
         "display_transform": "temp_delta",
+    },
+    CONF_ROOM_TEMP_ENTITIES: {
+        "label": "Preference Room Sensors",
+        "description": (
+            "Room temperature sensors Climate Advisor may measure your learned comfort temperature against, per part"
+            " of the day (needs preference learning on). Do not pick a sensor built into another heater or AC unit."
+        ),
+        "category": "advanced",
+    },
+    CONF_ROOM_PIN_NIGHT: {
+        "label": "Room For The Night",
+        "description": "Which room the comfort target is measured in at night: auto, the thermostat, or a room.",
+        "category": "advanced",
+    },
+    CONF_ROOM_PIN_MORNING: {
+        "label": "Room For The Morning",
+        "description": "Which room the comfort target is measured in each morning: auto, the thermostat, or a room.",
+        "category": "advanced",
+    },
+    CONF_ROOM_PIN_AFTERNOON: {
+        "label": "Room For The Afternoon",
+        "description": "Which room the comfort target is measured in each afternoon: auto, the thermostat, or a room.",
+        "category": "advanced",
+    },
+    CONF_ROOM_PIN_EVENING: {
+        "label": "Room For The Evening",
+        "description": "Which room the comfort target is measured in each evening: auto, the thermostat, or a room.",
+        "category": "advanced",
     },
     "comfort_mode_switch_min_interval_s": {
         "label": "Minimum Time Between Heat/Cool Switches (sec)",
@@ -2342,6 +2394,11 @@ _METADATA_DEFAULTS: dict[str, Any] = {
     "preference_learning_enabled": False,
     "preference_max_offset_f": DEFAULT_PREFERENCE_MAX_OFFSET_F,
     "preference_weekly_step_f": DEFAULT_PREFERENCE_WEEKLY_STEP_F,
+    CONF_ROOM_TEMP_ENTITIES: [],
+    CONF_ROOM_PIN_NIGHT: DEFAULT_ROOM_PIN,
+    CONF_ROOM_PIN_MORNING: DEFAULT_ROOM_PIN,
+    CONF_ROOM_PIN_AFTERNOON: DEFAULT_ROOM_PIN,
+    CONF_ROOM_PIN_EVENING: DEFAULT_ROOM_PIN,
     "comfort_mode_switch_min_interval_s": 600,
     "comfort_deadband_hot_f": DEFAULT_COMFORT_DEADBAND_HOT_F,
     "comfort_deadband_warm_f": DEFAULT_COMFORT_DEADBAND_WARM_F,

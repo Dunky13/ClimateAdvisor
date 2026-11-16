@@ -33,6 +33,7 @@ from typing import Any, NamedTuple
 
 from . import i18n
 from .const import (
+    REMOTE_CONTEXT_ROOM,
     REMOTE_CONTEXT_SLEEP,
     REMOTE_OFFSET_CAP_C,
     REMOTE_OFFSET_CAP_F,
@@ -336,7 +337,10 @@ GATE_REASON_KEYS: dict[str, str] = {
     "debounce": "status.remote_offset.gate_debounce",
 }
 
-_CONTEXT_LABEL_KEYS: dict[str, str] = {REMOTE_CONTEXT_SLEEP: "status.remote_offset.label_bedroom"}
+_CONTEXT_LABEL_KEYS: dict[str, str] = {
+    REMOTE_CONTEXT_SLEEP: "status.remote_offset.label_bedroom",
+    REMOTE_CONTEXT_ROOM: "status.remote_offset.label_room",  # fork Dunky13#1 phase 3: the steering room
+}
 # The band the context starts on (the WAITING text): the sleep window's is written by the bedtime routine.
 _CONTEXT_BAND_KEYS: dict[str, str] = {REMOTE_CONTEXT_SLEEP: "status.remote_offset.band_bedtime"}
 
@@ -349,7 +353,8 @@ _ACTIVE_NOTE_KEYS: dict[str, str] = {
 
 
 def context_label_msg(context: str | None) -> i18n.Msg:
-    """The sensor's label as a message: "Bedroom" for the sleep sensor, else "Remote sensor"."""
+    """The sensor's label as a message: "Bedroom" for the sleep sensor, "Steering room" for a room, else "Remote
+    sensor"."""
     return i18n.Msg(_CONTEXT_LABEL_KEYS.get(context or "", "status.remote_offset.label_remote"))
 
 

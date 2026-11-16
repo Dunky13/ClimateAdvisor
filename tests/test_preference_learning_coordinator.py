@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import types
-from datetime import UTC, datetime, time
+from datetime import UTC, datetime, time, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -11,7 +11,9 @@ import pytest
 
 from custom_components.climate_advisor import coordinator as coord_mod
 from custom_components.climate_advisor.automation import select_comfort_band
+from custom_components.climate_advisor.const import REMOTE_CONTEXT_ROOM
 from custom_components.climate_advisor.coordinator import ClimateAdvisorCoordinator, _compute_target_band_schedule
+from custom_components.climate_advisor.indoor_temp import IndoorTempReading
 from custom_components.climate_advisor.preference_learning import PreferenceView
 from tests.test_preference_learning import CONFIG, _classification
 
@@ -35,7 +37,19 @@ def _coordinator(*, enabled=True, automation=True, occupancy="home", classified=
     coord._current_classification = _classification() if classified else None
     coord._tou_bank_in_force = MagicMock(return_value=None)
     coord.automation_engine = SimpleNamespace(_remote_offset_applied_f=remote_f)
+    _no_rooms_or_humidity(coord)
     return coord
+
+
+def _no_rooms_or_humidity(coord):
+    """Phase 3 context: the thermostat's own reading, no humidity known (band "-"), no learned rooms."""
+    coord._preference_band = coord._preference_rh = None  # set by __init__, which a bare coordinator skips
+    coord._preference_bg_sampled = {}
+    coord.learning.learned_room_map.return_value = {}
+    coord._get_indoor_temp_with_provenance = MagicMock(
+        return_value=IndoorTempReading(value=70.0, source_entity="climate.thermostat", primary_value=70.0)
+    )
+    coord._reference_humidity = MagicMock(return_value=(None, None, "indoor_day", None))
 
 
 def _record(coord, old_state=None, new_state=None, old_f=70.0, new_f=74.0):
@@ -47,7 +61,7 @@ def test_a_heat_override_at_home_is_recorded_with_base_and_target():
     coord = _coordinator()
     assert _record(coord) is True
     kwargs = coord.learning.record_preference_change.call_args.kwargs
-    assert kwargs["bucket"] == B
+    assert kwargs["bucket"] == f"{B}|-"  # phase 3: the four-part key, band "-" with no humidity
     assert kwargs["base_f"] == 70.0  # the floor WITHOUT the learned offset
     assert kwargs["target_f"] == 72.0  # the floor the engine armed (offset included)
     assert (kwargs["old_f"], kwargs["new_f"]) == (70.0, 74.0)
@@ -123,7 +137,7 @@ def test_status_reports_enabled_bucket_and_offset():
     with patch.object(coord_mod.dt_util, "now", return_value=EVENING):
         status = coord.preference_status()
     assert status["enabled"] is True
-    assert status["bucket"] == B
+    assert status["bucket"] == f"{B}|-"
     assert status["active_offset_f"] == 2.0
     assert status["observation_count"] == 4
     assert _coordinator(enabled=False).preference_status() == {"enabled": False}
@@ -217,6 +231,7 @@ def _handler_coordinator(**stub_kwargs):
     coord._occupancy_mode = "home"
     coord._tou_bank_in_force = MagicMock(return_value=None)
     coord._executor_job = AsyncMock()
+    _no_rooms_or_humidity(coord)
     coord.preference_view = types.MethodType(ClimateAdvisorCoordinator.preference_view, coord)
     coord._record_preference_observation = types.MethodType(
         ClimateAdvisorCoordinator._record_preference_observation, coord
@@ -246,7 +261,7 @@ def test_an_occupant_setpoint_change_reaches_the_hook_through_the_real_handler()
     coord = _handler_coordinator()
     _drive(coord, _heat_event())
     kwargs = coord.learning.record_preference_change.call_args.kwargs
-    assert (kwargs["old_f"], kwargs["new_f"], kwargs["bucket"]) == (70.0, 74.0, B)
+    assert (kwargs["old_f"], kwargs["new_f"], kwargs["bucket"]) == (70.0, 74.0, f"{B}|-")
     assert (kwargs["base_f"], kwargs["target_f"]) == (70.0, 72.0)
 
 
@@ -366,3 +381,40 @@ def test_each_listed_offset_carries_its_own_day_class(day, evening, night, expec
     now = datetime(2026, 11, day, 18, 0, tzinfo=UTC)
     table = "\n".join(_tldr(PreferenceView({evening: 2.0, night: 1.0}), now))
     assert expected in table
+
+
+# ── phase 3: the background cadence and the reference an episode records ───────────────────────────────────────────
+
+ROOM = "sensor.bedroom_temp"
+
+
+def test_room_background_is_sampled_once_per_30_minutes_per_part_of_day():
+    # A refresh requested between the scheduled 30-minute ones (an Accept, a reload) must not add samples.
+    coord = _coordinator()
+    coord.config["room_temp_entities"] = ["sensor.bedroom_temp"]
+    coord._room_readings_f = MagicMock(return_value={"sensor.bedroom_temp": 64.0, "thermostat": 66.0})
+    coord._refresh_preference_context = MagicMock(return_value=None)
+    view = coord.preference_view()
+    for minutes in (0, 5, 20, 29.5, 31, 59.5):
+        with patch.object(coord_mod.dt_util, "now", return_value=EVENING + timedelta(minutes=minutes)):
+            coord._sample_preference_background(view)
+    # 18:00 sampled; 18:05 and 18:20 skipped; 18:29:30 is the next scheduled one (a moment early); 18:31 skipped.
+    assert coord.learning.sample_room_background.call_count == 3
+    assert coord._refresh_preference_context.call_count == 6, "the humidity band is still read every refresh"
+
+
+@pytest.mark.parametrize(
+    ("reading", "ref"),
+    [
+        (IndoorTempReading(64.0, ROOM, 70.0, remote_context=REMOTE_CONTEXT_ROOM), ROOM),
+        # The planned room's reading was stale: the thermostat steered, so that is the frame the delta belongs to.
+        (IndoorTempReading(70.0, "climate.thermostat", 70.0, room_reason="stale"), None),
+    ],
+)
+def test_an_episode_records_the_reference_actually_used_at_open(reading, ref):
+    coord = _coordinator()
+    coord.config.update({"room_temp_entities": [ROOM], "room_pin_evening": ROOM})
+    coord._get_indoor_temp_with_provenance = MagicMock(return_value=reading)
+    coord._room_readings_f = MagicMock(return_value={"thermostat": 70.0})
+    assert _record(coord) is True
+    assert coord.learning.record_preference_change.call_args.kwargs["context"]["ref"] == ref

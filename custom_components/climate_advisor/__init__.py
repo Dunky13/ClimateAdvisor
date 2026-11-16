@@ -18,7 +18,7 @@ import homeassistant.helpers.config_validation as cv
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ServiceValidationError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.start import async_at_started
 
@@ -109,13 +109,14 @@ from .const import (
 )
 from .coordinator import ClimateAdvisorCoordinator
 from .dashboard_api import DASHBOARD_VIEWS
+from .learning import PreferenceSeedInvalid
 from .storage_paths import remove_entry_scoped_files
 
 _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = ["sensor", "switch"]
 
-# Issue #796 Gap 5/9: the five zone-scoped services below are registered ONCE,
+# Issue #796 Gap 5/9: the zone-scoped services below are registered ONCE,
 # domain-wide (HA's service registry has no per-config-entry namespace) — see
 # _resolve_zone_coordinator()'s docstring for why every one of them now
 # requires a call.data["entry_id"] field instead of closing over a specific
@@ -128,6 +129,7 @@ ZONE_SCOPED_SERVICES = (
     "resend_briefing",
     "dump_diagnostics",
     "reset_learning_data",
+    "backfill_preferences",
 )
 
 # Issue #796 Gap 6/8: the REST API views (api.py's API_VIEWS — every view's
@@ -640,7 +642,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Set up sensor platform
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # Issue #796 Gap 5/9: register the five zone-scoped services ONCE,
+    # Issue #796 Gap 5/9: register the zone-scoped services ONCE,
     # domain-wide, on whichever zone's async_setup_entry() runs first — not
     # once per zone. All five handlers now resolve their target coordinator
     # (or entry) at CALL TIME via _resolve_zone_coordinator(), keyed off the
@@ -759,6 +761,34 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             "reset_learning_data",
             handle_reset_learning_data,
             schema=RESET_LEARNING_SCHEMA,
+        )
+
+        # Fork Dunky13#1 phase 3: analyse recorder history into the preference seed the dashboard reviews.
+        BACKFILL_PREFERENCES_SCHEMA = vol.Schema(
+            {
+                vol.Required("entry_id"): cv.string,
+                vol.Optional("days", default=30): vol.All(vol.Coerce(int), vol.Range(min=1, max=400)),
+            }
+        )
+
+        async def handle_backfill_preferences(call) -> None:
+            """Handle the backfill_preferences service call."""
+            zone_coordinator = _resolve_zone_coordinator(hass, call)
+            with log_capture.zone_scope(zone_coordinator.zone_label):
+                try:
+                    result = await zone_coordinator.async_backfill_preferences(call.data.get("days", 30))
+                except PreferenceSeedInvalid as err:
+                    raise HomeAssistantError(
+                        translation_domain=DOMAIN, translation_key="preference_seed_invalid"
+                    ) from err
+            if result is None:
+                raise ServiceValidationError(translation_domain=DOMAIN, translation_key="preference_learning_off")
+
+        hass.services.async_register(
+            DOMAIN,
+            "backfill_preferences",
+            handle_backfill_preferences,
+            schema=BACKFILL_PREFERENCES_SCHEMA,
         )
 
     # Issue #796 Gap 6: register the shared REST API views and dashboard panel
@@ -880,7 +910,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if not hass.data[DOMAIN]:
         log_capture.uninstall(hass)
 
-        # Issue #796 Gap 9: the five zone-scoped services (ZONE_SCOPED_SERVICES)
+        # Issue #796 Gap 9: the zone-scoped services (ZONE_SCOPED_SERVICES)
         # are registered once, domain-wide, on whichever zone's
         # async_setup_entry() ran first (see the has_service() guard there) —
         # mirror that "domain-wide resource" lifetime here: only tear them
