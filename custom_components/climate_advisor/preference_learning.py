@@ -373,6 +373,17 @@ def steering_reference(
     return part_reference(part, config, learned_rooms)
 
 
+def steering_room(
+    at: datetime, config: Mapping[str, Any], *, in_sleep_window: bool, view: PreferenceView | None
+) -> str | None:
+    """The ``room_entity`` the indoor resolver reads now: the steering room, None when the thermostat or the sleep
+    sensor is the reference (the resolver handles the sleep sensor itself) or the feature is off (``view`` None)."""
+    if view is None:
+        return None
+    ref = steering_reference(at, config, in_sleep_window=in_sleep_window, learned_rooms=view.learned_rooms)
+    return ref.entity if ref.context == REMOTE_CONTEXT_ROOM else None
+
+
 def references_by_part(
     config: Mapping[str, Any], learned_rooms: Mapping[str, str | None] | None
 ) -> dict[str, str | None]:

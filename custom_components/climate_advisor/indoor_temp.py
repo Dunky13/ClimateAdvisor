@@ -60,6 +60,7 @@ from homeassistant.util import dt as dt_util
 from .const import (
     COMPANION_CONSISTENCY_F,
     INDOOR_SENSOR_STALE_HOURS,
+    REMOTE_CONTEXT_ROOM,
     REMOTE_CONTEXT_SLEEP,
     REMOTE_OFFSET_FRESHNESS_MINUTES,
     TEMP_SOURCE_INPUT_NUMBER,
@@ -104,6 +105,9 @@ class IndoorTempReading(NamedTuple):
     # ``ambiguous``. The sleep swap never changes these: they describe the primary reading.
     companion_entity: str | None = None
     companion_reason: str | None = None
+    # Fork Dunky13#1 phase 3: why the room the comfort target is steered by (``room_entity``) was not used (the
+    # sleep-sensor reasons, plus ``not_heating``); None when it was used or none was asked for.
+    room_reason: str | None = None
 
 
 class CompanionSensors:
@@ -232,23 +236,31 @@ def _resolve_primary_indoor_temp_f(
     return checked, climate_entity, None
 
 
-def _resolve_sleep_indoor_temp_f(
-    *, hass: Any, unit: str, sleep_indoor_temp_entity: str, now: datetime
+def resolve_remote_indoor_temp_f(
+    *, hass: Any, unit: str, entity_id: str, now: datetime
 ) -> tuple[float | None, str | None]:
-    """Resolve the sleep-window bedroom sensor: ``(value_f, None)`` or ``(None, reason)``."""
-    state = hass.states.get(sleep_indoor_temp_entity)
+    """Resolve a remote room sensor (the sleep-window bedroom sensor, or a steering room): ``(value_f, None)`` or
+    ``(None, reason)``. Present, numeric, plausible and not stale; ``input_number`` helpers are never stale."""
+    state = hass.states.get(entity_id)
     val_f, reason = read_sensor_state_f(state, unit)
     if reason is not None:
-        _LOGGER.debug("Sleep indoor sensor %s unusable: reason=%s", sleep_indoor_temp_entity, reason)
+        _LOGGER.debug("Remote indoor sensor %s unusable: reason=%s", entity_id, reason)
         return None, reason
-    checked = _check_plausible(val_f, sleep_indoor_temp_entity)
+    checked = _check_plausible(val_f, entity_id)
     if checked is None:
         return None, "implausible"
-    if not sleep_indoor_temp_entity.startswith("input_number.") and is_sensor_stale(
-        state, INDOOR_SENSOR_STALE_HOURS, now
-    ):
+    if not entity_id.startswith("input_number.") and is_sensor_stale(state, INDOOR_SENSOR_STALE_HOURS, now):
         return None, "stale"
     return checked, None
+
+
+def _heating_only_now(climate_state: Any) -> bool:
+    """True when a room may steer (D5, heating only): the thermostat heats, or is off and cannot cool at all."""
+    mode = getattr(climate_state, "state", None)
+    if mode == "heat":
+        return True
+    modes = getattr(climate_state, "attributes", {}).get("hvac_modes") or ()
+    return mode == "off" and not any(m in modes for m in ("cool", "heat_cool", "auto"))
 
 
 def resolve_indoor_temp_with_provenance(
@@ -262,6 +274,7 @@ def resolve_indoor_temp_with_provenance(
     sleep_indoor_temp_entity: str | None = None,
     now: datetime | None = None,
     companion: CompanionSensors | None = None,
+    room_entity: str | None = None,
 ) -> IndoorTempReading:
     """Resolve indoor temperature: comfort-facing value + provenance + always-primary value.
 
@@ -279,6 +292,11 @@ def resolve_indoor_temp_with_provenance(
     thermostat's reading as the PRIMARY value when ``_resolve_companion_f`` proves it is the same reading at finer
     resolution. ``sensor``/``input_number`` sources are explicit user choices and are never overridden. The sleep
     sensor still takes priority over both for the comfort-facing value.
+
+    ``room_entity`` (fork Dunky13#1 phase 3; the caller passes the room ``preference_learning.steering_reference``
+    names, None otherwise): the comfort-facing value is that room's reading with context ``REMOTE_CONTEXT_ROOM``, under
+    the same checks as the sleep sensor, while the thermostat heats (D5); on any failure the primary reading is used and
+    ``room_reason`` says why. A sleep-sensor swap wins over it.
     """
     now = now or dt_util.utcnow()
     primary_val, primary_entity, primary_reason = _resolve_primary_indoor_temp_f(
@@ -311,8 +329,8 @@ def resolve_indoor_temp_with_provenance(
 
     sleep_reason: str | None = None
     if in_sleep_window and sleep_indoor_temp_entity:
-        val_f, sleep_reason = _resolve_sleep_indoor_temp_f(
-            hass=hass, unit=unit, sleep_indoor_temp_entity=sleep_indoor_temp_entity, now=now
+        val_f, sleep_reason = resolve_remote_indoor_temp_f(
+            hass=hass, unit=unit, entity_id=sleep_indoor_temp_entity, now=now
         )
         if val_f is not None:
             _log_indoor_source(sleep_indoor_temp_entity, val_f)
@@ -327,8 +345,35 @@ def resolve_indoor_temp_with_provenance(
                 companion_reason,
             )
 
+    room_reason: str | None = None
+    if room_entity:
+        if not _heating_only_now(hass.states.get(climate_entity)):
+            room_reason = "not_heating"
+        else:
+            val_f, room_reason = resolve_remote_indoor_temp_f(hass=hass, unit=unit, entity_id=room_entity, now=now)
+            if val_f is not None:
+                _LOGGER.debug("Using steering room sensor entity=%s value=%.1f°F", room_entity, val_f)
+                return IndoorTempReading(
+                    val_f,
+                    room_entity,
+                    primary_val,
+                    primary_reason,
+                    sleep_reason,
+                    REMOTE_CONTEXT_ROOM,
+                    companion_entity,
+                    companion_reason,
+                )
+
     return IndoorTempReading(
-        primary_val, primary_entity, primary_val, primary_reason, sleep_reason, None, companion_entity, companion_reason
+        primary_val,
+        primary_entity,
+        primary_val,
+        primary_reason,
+        sleep_reason,
+        None,
+        companion_entity,
+        companion_reason,
+        room_reason,
     )
 
 
@@ -495,6 +540,7 @@ def resolve_indoor_temp_f(
     in_sleep_window: bool = False,
     sleep_indoor_temp_entity: str | None = None,
     companion: CompanionSensors | None = None,
+    room_entity: str | None = None,
 ) -> float | None:
     """Read the current comfort-facing indoor temperature in Fahrenheit, or None.
 
@@ -510,6 +556,7 @@ def resolve_indoor_temp_f(
         in_sleep_window=in_sleep_window,
         sleep_indoor_temp_entity=sleep_indoor_temp_entity,
         companion=companion,
+        room_entity=room_entity,
     ).value
 
 

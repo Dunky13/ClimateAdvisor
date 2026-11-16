@@ -12,6 +12,7 @@ import pytest
 from custom_components.climate_advisor import coordinator as coord_mod
 from custom_components.climate_advisor.automation import select_comfort_band
 from custom_components.climate_advisor.coordinator import ClimateAdvisorCoordinator, _compute_target_band_schedule
+from custom_components.climate_advisor.indoor_temp import IndoorTempReading
 from custom_components.climate_advisor.preference_learning import PreferenceView
 from tests.test_preference_learning import CONFIG, _classification
 
@@ -35,7 +36,17 @@ def _coordinator(*, enabled=True, automation=True, occupancy="home", classified=
     coord._current_classification = _classification() if classified else None
     coord._tou_bank_in_force = MagicMock(return_value=None)
     coord.automation_engine = SimpleNamespace(_remote_offset_applied_f=remote_f)
+    _no_rooms_or_humidity(coord)
     return coord
+
+
+def _no_rooms_or_humidity(coord):
+    """Phase 3 context: the thermostat's own reading, no humidity known (band "-"), no learned rooms."""
+    coord.learning.learned_room_map.return_value = {}
+    coord._get_indoor_temp_with_provenance = MagicMock(
+        return_value=IndoorTempReading(value=70.0, source_entity="climate.thermostat", primary_value=70.0)
+    )
+    coord._reference_humidity = MagicMock(return_value=(None, None, "indoor_day", None))
 
 
 def _record(coord, old_state=None, new_state=None, old_f=70.0, new_f=74.0):
@@ -217,6 +228,7 @@ def _handler_coordinator(**stub_kwargs):
     coord._occupancy_mode = "home"
     coord._tou_bank_in_force = MagicMock(return_value=None)
     coord._executor_job = AsyncMock()
+    _no_rooms_or_humidity(coord)
     coord.preference_view = types.MethodType(ClimateAdvisorCoordinator.preference_view, coord)
     coord._record_preference_observation = types.MethodType(
         ClimateAdvisorCoordinator._record_preference_observation, coord
