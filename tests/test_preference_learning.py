@@ -100,7 +100,8 @@ def test_view_offset_at_returns_bucket():
     offset, bucket = view.offset_at(
         _at(*MON, 18), "cold", {"wake_time": WAKE, "sleep_time": SLEEP}, in_sleep_window=False
     )
-    assert (offset, bucket) == (1.0, "cold|evening|weekday")
+    # Phase 3: the bucket is the four-part key (band "-" with no humidity); the three-part offset still applies.
+    assert (offset, bucket) == (1.0, "cold|evening|weekday|-")
 
 
 # ── episodes ────────────────────────────────────────────────────────────────────────────────────────────
@@ -247,7 +248,9 @@ def test_update_falls_back_to_the_day_type_part_level():
     assert offsets[B]["level"] == pl.LEVEL_DAYTYPE_PART
     assert offsets[B]["n"] == 3
     assert offsets[sibling]["level"] == pl.LEVEL_DAYTYPE_PART
-    assert {c["bucket"] for c in changes} == {B, sibling}
+    # Phase 3: the band "-" four-part key of each bucket with observations moves too, through the same fallback.
+    assert offsets[f"{B}|-"]["level"] == pl.LEVEL_DAYTYPE_PART
+    assert {c["bucket"] for c in changes} == {B, sibling, f"{B}|-", f"{sibling}|-"}
 
 
 def test_update_uses_only_the_newest_twenty():

@@ -1,4 +1,4 @@
-"""Setpoint preference learning: the pure core (fork Dunky13#1, phase 1).
+"""Setpoint preference learning: the pure core (fork Dunky13#1, phases 1 and 3).
 
 Occupant outcome: when the household keeps nudging the thermostat to the same temperature at the same
 kind of time (a cold weekday evening, say), Climate Advisor learns that preference and arms it itself,
@@ -7,6 +7,9 @@ within safe bounds, so the nudging stops.
 This module is pure (no Home Assistant, no clock): buckets, episode grouping, the weekly update and the
 clamps. The coordinator owns the state and the wiring; ``automation.select_comfort_band`` is the one seam
 that applies an offset to the heat floor. Heating only, internal degrees F throughout.
+
+Phase 3 adds the steering reference (which room the comfort target is measured in, per part of day), the learned
+room score, the humidity band as a fourth bucket part and the reference frame of each observation.
 
 Spec: docs/preference-learning-spec.md.
 """
@@ -18,9 +21,17 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from statistics import median
-from typing import Any
+from typing import Any, NamedTuple
 
-from .const import DEFAULT_PREFERENCE_MAX_OFFSET_F
+from .const import (
+    CONF_ROOM_TEMP_ENTITIES,
+    DEFAULT_PREFERENCE_MAX_OFFSET_F,
+    REMOTE_CONTEXT_ROOM,
+    REMOTE_CONTEXT_SLEEP,
+    ROOM_PIN_AUTO,
+    ROOM_PIN_KEYS,
+    ROOM_PIN_THERMOSTAT,
+)
 
 PART_NIGHT = "night"
 PART_MORNING = "morning"
@@ -42,8 +53,35 @@ MIN_OBSERVATIONS = 3
 UPDATE_INTERVAL_DAYS = 7
 OFFSET_ROUND_DIGITS = 1
 
-LEVEL_BUCKET = "bucket"
+LEVEL_BAND = "band"  # the four-part key (phase 3)
+LEVEL_BUCKET = "bucket"  # the band-agnostic three-part key
 LEVEL_DAYTYPE_PART = "day_type_part"
+
+# Phase 3: the humidity band of the reference room at episode open (relative humidity, %).
+BAND_DRY = "dry"
+BAND_NORMAL = "normal"
+BAND_HUMID = "humid"
+BAND_NONE = "-"  # no humidity known (and every phase 1 observation)
+BANDS: tuple[str, ...] = (BAND_DRY, BAND_NORMAL, BAND_HUMID, BAND_NONE)
+RH_DRY_BELOW = 40.0
+RH_HUMID_ABOVE = 60.0
+RH_HYSTERESIS = 2.0
+
+# Phase 3: the learned room per part of day.
+REF_THERMOSTAT = ROOM_PIN_THERMOSTAT  # the key the thermostat's own reading is scored under
+RAISE_WINDOW = 60  # the most recent raise samples of a part of day that are scored
+MIN_RAISE_SAMPLES = 10
+MIN_BACKGROUND_SAMPLES = 10
+BACKGROUND_RESERVOIR = 200
+MAD_FLOOR_F = 0.1
+CHOOSE_MAX_RATIO = 0.7
+CHOOSE_MIN_MARGIN = 0.15
+SOURCE_SLEEP_SENSOR = "sleep_sensor"
+SOURCE_PINNED = "pinned"
+SOURCE_LEARNED = "learned"
+SOURCE_THERMOSTAT = "thermostat"
+SOURCE_HISTORY = "history"  # an observation from the recorder backfill
+EPISODE_CONTEXT_KEYS: tuple[str, ...] = ("ref", "rh", "band", "rooms")
 
 _NOON_MIN = 12 * 60
 _AFTERNOON_END_MIN = 17 * 60
@@ -58,15 +96,32 @@ def _minutes(value: Any) -> int | None:
         return None
 
 
-def bucket_key(
-    at: datetime,
-    day_type: str,
-    wake_time: Any,
-    sleep_time: Any,
-    *,
-    in_sleep_window: bool,
-) -> str:
-    """``"<day_type>|<part_of_day>|<day_class>"`` for a local instant: the single source for every caller.
+def in_sleep_window(local: datetime, sleep_time: str | None, wake_time: str | None) -> bool:
+    """True when ``local`` is inside the ``sleep_time`` -> ``wake_time`` ("HH:MM") window.
+
+    Same semantics as ``automation._in_sleep_window`` (this module may not import it: it is hass-free; predictor_v4
+    and preference_backfill use this one): the window
+    wraps midnight when bedtime is after wake time, does not wrap when bedtime is after midnight, equal or
+    malformed times are an empty window. A test pins the two together.
+    """
+    if not sleep_time or not wake_time:
+        return False
+    try:
+        sh, sm = (int(x) for x in str(sleep_time).split(":")[:2])
+        wh, wm = (int(x) for x in str(wake_time).split(":")[:2])
+        now_m = local.hour * 60 + local.minute
+    except ValueError, AttributeError:
+        return False
+    s_m, w_m = sh * 60 + sm, wh * 60 + wm
+    if s_m == w_m:
+        return False
+    if s_m < w_m:
+        return s_m <= now_m < w_m
+    return now_m >= s_m or now_m < w_m
+
+
+def part_of_day(at: datetime, wake_time: Any, sleep_time: Any, *, in_sleep_window: bool) -> tuple[str, date]:
+    """``(part_of_day, day)`` of a local instant: the part and the calendar day its day class is read from.
 
     ``in_sleep_window`` is the resolver's own verdict (``automation._in_sleep_window``, or the forced value
     bedtime/pre-cool/wake pass), so the night part can never disagree with the sleep branch that applies it.
@@ -94,8 +149,27 @@ def bucket_key(
         part = PART_AFTERNOON
     else:
         part = PART_EVENING
+    return part, day
+
+
+def bucket_key(
+    at: datetime,
+    day_type: str,
+    wake_time: Any,
+    sleep_time: Any,
+    *,
+    in_sleep_window: bool,
+    band: str | None = None,
+) -> str:
+    """``"<day_type>|<part_of_day>|<day_class>"`` for a local instant: the single source for every caller.
+
+    With ``band`` (phase 3) the key gains the humidity band as a fourth part: ``"<...>|<band>"``. See
+    ``part_of_day`` for the part and day-class rules.
+    """
+    part, day = part_of_day(at, wake_time, sleep_time, in_sleep_window=in_sleep_window)
     day_class = DAY_CLASS_WEEKEND if day.weekday() >= 5 else DAY_CLASS_WEEKDAY
-    return f"{day_type}|{part}|{day_class}"
+    key = f"{day_type}|{part}|{day_class}"
+    return key if band is None else f"{key}|{band}"
 
 
 def near_schedule_edge(at: datetime, wake_time: Any, sleep_time: Any) -> bool:
@@ -132,20 +206,56 @@ def is_iso_date(value: Any) -> bool:
         return False
 
 
-def parse_bucket(key: Any) -> tuple[str, str, str] | None:
-    """``(day_type, part_of_day, day_class)`` of a well-formed bucket key, else None (never raises)."""
+def parse_bucket(key: Any) -> tuple[str, str, str, str | None] | None:
+    """``(day_type, part_of_day, day_class, band)`` of a well-formed bucket key, else None (never raises).
+
+    A three-part key (the band-agnostic level, and every phase 1 key) has band ``None``.
+    """
     if not isinstance(key, str):
         return None
     parts = key.split("|")
-    if len(parts) != 3 or not parts[0] or parts[1] not in PARTS_OF_DAY or parts[2] not in DAY_CLASSES:
+    if len(parts) not in (3, 4) or not parts[0] or parts[1] not in PARTS_OF_DAY or parts[2] not in DAY_CLASSES:
         return None
-    return parts[0], parts[1], parts[2]
+    if len(parts) == 4 and parts[3] not in BANDS:
+        return None
+    return parts[0], parts[1], parts[2], (parts[3] if len(parts) == 4 else None)
 
 
 def bucket_parts(key: str) -> tuple[str, str, str]:
-    """``(day_type, part_of_day, day_class)`` of a bucket key."""
-    day_type, part, day_class = key.split("|")
+    """``(day_type, part_of_day, day_class)`` of a bucket key (a four-part key's band is ignored)."""
+    day_type, part, day_class = key.split("|")[:3]
     return day_type, part, day_class
+
+
+def base_key(key: str) -> str:
+    """The band-agnostic three-part key of a bucket key."""
+    return "|".join(key.split("|")[:3])
+
+
+def with_band(key: str) -> str:
+    """A bucket key as a four-part key: a three-part (phase 1) key gets band ``-``."""
+    return key if key.count("|") == 3 else f"{key}|{BAND_NONE}"
+
+
+def humidity_band(rh: Any, current: str | None = None) -> str:
+    """The humidity band of a relative humidity, with hysteresis against the band in force (``current``).
+
+    ``dry`` below 40 %, ``normal`` 40 to 60, ``humid`` above 60, ``-`` when unknown. Leaving the band in force needs the
+    reading to pass the edge by 2 % RH, so a reading hovering on 40 % does not flap between two buckets.
+    """
+    if not is_finite_number(rh) or not 0.0 <= float(rh) <= 100.0:
+        return BAND_NONE
+    value = float(rh)
+    if current in (BAND_DRY, BAND_NORMAL, BAND_HUMID):
+        dry_edge = RH_DRY_BELOW + (RH_HYSTERESIS if current == BAND_DRY else -RH_HYSTERESIS)
+        humid_edge = RH_HUMID_ABOVE + (-RH_HYSTERESIS if current == BAND_HUMID else RH_HYSTERESIS)
+    else:
+        dry_edge, humid_edge = RH_DRY_BELOW, RH_HUMID_ABOVE
+    if value < dry_edge:
+        return BAND_DRY
+    if value > humid_edge:
+        return BAND_HUMID
+    return BAND_NORMAL
 
 
 @dataclass(frozen=True)
@@ -153,24 +263,199 @@ class PreferenceView:
     """What the band resolver needs: the learned offsets and the cap, read-only.
 
     ``None`` in place of a view means "feature off": every offset is 0 and no output differs from upstream.
+    Phase 3: ``band`` is the humidity band in force now (the four-part key's last part) and ``learned_rooms`` the
+    learned room per part of day (``None`` = the thermostat). Both are snapshots (the view is read from executor
+    threads), never live state.
     """
 
     offsets: Mapping[str, float] = field(default_factory=dict)
     max_offset_f: float = DEFAULT_PREFERENCE_MAX_OFFSET_F
+    band: str = BAND_NONE
+    learned_rooms: Mapping[str, str | None] = field(default_factory=dict)
 
     def offset_for(self, bucket: str) -> float:
-        """The offset for a bucket, clamped to the CURRENT cap (lowering the cap applies at once)."""
-        raw = self.offsets.get(bucket, 0.0)
-        return max(-self.max_offset_f, min(self.max_offset_f, float(raw)))
+        """The offset for a bucket, clamped to the CURRENT cap (lowering the cap applies at once).
+
+        A four-part key falls back to its band-agnostic three-part key, then 0.
+        """
+        raw = self.offsets.get(bucket)
+        if raw is None and bucket.count("|") == 3:
+            raw = self.offsets.get(base_key(bucket))
+        return max(-self.max_offset_f, min(self.max_offset_f, float(raw or 0.0)))
 
     def offset_at(
         self, at: datetime, day_type: str, config: Mapping[str, Any], *, in_sleep_window: bool
     ) -> tuple[float, str]:
-        """``(offset_f, bucket)`` for an instant under ``config``'s wake and sleep times."""
+        """``(offset_f, bucket)`` for an instant under ``config``'s wake and sleep times (four-part bucket)."""
         bucket = bucket_key(
-            at, day_type, config.get("wake_time"), config.get("sleep_time"), in_sleep_window=in_sleep_window
+            at,
+            day_type,
+            config.get("wake_time"),
+            config.get("sleep_time"),
+            in_sleep_window=in_sleep_window,
+            band=self.band,
         )
         return self.offset_for(bucket), bucket
+
+
+# --------------------------------------------------------------------------------------------------
+# Steering reference (phase 3)
+# --------------------------------------------------------------------------------------------------
+
+
+class SteeringReference(NamedTuple):
+    """The entity the comfort target is measured against at one moment.
+
+    ``entity`` None = the thermostat (the primary reading). ``context`` is the ``IndoorTempReading.remote_context``
+    the resolver sets when that entity's reading is used (``REMOTE_CONTEXT_SLEEP`` / ``REMOTE_CONTEXT_ROOM``).
+    ``source``: ``sleep_sensor`` / ``pinned`` / ``learned`` / ``thermostat``.
+    """
+
+    entity: str | None
+    context: str | None
+    source: str
+    part: str
+
+
+def selected_rooms(config: Mapping[str, Any]) -> tuple[str, ...]:
+    """The room temperature sensors the user selected (a malformed value reads as none)."""
+    rooms = config.get(CONF_ROOM_TEMP_ENTITIES)
+    if not isinstance(rooms, (list, tuple)):
+        return ()
+    return tuple(r for r in rooms if isinstance(r, str) and r)
+
+
+def room_pin(config: Mapping[str, Any], part: str) -> str:
+    """The part of day's pin: ``auto``, ``thermostat`` or a selected room; a stale or bad pin reads as ``auto``."""
+    pin = config.get(ROOM_PIN_KEYS.get(part, ""), ROOM_PIN_AUTO)
+    if pin == ROOM_PIN_THERMOSTAT or (isinstance(pin, str) and pin in selected_rooms(config)):
+        return pin
+    return ROOM_PIN_AUTO
+
+
+def part_reference(
+    part: str, config: Mapping[str, Any], learned_rooms: Mapping[str, str | None] | None
+) -> SteeringReference:
+    """The reference for a part of day (see ``steering_reference``)."""
+    sleep_entity = config.get("sleep_indoor_temp_entity")
+    if part == PART_NIGHT and isinstance(sleep_entity, str) and sleep_entity:
+        return SteeringReference(sleep_entity, REMOTE_CONTEXT_SLEEP, SOURCE_SLEEP_SENSOR, part)
+    if learned_rooms is None:  # preference learning off: rooms never steer
+        return SteeringReference(None, None, SOURCE_THERMOSTAT, part)
+    pin = room_pin(config, part)
+    if pin == ROOM_PIN_THERMOSTAT:
+        return SteeringReference(None, None, SOURCE_PINNED, part)
+    if pin != ROOM_PIN_AUTO:
+        return SteeringReference(pin, REMOTE_CONTEXT_ROOM, SOURCE_PINNED, part)
+    learned = learned_rooms.get(part)
+    if isinstance(learned, str) and learned in selected_rooms(config):
+        return SteeringReference(learned, REMOTE_CONTEXT_ROOM, SOURCE_LEARNED, part)
+    return SteeringReference(None, None, SOURCE_THERMOSTAT, part)
+
+
+def steering_reference(
+    at: datetime,
+    config: Mapping[str, Any],
+    *,
+    in_sleep_window: bool,
+    learned_rooms: Mapping[str, str | None] | None,
+) -> SteeringReference:
+    """The entity whose temperature the comfort target is measured against at ``at``: the ONE source every caller uses.
+
+    1. In the sleep window a configured ``sleep_indoor_temp_entity`` always wins (existing behaviour).
+    2. Otherwise the part of day's pin: ``thermostat`` means none, a selected room means that room.
+    3. ``auto`` uses the learned room for the part of day when one is confident, else the thermostat.
+
+    ``learned_rooms`` None means preference learning is off: only rule 1 applies (identical to before phase 3).
+    The caller falls back to the thermostat when the room's reading is not usable (the resolver does that).
+    """
+    part, _day = part_of_day(at, config.get("wake_time"), config.get("sleep_time"), in_sleep_window=in_sleep_window)
+    return part_reference(part, config, learned_rooms)
+
+
+def references_by_part(
+    config: Mapping[str, Any], learned_rooms: Mapping[str, str | None] | None
+) -> dict[str, str | None]:
+    """``{part: reference entity or None}`` for every part of day: the frame each part's offsets belong to."""
+    return {part: part_reference(part, config, learned_rooms).entity for part in PARTS_OF_DAY}
+
+
+# --------------------------------------------------------------------------------------------------
+# Learned room (phase 3)
+# --------------------------------------------------------------------------------------------------
+
+
+def mad(values: list[float]) -> float:
+    """Median absolute deviation (0.0 for an empty list)."""
+    if not values:
+        return 0.0
+    mid = median(values)
+    return float(median(abs(v - mid) for v in values))
+
+
+def is_whole_series(values_f: list[float], unit: str) -> bool:
+    """True when every reading, in the user's unit, is a whole number (a whole-degree sensor), given 5+ readings.
+
+    Readings are stored in degrees F rounded to 2 decimals; a whole Celsius reading is not whole in F, so the test
+    is made in the unit the sensor reports in (the configured unit, as the sensor reads do).
+    """
+    if len(values_f) < 5:
+        return False
+    for v in values_f:
+        shown = (v - 32.0) / 1.8 if unit == "celsius" else v
+        if abs(shown - round(shown)) >= 0.02:
+            return False
+    return True
+
+
+def raise_samples(observations: list[dict], part: str) -> dict[str, list[float]]:
+    """``{entity: [temp_f, ...]}`` from the most recent 60 raise observations of a part of day."""
+    raises = [o for o in observations if isinstance(o.get("rooms"), dict) and bucket_parts(o["bucket"])[1] == part]
+    out: dict[str, list[float]] = {}
+    for obs in raises[-RAISE_WINDOW:]:
+        for entity, temp in obs["rooms"].items():
+            if is_finite_number(temp):
+                out.setdefault(str(entity), []).append(float(temp))
+    return out
+
+
+def score_rooms(
+    raises: Mapping[str, list[float]],
+    background: Mapping[str, list[float]],
+    *,
+    whole: set[str] | frozenset[str] = frozenset(),
+) -> tuple[str | None, dict[str, float], dict[str, int]]:
+    """``(chosen room or None, {entity: ratio}, {entity: raise n})`` for one part of day.
+
+    ``ratio = MAD(raise temps) / MAD(background temps)`` (MAD floor 0.1 F) for every entity with at least 10 raise and
+    10 background samples, the thermostat (``REF_THERMOSTAT``) included. A low ratio means the occupants turn the heat
+    up when that room reaches a consistent temperature, more consistently than the room normally varies. The room with
+    the lowest ratio is chosen when it is at most 0.7 and at least 0.15 below the thermostat's ratio; a whole-degree
+    sensor (``whole``) is scored but never chosen.
+    """
+    ratios: dict[str, float] = {}
+    counts: dict[str, int] = {}
+    for entity, values in raises.items():
+        counts[entity] = len(values)
+        bg = list(background.get(entity, ()))
+        if len(values) < MIN_RAISE_SAMPLES or len(bg) < MIN_BACKGROUND_SAMPLES:
+            continue
+        ratios[entity] = round(max(mad(values), MAD_FLOOR_F) / max(mad(bg), MAD_FLOOR_F), 3)
+    thermostat = ratios.get(REF_THERMOSTAT)
+    if thermostat is None:
+        return None, ratios, counts
+    candidates = sorted((r, e) for e, r in ratios.items() if e != REF_THERMOSTAT and e not in whole)
+    if not candidates:
+        return None, ratios, counts
+    ratio, entity = candidates[0]
+    if ratio <= CHOOSE_MAX_RATIO and ratio <= thermostat - CHOOSE_MIN_MARGIN:
+        return entity, ratios, counts
+    return None, ratios, counts
+
+
+def observations_in_frame(observations: list[dict], refs: Mapping[str, str | None]) -> list[dict]:
+    """The observations recorded under the reference their part of day uses now (``ref`` missing reads as None)."""
+    return [o for o in observations if o.get("ref") == refs.get(bucket_parts(o["bucket"])[1])]
 
 
 # --------------------------------------------------------------------------------------------------
@@ -189,6 +474,7 @@ def extend_episode(
     target_f: float,
     excluded: bool = False,
     remote_f: float = 0.0,
+    context: Mapping[str, Any] | None = None,
 ) -> tuple[dict | None, dict | None]:
     """Fold one occupant setpoint change into the open episode: ``(open_episode, closed_observation)``.
 
@@ -202,6 +488,9 @@ def extend_episode(
     ``old_f`` / ``new_f`` are the setpoints the thermostat reported. ``remote_f`` is the signed remote-sensor offset
     its setpoint carried when the episode OPENED; it is stored in the episode and applied to every change in it, because
     the offset stops being applied once the occupant takes the thermostat (a later change must not read it as 0).
+
+    ``context`` (phase 3) is what else is captured at open: ``ref`` (the reference entity, None = thermostat), ``rh``
+    and ``band`` (the reference humidity) and ``rooms`` (``{entity: temp_f}``, ``thermostat`` for the primary reading).
     """
     closed: dict | None = None
     if episode is not None:
@@ -220,6 +509,7 @@ def extend_episode(
         "old_f": old_f - remote_f,
         "final_f": new_f - remote_f,
         "remote_f": remote_f,
+        **{k: context[k] for k in EPISODE_CONTEXT_KEYS if context is not None and k in context},
     }, closed
 
 
@@ -234,16 +524,23 @@ def close_episode(episode: dict) -> dict | None:
     ``delta_f = final setpoint - base target``; using the base (not the offset-adjusted target) makes the
     offset converge to the preference instead of accumulating. A final setpoint within 0.5 F of the
     offset-adjusted target the occupant started from is discarded.
+
+    The phase 3 context captured at open is copied; the room temperatures (``rooms``) only for a raise
+    (``final > old``): they are the learned room's raise samples.
     """
     if abs(float(episode["final_f"]) - float(episode["target_f"])) <= UNDO_TOLERANCE_F:
         return None
     last = datetime.fromisoformat(episode["last"])
-    return {
+    obs: dict[str, Any] = {
         "date": last.date().isoformat(),
         "time": f"{last.hour:02d}:{last.minute:02d}",
         "bucket": episode["bucket"],
         "delta_f": round(float(episode["final_f"]) - float(episode["base_f"]), 2),
     }
+    for key in EPISODE_CONTEXT_KEYS:
+        if key in episode and (key != "rooms" or float(episode["final_f"]) > float(episode["old_f"])):
+            obs[key] = episode[key]
+    return obs
 
 
 def trim_observations(observations: list[dict], today: date) -> list[dict]:
@@ -273,9 +570,39 @@ def _clamp(value: float, limit: float) -> float:
 
 
 def _sibling(key: str) -> str:
-    day_type, part, day_class = bucket_parts(key)
-    other = DAY_CLASS_WEEKEND if day_class == DAY_CLASS_WEEKDAY else DAY_CLASS_WEEKDAY
-    return f"{day_type}|{part}|{other}"
+    """The same bucket in the other day class (a four-part key keeps its band)."""
+    parts = key.split("|")
+    parts[2] = DAY_CLASS_WEEKEND if parts[2] == DAY_CLASS_WEEKDAY else DAY_CLASS_WEEKDAY
+    return "|".join(parts)
+
+
+def _day_type_part(key: str) -> tuple[str, str]:
+    day_type, part, _day_class = bucket_parts(key)
+    return day_type, part
+
+
+def _level_values(observations: list[dict]) -> dict[str, tuple[str, list[float]]]:
+    """``{bucket: (level, newest 20 deltas)}`` for every bucket the weekly update sets (see ``weekly_update``)."""
+    by_band: dict[str, list[float]] = {}
+    by_base: dict[str, list[float]] = {}
+    by_day_type_part: dict[tuple[str, str], list[float]] = {}
+    for obs in observations:
+        key, delta = with_band(str(obs["bucket"])), float(obs["delta_f"])
+        by_band.setdefault(key, []).append(delta)
+        by_base.setdefault(base_key(key), []).append(delta)
+        by_day_type_part.setdefault(_day_type_part(key), []).append(delta)
+    out: dict[str, tuple[str, list[float]]] = {}
+    for key in set(by_band) | set(by_base) | {_sibling(k) for k in by_base}:
+        candidates: list[tuple[str, list[float]]] = []
+        if key.count("|") == 3:
+            candidates.append((LEVEL_BAND, by_band.get(key, [])))
+        candidates.append((LEVEL_BUCKET, by_base.get(base_key(key), [])))
+        candidates.append((LEVEL_DAYTYPE_PART, by_day_type_part.get(_day_type_part(key), [])))
+        for level, values in candidates:
+            if len(values) >= MIN_OBSERVATIONS:
+                out[key] = (level, values[-RECENT_OBSERVATIONS:])
+                break
+    return out
 
 
 def weekly_update(
@@ -288,29 +615,18 @@ def weekly_update(
 ) -> tuple[dict[str, dict], list[dict]]:
     """One weekly pass: ``(new_offsets, changes)``; ``changes`` has one record per bucket whose offset moved.
 
-    Per bucket: the most recent 20 observations (any age within retention); fewer than 3 falls back to the
-    bucket's ``day_type|part_of_day`` across both day classes, still fewer than 3 means no change. The target
-    is the median ``delta_f`` clamped to ``+-max_offset_f``; the offset moves toward it by at most ``step_f``,
-    is clamped again and rounded to 0.1 F.
+    Observation buckets are four-part keys (a three-part phase 1 key reads as band ``-``). Offsets are computed
+    for every four-part key with observations and for every three-part key with observations or a sibling (other
+    day class) with observations. Each uses the most recent 20 observations of the first level that has at least
+    3: the four-part key (four-part keys only), the band-agnostic three-part key across bands, then
+    ``day_type|part_of_day`` across both day classes and every band (the phase 1 fallback); still fewer than 3
+    means no change. The target is the median ``delta_f`` clamped to ``+-max_offset_f``; the offset moves toward
+    it by at most ``step_f``, is clamped again and
+    rounded to 0.1 F. The caller passes only the observations of the current reference frame.
     """
-    by_bucket: dict[str, list[float]] = {}
-    for obs in observations:
-        by_bucket.setdefault(str(obs["bucket"]), []).append(float(obs["delta_f"]))
-    buckets = set(by_bucket) | {_sibling(k) for k in by_bucket}
-
     new_offsets: dict[str, dict] = {k: dict(v) for k, v in offsets.items()}
     changes: list[dict] = []
-    for key in sorted(buckets):
-        values = by_bucket.get(key, [])[-RECENT_OBSERVATIONS:]
-        level = LEVEL_BUCKET
-        if len(values) < MIN_OBSERVATIONS:
-            # Both day classes of day_type|part_of_day, the newest 20 of the pooled observations.
-            level = LEVEL_DAYTYPE_PART
-            values = [float(o["delta_f"]) for o in observations if str(o["bucket"]) in (key, _sibling(key))][
-                -RECENT_OBSERVATIONS:
-            ]
-        if len(values) < MIN_OBSERVATIONS:
-            continue
+    for key, (level, values) in sorted(_level_values(observations).items()):
         current = float(offsets.get(key, {}).get("offset_f", 0.0))
         target = _clamp(float(median(values)), max_offset_f)
         new = _clamp(current + _clamp(target - current, step_f), max_offset_f)
@@ -329,3 +645,25 @@ def weekly_update(
                 }
             )
     return new_offsets, changes
+
+
+def drop_parts(offsets: Mapping[str, Any], parts: set[str] | frozenset[str]) -> dict[str, Any]:
+    """The offsets without every bucket of the given parts of day (their reference changed: restart from 0)."""
+    return {k: v for k, v in offsets.items() if bucket_parts(k)[1] not in parts}
+
+
+def seed_offsets(observations: list[dict], *, max_offset_f: float) -> dict[str, dict[str, Any]]:
+    """``{bucket: {"n", "median_f", "offset_f", "level"}}`` the seed would set: the weekly levels, no step limit.
+
+    Accepting a seed is an explicit user decision, so its offset is the level's median clamped to the cap only.
+    """
+    out: dict[str, dict[str, Any]] = {}
+    for key, (level, values) in sorted(_level_values(observations).items()):
+        mid = float(median(values))
+        out[key] = {
+            "n": len(values),
+            "median_f": round(mid, 2),
+            "offset_f": round(_clamp(mid, max_offset_f), OFFSET_ROUND_DIGITS),
+            "level": level,
+        }
+    return out

@@ -47,7 +47,7 @@ def test_a_heat_override_at_home_is_recorded_with_base_and_target():
     coord = _coordinator()
     assert _record(coord) is True
     kwargs = coord.learning.record_preference_change.call_args.kwargs
-    assert kwargs["bucket"] == B
+    assert kwargs["bucket"] == f"{B}|-"  # phase 3: the four-part key, band "-" with no humidity
     assert kwargs["base_f"] == 70.0  # the floor WITHOUT the learned offset
     assert kwargs["target_f"] == 72.0  # the floor the engine armed (offset included)
     assert (kwargs["old_f"], kwargs["new_f"]) == (70.0, 74.0)
@@ -123,7 +123,7 @@ def test_status_reports_enabled_bucket_and_offset():
     with patch.object(coord_mod.dt_util, "now", return_value=EVENING):
         status = coord.preference_status()
     assert status["enabled"] is True
-    assert status["bucket"] == B
+    assert status["bucket"] == f"{B}|-"
     assert status["active_offset_f"] == 2.0
     assert status["observation_count"] == 4
     assert _coordinator(enabled=False).preference_status() == {"enabled": False}
@@ -246,7 +246,7 @@ def test_an_occupant_setpoint_change_reaches_the_hook_through_the_real_handler()
     coord = _handler_coordinator()
     _drive(coord, _heat_event())
     kwargs = coord.learning.record_preference_change.call_args.kwargs
-    assert (kwargs["old_f"], kwargs["new_f"], kwargs["bucket"]) == (70.0, 74.0, B)
+    assert (kwargs["old_f"], kwargs["new_f"], kwargs["bucket"]) == (70.0, 74.0, f"{B}|-")
     assert (kwargs["base_f"], kwargs["target_f"]) == (70.0, 72.0)
 
 
