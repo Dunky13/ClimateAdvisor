@@ -846,11 +846,28 @@
           "description": "Welke gegevens worden gereset. ‘all’ wist alles. ‘thermal_model’ wist de waarnemingen van HVAC-runs. ‘weather_bias’ wist de gegevens over voorspellingsnauwkeurigheid. ‘suggestions’ laat eerder genegeerde suggesties weer verschijnen."
         }
       }
+    },
+    "backfill_preferences": {
+      "name": "Voorkeursgeschiedenis analyseren",
+      "description": "Leest de recordergeschiedenis en stelt geleerde setpointvoorkeuren voor, te beoordelen op het tabblad Analyse van het dashboard. Er verandert niets tot je het voorstel accepteert. Vereist dat voorkeuren leren aan staat.",
+      "fields": {
+        "entry_id": {
+          "name": "Zone",
+          "description": "De Climate Advisor-zone (configuratie-item) waarop deze aanroep van toepassing is. Vereist sinds Issue #796 — met meer dan één geconfigureerde zone kan het serviceregister van HA anders niet weten voor welke zone een aanroep bedoeld is."
+        },
+        "days": {
+          "name": "Dagen",
+          "description": "Hoeveel dagen geschiedenis er geanalyseerd worden (1 tot 400)."
+        }
+      }
     }
   },
   "exceptions": {
     "unknown_zone": {
       "message": "Onbekende of niet geladen Climate Advisor-zone entry_id {entry_id}. Controleer onder Instellingen > Apparaten & diensten de juiste zone."
+    },
+    "preference_learning_off": {
+      "message": "Voorkeuren leren staat uit voor deze zone. Zet het eerst aan in de opties van Climate Advisor."
     }
   }
 }

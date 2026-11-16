@@ -73,3 +73,21 @@ reset_learning_data:
             - "weather_bias"
             - "suggestions"
             - "preferences"
+
+backfill_preferences:
+  fields:
+    entry_id:
+      required: true
+      example: "01JABCDEFGHJKMNPQRSTVWXYZ"
+      selector:
+        config_entry:
+          integration: climate_advisor
+    days:
+      required: false
+      default: 30
+      example: 30
+      selector:
+        number:
+          min: 1
+          max: 400
+          unit_of_measurement: d

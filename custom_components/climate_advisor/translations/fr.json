@@ -846,11 +846,28 @@
           "description": "Données à réinitialiser. \"all\" efface tout. \"thermal_model\" efface les observations des cycles CVC. \"weather_bias\" efface les relevés de précision des prévisions. \"suggestions\" permet aux suggestions précédemment ignorées de réapparaître."
         }
       }
+    },
+    "backfill_preferences": {
+      "name": "Analyser l’historique des préférences",
+      "description": "Lit l’historique de l’enregistreur et propose des préférences de consigne apprises à examiner dans l’onglet Analyse du tableau de bord. Rien ne change tant que vous n’acceptez pas la proposition. Nécessite l’apprentissage des préférences activé.",
+      "fields": {
+        "entry_id": {
+          "name": "Zone",
+          "description": "La zone Climate Advisor (entrée de configuration) concernée par cet appel. Obligatoire depuis le ticket #796 : avec plusieurs zones configurées, le registre des services de HA n’a pas d’autre moyen de savoir à quelle zone l’appel est destiné."
+        },
+        "days": {
+          "name": "Jours",
+          "description": "Nombre de jours d’historique à analyser (1 à 400)."
+        }
+      }
     }
   },
   "exceptions": {
     "unknown_zone": {
       "message": "Entry_id de zone Climate Advisor inconnu ou non chargé : « {entry_id} ». Vérifiez Paramètres > Appareils et services pour trouver la bonne zone."
+    },
+    "preference_learning_off": {
+      "message": "L’apprentissage des préférences est désactivé pour cette zone. Activez-le d’abord dans les options de Climate Advisor."
     }
   }
 }

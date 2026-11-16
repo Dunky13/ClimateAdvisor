@@ -846,11 +846,28 @@
           "description": "Quali dati reimpostare. \"all\" cancella tutto. \"thermal_model\" cancella le osservazioni delle sessioni di climatizzazione. \"weather_bias\" cancella i registri di accuratezza delle previsioni. \"suggestions\" permette ai suggerimenti ignorati in precedenza di ricomparire."
         }
       }
+    },
+    "backfill_preferences": {
+      "name": "Analizza la cronologia delle preferenze",
+      "description": "Legge la cronologia del registratore e propone le preferenze di setpoint apprese da rivedere nella scheda Analisi della dashboard. Nulla cambia finché non accetti la proposta. Richiede l’apprendimento delle preferenze attivo.",
+      "fields": {
+        "entry_id": {
+          "name": "Zona",
+          "description": "La zona di Climate Advisor (voce di configurazione) a cui si applica questa chiamata. Obbligatorio dalla segnalazione #796: con più di una zona configurata, il registro dei servizi di HA non ha altro modo di sapere a quale zona è destinata la chiamata."
+        },
+        "days": {
+          "name": "Giorni",
+          "description": "Quanti giorni di cronologia analizzare (da 1 a 400)."
+        }
+      }
     }
   },
   "exceptions": {
     "unknown_zone": {
       "message": "entry_id della zona Climate Advisor sconosciuto o non caricato: «{entry_id}». Controlla in Impostazioni > Dispositivi e servizi qual è la zona corretta."
+    },
+    "preference_learning_off": {
+      "message": "L’apprendimento delle preferenze è disattivato per questa zona. Attivalo prima nelle opzioni di Climate Advisor."
     }
   }
 }

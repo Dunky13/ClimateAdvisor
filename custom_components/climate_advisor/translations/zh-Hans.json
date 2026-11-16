@@ -846,11 +846,28 @@
           "description": "要重置哪些数据。“all”清除所有数据。“thermal_model”清除空调运行会话的观测记录。“weather_bias”清除预报准确度记录。“suggestions”允许之前忽略的建议再次出现。"
         }
       }
+    },
+    "backfill_preferences": {
+      "name": "分析偏好历史",
+      "description": "读取记录器历史，并提出学习到的设定温度偏好，供在仪表板的“分析”选项卡中审核。在您接受提议之前不会有任何改变。需要开启偏好学习。",
+      "fields": {
+        "entry_id": {
+          "name": "区域",
+          "description": "此调用适用的 Climate Advisor 区域（配置条目）。自 Issue #796 起为必填——配置了多个区域时，HA 的服务注册表没有其他方式知道调用针对哪个区域。"
+        },
+        "days": {
+          "name": "天数",
+          "description": "要分析的历史天数（1 到 400）。"
+        }
+      }
     }
   },
   "exceptions": {
     "unknown_zone": {
       "message": "未知或未加载的 Climate Advisor 区域 entry_id“{entry_id}”。请在 设置 > 设备与服务 中查看正确的区域。"
+    },
+    "preference_learning_off": {
+      "message": "此区域的偏好学习已关闭。请先在 Climate Advisor 选项中开启。"
     }
   }
 }

@@ -846,11 +846,28 @@
           "description": "Jakie dane zresetować. „all” usuwa wszystko. „thermal_model” czyści obserwacje cykli pracy HVAC. „weather_bias” czyści zapisy trafności prognoz. „suggestions” pozwala ponownie pojawić się wcześniej odrzuconym sugestiom."
         }
       }
+    },
+    "backfill_preferences": {
+      "name": "Analizuj historię preferencji",
+      "description": "Odczytuje historię rejestratora i proponuje wyuczone preferencje nastaw do przejrzenia na karcie Analiza w panelu. Nic się nie zmienia, dopóki nie zaakceptujesz propozycji. Wymaga włączonego uczenia preferencji.",
+      "fields": {
+        "entry_id": {
+          "name": "Strefa",
+          "description": "Strefa Climate Advisor (wpis konfiguracji), której dotyczy to wywołanie. Wymagane od Issue #796 — przy więcej niż jednej skonfigurowanej strefie rejestr usług HA nie ma innego sposobu, by wiedzieć, której strefy dotyczy wywołanie."
+        },
+        "days": {
+          "name": "Dni",
+          "description": "Ile dni historii przeanalizować (od 1 do 400)."
+        }
+      }
     }
   },
   "exceptions": {
     "unknown_zone": {
       "message": "Nieznana lub niewczytana strefa Climate Advisor o entry_id „{entry_id}”. Sprawdź właściwą strefę w Ustawienia > Urządzenia i usługi."
+    },
+    "preference_learning_off": {
+      "message": "Uczenie preferencji jest wyłączone dla tej strefy. Najpierw włącz je w opcjach Climate Advisor."
     }
   }
 }

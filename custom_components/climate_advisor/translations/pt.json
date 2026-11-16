@@ -846,11 +846,28 @@
           "description": "Os dados a repor. «all» apaga tudo. «thermal_model» limpa as observações de sessões de AVAC. «weather_bias» limpa os registos de precisão da previsão. «suggestions» permite que sugestões anteriormente dispensadas voltem a aparecer."
         }
       }
+    },
+    "backfill_preferences": {
+      "name": "Analisar histórico de preferências",
+      "description": "Lê o histórico do gravador e propõe preferências de temperatura-alvo aprendidas para rever no separador Análise do painel. Nada muda até aceitar a proposta. Requer a aprendizagem de preferências ativada.",
+      "fields": {
+        "entry_id": {
+          "name": "Zona",
+          "description": "A zona do Climate Advisor (entrada de configuração) a que esta chamada se aplica. Obrigatório desde o Issue #796 — com mais do que uma zona configurada, o registo de serviços do HA não tem outra forma de saber a que zona se destina uma chamada."
+        },
+        "days": {
+          "name": "Dias",
+          "description": "Quantos dias de histórico analisar (1 a 400)."
+        }
+      }
     }
   },
   "exceptions": {
     "unknown_zone": {
       "message": "Entrada entry_id da zona do Climate Advisor desconhecida ou não carregada: {entry_id}. Consulte Definições > Dispositivos e serviços para ver a zona correta."
+    },
+    "preference_learning_off": {
+      "message": "A aprendizagem de preferências está desativada para esta zona. Ative-a primeiro nas opções do Climate Advisor."
     }
   }
 }

@@ -846,11 +846,28 @@
           "description": "リセットするデータです。「all」はすべてを消去します。「thermal_model」は空調の運転セッションの観測データを消去します。「weather_bias」は予報精度の記録を消去します。「suggestions」は、却下済みの提案が再び表示されるようにします。"
         }
       }
+    },
+    "backfill_preferences": {
+      "name": "好みの履歴を分析",
+      "description": "レコーダーの履歴を読み取り、学習した設定温度の好みをダッシュボードの分析タブで確認できるよう提案します。提案を受け入れるまで何も変わりません。好みの学習をオンにする必要があります。",
+      "fields": {
+        "entry_id": {
+          "name": "ゾーン",
+          "description": "この呼び出しの対象となる Climate Advisor のゾーン(設定エントリ)です。Issue #796 以降は必須です。複数のゾーンが設定されている場合、HA のサービスレジストリには、呼び出しがどのゾーン宛てかを知る他の方法がないためです。"
+        },
+        "days": {
+          "name": "日数",
+          "description": "分析する履歴の日数（1〜400）。"
+        }
+      }
     }
   },
   "exceptions": {
     "unknown_zone": {
       "message": "Climate Advisor のゾーン entry_id「{entry_id}」が不明、または読み込まれていません。設定 > デバイスとサービスで正しいゾーンを確認してください。"
+    },
+    "preference_learning_off": {
+      "message": "このゾーンでは好みの学習がオフです。まず Climate Advisor のオプションでオンにしてください。"
     }
   }
 }

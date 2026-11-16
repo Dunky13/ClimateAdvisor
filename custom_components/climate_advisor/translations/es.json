@@ -846,11 +846,28 @@
           "description": "Qué datos restablecer. \"all\" borra todo. \"thermal_model\" borra las observaciones de sesiones de climatización. \"weather_bias\" borra los registros de precisión de la previsión. \"suggestions\" permite que vuelvan a aparecer las sugerencias descartadas antes."
         }
       }
+    },
+    "backfill_preferences": {
+      "name": "Analizar historial de preferencias",
+      "description": "Lee el historial del registrador y propone preferencias de consigna aprendidas para revisarlas en la pestaña Análisis del panel. Nada cambia hasta que aceptes la propuesta. Requiere el aprendizaje de preferencias activado.",
+      "fields": {
+        "entry_id": {
+          "name": "Zona",
+          "description": "La zona de Climate Advisor (entrada de configuración) a la que se aplica esta llamada. Obligatorio desde la incidencia #796: con más de una zona configurada, el registro de servicios de HA no tiene otra forma de saber a qué zona va dirigida la llamada."
+        },
+        "days": {
+          "name": "Días",
+          "description": "Cuántos días de historial analizar (de 1 a 400)."
+        }
+      }
     }
   },
   "exceptions": {
     "unknown_zone": {
       "message": "entry_id de zona de Climate Advisor desconocido o no cargado: «{entry_id}». Comprueba en Ajustes > Dispositivos y servicios cuál es la zona correcta."
+    },
+    "preference_learning_off": {
+      "message": "El aprendizaje de preferencias está desactivado para esta zona. Actívalo primero en las opciones de Climate Advisor."
     }
   }
 }

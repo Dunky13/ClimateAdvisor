@@ -130,7 +130,7 @@ class TestAPIViewList:
     """Test the API_VIEWS registry."""
 
     def test_correct_count(self):
-        assert len(API_VIEWS) == 25  # #1230 R1/R3b/R6 views; fork #1: + ResetPreferencesView
+        assert len(API_VIEWS) == 27  # #1230 R1/R3b/R6 views; fork #1: + Reset/BackfillPreferences, PreferenceSeed
 
     def test_all_are_callable(self):
         for view_cls in API_VIEWS:

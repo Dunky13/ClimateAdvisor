@@ -21,6 +21,7 @@ from .const import (
     API_AI_INVESTIGATE,
     API_AI_STATUS,
     API_AUTOMATION_STATE,
+    API_BACKFILL_PREFERENCES,
     API_BRIEFING,
     API_CANCEL_FAN_OVERRIDE,
     API_CANCEL_OVERRIDE,
@@ -34,6 +35,7 @@ from .const import (
     API_LEARNING,
     API_NIGHT_STRATEGY,
     API_PREDICTION_ACCURACY,
+    API_PREFERENCE_SEED,
     API_RESET_PREFERENCES,
     API_RESPOND_SUGGESTION,
     API_RESUME_FROM_PAUSE,
@@ -251,6 +253,11 @@ _ERROR_KEYS: dict[str, str] = {
     "network_error": "errors.network_error",
     "github_api": "errors.github_api",
     "investigation_failed": "errors.investigation_failed",
+    "preferences_off": "errors.preferences_off",
+    "backfill_days": "errors.backfill_days",
+    "backfill_failed": "errors.backfill_failed",
+    "preference_seed_none": "errors.preference_seed_none",
+    "preference_seed_action": "errors.preference_seed_action",
 }
 
 
@@ -1191,6 +1198,87 @@ class ClimateAdvisorResetPreferencesView(HomeAssistantView):
             return self.json({"status": "ok", **_msg_fields(hass, i18n.Msg("errors.preferences_reset"))})
 
 
+class ClimateAdvisorBackfillPreferencesView(HomeAssistantView):
+    """Analyse recorder history into the preference seed (fork Dunky13#1 phase 3); body ``{"days": 1..400}``."""
+
+    url = API_BACKFILL_PREFERENCES
+    name = "api:climate_advisor:backfill_preferences"
+    requires_auth = True
+
+    async def post(self, request: web.Request) -> web.Response:
+        hass = request.app["hass"]
+        coordinator, ambiguous_refused = _get_coordinator(hass, request)
+        if ambiguous_refused:
+            return self.json(_ambiguous_zone_payload(hass), status_code=400)
+        if not coordinator:
+            return self.json(_error_body(hass, "not_loaded"), status_code=503)
+
+        with log_capture.zone_scope(coordinator.zone_label):
+            try:
+                body = await request.json()
+            except Exception:
+                return self.json(_error_body(hass, "invalid_json_body"), status_code=400)
+            days = body.get("days", 30) if isinstance(body, dict) else None
+            if not isinstance(days, int) or isinstance(days, bool) or not 1 <= days <= 400:
+                return self.json(_error_body(hass, "backfill_days"), status_code=400)
+            try:
+                result = await coordinator.async_backfill_preferences(days)
+            except Exception as err:
+                _LOGGER.error("Preference history backfill failed: days=%d", days, exc_info=True)
+                return self.json(_error_body(hass, "backfill_failed", error=type(err).__name__), status_code=500)
+            if result is None:
+                return self.json(_error_body(hass, "preferences_off"), status_code=409)
+            counts = result["counts"]
+            msg = i18n.Msg(
+                "errors.preference_seed_built",
+                observations=counts["observations"],
+                schedule=counts["schedule"],
+                days=result["window"]["days"],
+            )
+            return self.json({"status": "ok", **result, **_msg_fields(hass, msg)})
+
+
+class ClimateAdvisorPreferenceSeedView(HomeAssistantView):
+    """Accept or discard the history seed; body ``{"action": "accept"|"discard", "buckets": [key, ...]}``."""
+
+    url = API_PREFERENCE_SEED
+    name = "api:climate_advisor:preference_seed"
+    requires_auth = True
+
+    async def post(self, request: web.Request) -> web.Response:
+        hass = request.app["hass"]
+        coordinator, ambiguous_refused = _get_coordinator(hass, request)
+        if ambiguous_refused:
+            return self.json(_ambiguous_zone_payload(hass), status_code=400)
+        if not coordinator:
+            return self.json(_error_body(hass, "not_loaded"), status_code=503)
+
+        with log_capture.zone_scope(coordinator.zone_label):
+            try:
+                body = await request.json()
+            except Exception:
+                return self.json(_error_body(hass, "invalid_json_body"), status_code=400)
+            action = body.get("action") if isinstance(body, dict) else None
+            buckets = body.get("buckets") if isinstance(body, dict) else None
+            if action not in ("accept", "discard") or (
+                buckets is not None and not (isinstance(buckets, list) and all(isinstance(b, str) for b in buckets))
+            ):
+                return self.json(_error_body(hass, "preference_seed_action"), status_code=400)
+            if coordinator.preference_view() is None:
+                return self.json(_error_body(hass, "preferences_off"), status_code=409)
+            if action == "discard":
+                if not await coordinator.async_discard_preference_seed():
+                    return self.json(_error_body(hass, "preference_seed_none"), status_code=404)
+                return self.json({"status": "ok", **_msg_fields(hass, i18n.Msg("errors.preference_seed_discarded"))})
+            result = await coordinator.async_accept_preference_seed(buckets)
+            if result is None:
+                return self.json(_error_body(hass, "preference_seed_none"), status_code=404)
+            msg = i18n.Msg(
+                "errors.preference_seed_accepted", applied=len(result["applied"]), skipped=len(result["skipped"])
+            )
+            return self.json({"status": "ok", **result, **_msg_fields(hass, msg)})
+
+
 class ClimateAdvisorResumeFromPauseView(HomeAssistantView):
     """Resume HVAC from a contact sensor pause (user override)."""
 
@@ -1974,6 +2062,8 @@ API_VIEWS = [
     ClimateAdvisorConfigView,
     ClimateAdvisorCancelOverrideView,
     ClimateAdvisorResetPreferencesView,
+    ClimateAdvisorBackfillPreferencesView,
+    ClimateAdvisorPreferenceSeedView,
     ClimateAdvisorCancelFanOverrideView,
     ClimateAdvisorResumeFromPauseView,
     ClimateAdvisorToggleAutomationView,

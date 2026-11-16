@@ -846,11 +846,28 @@
           "description": "Hangi verilerin sıfırlanacağı. \"all\" her şeyi siler. \"thermal_model\" HVAC oturum gözlemlerini temizler. \"weather_bias\" tahmin doğruluğu kayıtlarını temizler. \"suggestions\" daha önce reddedilen önerilerin yeniden görünmesine izin verir."
         }
       }
+    },
+    "backfill_preferences": {
+      "name": "Tercih geçmişini analiz et",
+      "description": "Kaydedici geçmişini okur ve öğrenilen ayar noktası tercihlerini panonun Analiz sekmesinde incelenmek üzere önerir. Öneriyi kabul edene kadar hiçbir şey değişmez. Tercih öğrenmenin açık olması gerekir.",
+      "fields": {
+        "entry_id": {
+          "name": "Bölge",
+          "description": "Bu çağrının geçerli olduğu Climate Advisor bölgesi (yapılandırma girdisi). Issue #796'dan beri zorunludur; birden fazla bölge yapılandırıldığında HA'nın hizmet kaydının bir çağrının hangi bölge için olduğunu bilmenin başka yolu yoktur."
+        },
+        "days": {
+          "name": "Gün",
+          "description": "Analiz edilecek geçmiş gün sayısı (1 ile 400 arası)."
+        }
+      }
     }
   },
   "exceptions": {
     "unknown_zone": {
       "message": "Bilinmeyen veya yüklenmemiş Climate Advisor bölgesi entry_id {entry_id}. Doğru bölge için Ayarlar > Cihazlar ve hizmetler bölümüne bakın."
+    },
+    "preference_learning_off": {
+      "message": "Bu bölge için tercih öğrenme kapalı. Önce Climate Advisor seçeneklerinden açın."
     }
   }
 }

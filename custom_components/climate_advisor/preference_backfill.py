@@ -18,6 +18,7 @@ from datetime import datetime, timedelta, tzinfo
 from typing import Any
 
 from .classifier import DayClassification, ForecastSnapshot
+from .humidity_sources import valid_rh
 from .preference_learning import (
     BACKGROUND_RESERVOIR,
     BAND_NONE,
@@ -32,6 +33,7 @@ from .preference_learning import (
     part_of_day,
     seed_offsets,
 )
+from .temperature import read_attribute_temp_f, read_sensor_state_f
 
 SCHEDULE_TOLERANCE_F = 0.1 * 1.8 + 1e-6  # the same setpoint: within 0.1 C
 SCHEDULE_WINDOW_MIN = 10  # the same clock time: within 10 minutes (wrapping midnight)
@@ -64,6 +66,45 @@ class SetpointChange:
     old_f: float
     new_f: float
     user_id: str | None = None
+
+
+def climate_rows(states: list[Any], unit: str) -> list[ClimateRow]:
+    """Recorder states of the climate entity as rows (``last_updated``: a setpoint change is an attribute change)."""
+    rows = []
+    for st in states:
+        attrs = getattr(st, "attributes", None) or {}
+        context = getattr(st, "context", None)
+        rows.append(
+            ClimateRow(
+                at=st.last_updated,
+                mode=str(st.state),
+                setpoint_f=read_attribute_temp_f(st, "temperature", unit)[0],
+                preset=attrs.get("preset_mode"),
+                current_f=read_attribute_temp_f(st, "current_temperature", unit)[0],
+                user_id=getattr(context, "user_id", None),
+            )
+        )
+    return rows
+
+
+def temperature_series(states: list[Any], unit: str, attribute: str | None = None) -> Series:
+    """Recorder states as ``[(at, temp_f)]``: the state, or ``attribute`` (the weather entity's ``temperature``)."""
+    out: Series = []
+    for st in states:
+        value = read_sensor_state_f(st, unit)[0] if attribute is None else read_attribute_temp_f(st, attribute, unit)[0]
+        if value is not None:
+            out.append((st.last_updated, value))
+    return out
+
+
+def humidity_series(states: list[Any], attribute: str | None = None) -> Series:
+    """Recorder states as ``[(at, rh)]``: the state, or ``attribute`` (a thermostat's ``current_humidity``)."""
+    out: Series = []
+    for st in states:
+        raw = st.state if attribute is None else (st.attributes or {}).get(attribute)
+        if (value := valid_rh(raw)) is not None:
+            out.append((st.last_updated, value))
+    return out
 
 
 def setpoint_changes(rows: list[ClimateRow]) -> list[SetpointChange]:

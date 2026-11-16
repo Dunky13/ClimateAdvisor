@@ -434,6 +434,7 @@ from .operation_timeline import to_dict as timeline_to_dict
 from .override_confirm_split import ca_expected_mode
 from .prediction_accuracy import RANGES as CHART_RANGE_DAYS
 from .prediction_accuracy import build_chart_v4, ca_swap_epochs, load_backtest
+from .preference_backfill import build_seed, climate_rows, humidity_series, temperature_series
 from .preference_learning import (
     BAND_NONE,
     PARTS_OF_DAY,
@@ -11678,6 +11679,96 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         except Exception:
             _LOGGER.error("Preference weekly update failed; continuing end of day", exc_info=True)
             return False
+
+    async def async_backfill_preferences(self, days: int) -> dict[str, Any] | None:
+        """Analyse ``days`` of recorder history into the reviewable ``preference_seed`` (fork Dunky13#1 phase 3).
+
+        Returns the seed's counts and bucket count, or None while the feature is off. The recorder read runs on the
+        recorder's own executor and the analysis on the default executor; entity choices and the humidity source are
+        resolved here on the event loop (the humidity source is today's thermostat-room source: the history was steered
+        by the thermostat).
+        """
+        view = self.preference_view()
+        if view is None:
+            _LOGGER.info("Preference history backfill skipped: preference learning is off")
+            return None
+        from homeassistant.components.recorder import get_instance, history  # recorder is an after_dependency
+
+        cfg = self.config
+        unit = cfg.get("temp_unit", "fahrenheit")
+        climate = cfg["climate_entity"]
+        rooms = selected_rooms(cfg)
+        rh_source = self._reference_humidity(IndoorTempReading(value=None, source_entity=None, primary_value=None))[1]
+        rh_entity, _sep, rh_attr = (rh_source or "").partition("#")
+        outdoor_sensor = (
+            cfg.get("outdoor_temp_entity")
+            if cfg.get("outdoor_temp_source", TEMP_SOURCE_WEATHER_SERVICE) != TEMP_SOURCE_WEATHER_SERVICE
+            else None
+        )
+        outdoor = outdoor_sensor or cfg.get("weather_entity")
+        entities = sorted({e for e in (climate, *rooms, rh_entity, outdoor) if e})
+        end = dt_util.utcnow()
+        start = end - timedelta(days=days)
+        _LOGGER.info("Preference history backfill started: days=%d entities=%s humidity=%s", days, entities, rh_source)
+        raw = await get_instance(self.hass).async_add_executor_job(
+            functools.partial(
+                history.get_significant_states, self.hass, start, end, entities, significant_changes_only=False
+            )
+        )
+        savings = bool(cfg.get("aggressive_savings", False))
+        classify_kwargs = self._classify_kwargs(seed_hysteresis=False)
+
+        def _base_floor(at: datetime, c: DayClassification, asleep: bool) -> float:
+            band = select_comfort_band(
+                c, cfg, occupancy_mode=OCCUPANCY_HOME, in_sleep_window=asleep, aggressive_savings=savings, at=at
+            )
+            return band.floor
+
+        def _build() -> dict[str, Any]:
+            return build_seed(
+                climate_rows(raw.get(climate, []), unit),
+                rooms={e: temperature_series(raw.get(e, []), unit) for e in rooms},
+                humidity=humidity_series(raw.get(rh_entity, []), rh_attr or None) if rh_entity else [],
+                outdoor=temperature_series(raw.get(outdoor, []), unit, None if outdoor_sensor else "temperature")
+                if outdoor
+                else [],
+                start=start,
+                end=end,
+                tz=dt_util.now().tzinfo or UTC,
+                config=cfg,
+                classify=lambda snapshot: classify_day(snapshot, **classify_kwargs),
+                base_floor=_base_floor,
+                max_offset_f=float(cfg.get(CONF_PREFERENCE_MAX_OFFSET_F, DEFAULT_PREFERENCE_MAX_OFFSET_F)),
+            )
+
+        seed = await self._executor_job(_build)
+        self.learning.store_preference_seed(seed)
+        await self._executor_job(self.learning.save_state)
+        _LOGGER.info("Preference history backfill finished: counts=%s buckets=%d", seed["counts"], len(seed["summary"]))
+        return {"counts": seed["counts"], "buckets": len(seed["summary"]), "window": seed["window"]}
+
+    async def async_accept_preference_seed(self, buckets: list[str] | None) -> dict[str, Any] | None:
+        """Accept the history seed (``buckets`` None = every row): offsets apply now, within the cap; None = no seed."""
+        view = self.preference_view()
+        if view is None:
+            return None
+        result = self.learning.accept_preference_seed(
+            buckets,
+            today=dt_util.now().date(),
+            refs=self._preference_refs(view),
+            max_offset_f=view.max_offset_f,
+        )
+        if result is not None:
+            await self._executor_job(self.learning.save_state)
+            await self.async_request_refresh()  # the next decision arms the new floors
+        return result
+
+    async def async_discard_preference_seed(self) -> bool:
+        """Delete the history seed; True when there was one."""
+        if not self.learning.discard_preference_seed(dt_util.now().date()):
+            return False
+        await self._executor_job(self.learning.save_state)
+        return True
 
     def preference_status(self) -> dict[str, Any]:
         """Status/dashboard view of preference learning (always present; ``enabled`` False = nothing else matters).

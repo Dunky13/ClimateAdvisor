@@ -846,11 +846,28 @@
           "description": "What data to reset. \"all\" wipes everything. \"thermal_model\" clears HVAC session observations. \"weather_bias\" clears forecast accuracy records. \"suggestions\" allows previously dismissed suggestions to reappear."
         }
       }
+    },
+    "backfill_preferences": {
+      "name": "Analyse preference history",
+      "description": "Read the recorder history and propose learned setpoint preferences for review on the dashboard's Analysis tab. Nothing changes until you accept the proposal. Requires preference learning to be on.",
+      "fields": {
+        "entry_id": {
+          "name": "Zone",
+          "description": "The Climate Advisor zone (config entry) this call applies to. Required since Issue #796 — with more than one zone configured, HA's service registry has no other way to know which zone a call is meant for."
+        },
+        "days": {
+          "name": "Days",
+          "description": "How many days of history to analyse (1 to 400)."
+        }
+      }
     }
   },
   "exceptions": {
     "unknown_zone": {
       "message": "Unknown or unloaded Climate Advisor zone entry_id {entry_id}. Check Settings > Devices & Services for the correct zone."
+    },
+    "preference_learning_off": {
+      "message": "Preference learning is off for this zone. Turn it on in the Climate Advisor options first."
     }
   }
 }
