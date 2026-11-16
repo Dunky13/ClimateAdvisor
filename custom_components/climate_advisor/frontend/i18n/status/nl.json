@@ -184,6 +184,8 @@
   "status.pre_cool_status.scheduled": "Voorkoelen gepland ({target} om {t})",
   "status.pre_cool_status.suppressed_achieved": "voorkoelen onderdrukt — natuurlijke ventilatie bereikte {indoor} (doel {target})",
   "status.pre_cool_status.suppressed_session": "voorkoelen onderdrukt — sessie met natuurlijke ventilatie/huisventilator actief",
+  "status.preference.applied": "Verwarmingsondergrens {armed} in plaats van de ingestelde {configured}: geleerd {sign}{amount} voor {part, select, night {nacht} morning {ochtend} afternoon {middag} evening {avond} other {{part}}}, {day_class, select, weekday {doordeweeks} weekend {weekend} other {{day_class}}} (waarnemingen: {n, number}{has_update, select, yes {, laatste update: {when}} other {, nog geen update}}).",
+  "status.preference.neutral": "Voorkeuren leren staat aan; de verwarmingsondergrens is nu ongewijzigd (waarnemingen: {n, number}{has_update, select, yes {, laatste update: {when}} other {, nog geen update}}).",
   "status.promise.ac_whf_mutex": "{n}: airco en huisventilator nooit tegelijk",
   "status.promise.blind_fan_continue": "{n}: ventilator zonder binnenmeting blijft draaien",
   "status.promise.comfort_kept": "{n}: comfort behouden",

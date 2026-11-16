@@ -169,6 +169,7 @@
           "notifications": "알림",
           "advanced": "학습 및 동작",
           "classification_thresholds": "날씨 유형 임계값",
+          "preference_learning": "선호도 학습",
           "ai_settings": "Claude AI 설정",
           "github_settings": "GitHub 통합"
         }
@@ -447,6 +448,20 @@
           "threshold_warm": "예상 최고 기온이 이 온도 이상인 날은 따뜻한 날(창문 개방 권장, 에어컨 없음)로 분류됩니다. 기본값: 75°F / 24°C.",
           "threshold_mild": "예상 최고 기온이 이 온도 이상인 날은 온화한 날(쾌적함, 창문 열기)로 분류됩니다. 기본값: 60°F / 16°C.",
           "threshold_cool": "예상 최고 기온이 이 온도 이상인 날은 선선한 날(약한 난방)로 분류됩니다. 이보다 낮으면 추운 날(본격 난방)입니다. 기본값: 45°F / 7°C."
+        }
+      },
+      "preference_learning": {
+        "title": "선호도 학습",
+        "description": "Climate Advisor는 사용자가 직접 조절한 온도조절기 변경으로부터 실제로 원하는 난방 온도를 날씨 유형, 하루의 시간대, 평일 또는 주말별로 학습하고 아래의 안전 한도 안에서 적용합니다. 난방만 해당합니다. 냉방은 절대 변경되지 않습니다. 먼저 온도조절기의 스케줄과 에코 모드를 끄세요.",
+        "data": {
+          "preference_learning_enabled": "내 난방 선호도 학습",
+          "preference_max_offset_f": "최대 학습 조정폭",
+          "preference_weekly_step_f": "주간 최대 변경폭"
+        },
+        "data_description": {
+          "preference_learning_enabled": "켜면 비슷한 시간대에 반복한 온도조절기 변경이 해당 시간대에 Climate Advisor가 설정하는 난방 온도를 이동시킵니다. 기본값은 꺼짐입니다.",
+          "preference_max_offset_f": "학습된 조정이 설정한 온도에서 난방 온도를 위아래로 움직일 수 있는 최대 폭입니다.",
+          "preference_weekly_step_f": "학습된 조정이 한 주에 바뀔 수 있는 최대 폭입니다."
         }
       },
       "ai_settings": {
@@ -757,7 +772,8 @@
         "all": "학습한 모든 데이터",
         "thermal_model": "열 모델",
         "weather_bias": "일기 예보 편향",
-        "suggestions": "무시한 제안"
+        "suggestions": "무시한 제안",
+        "preferences": "학습된 선호도"
       }
     },
     "schedule_applies_to": {

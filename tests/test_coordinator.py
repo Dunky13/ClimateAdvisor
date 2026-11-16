@@ -1836,6 +1836,65 @@ class TestBriefingRegeneration:
         assert coord._briefing_day_type is None
         assert coord._briefing_sent_today is False
 
+    def _eod_coord(self):
+        import types
+
+        from custom_components.climate_advisor.coordinator import ClimateAdvisorCoordinator
+
+        coord = self._make_coord()
+        coord._briefing_day_type = DAY_TYPE_HOT
+        coord._today_record = None
+        coord._hvac_on_since = None
+        coord._last_violation_check = None
+        coord._outdoor_temp_history = MagicMock()
+        coord._indoor_temp_history = MagicMock()
+        coord._hourly_forecast_temps = MagicMock()
+        coord._executor_job = AsyncMock()
+        coord.learning = MagicMock()
+        coord._async_end_of_day = types.MethodType(ClimateAdvisorCoordinator._async_end_of_day, coord)
+        return coord
+
+    def test_end_of_day_runs_the_weekly_preference_update_and_saves(self):
+        """Fork #1: the end-of-day wiring calls the preference hook and persists when it reports a change."""
+        coord = self._eod_coord()
+        coord._run_preference_update = MagicMock(return_value=True)
+        asyncio.run(coord._async_end_of_day(MagicMock()))
+        coord._run_preference_update.assert_called_once()
+        coord._executor_job.assert_awaited_with(coord.learning.save_state)
+
+    def test_end_of_day_survives_a_failing_preference_update(self):
+        """Fork #1: a failing weekly update is logged and the end-of-day reset still runs."""
+        import types
+
+        from custom_components.climate_advisor.coordinator import ClimateAdvisorCoordinator
+
+        coord = self._eod_coord()
+        coord._run_preference_update = types.MethodType(ClimateAdvisorCoordinator._run_preference_update, coord)
+        coord.preference_view = MagicMock(side_effect=ValueError("corrupt"))
+        asyncio.run(coord._async_end_of_day(MagicMock()))
+        assert coord._briefing_day_type is None  # the reset after the hook ran
+        coord._executor_job.assert_not_awaited()
+
+    def test_update_data_flushes_the_preference_episode_and_saves(self):
+        """Fork #1: the 30-minute update flushes the open episode first and saves when it closed."""
+
+        import pytest
+
+        from custom_components.climate_advisor.coordinator import ClimateAdvisorCoordinator
+
+        class _Stop(Exception):
+            pass
+
+        coord = self._make_coord()
+        coord._executor_job = AsyncMock()
+        coord._flush_preference_episode = MagicMock(return_value=True)
+        coord._resolve_monitored_sensors = MagicMock(side_effect=_Stop)
+        coord._async_update_data_impl = types.MethodType(ClimateAdvisorCoordinator._async_update_data_impl, coord)
+        with pytest.raises(_Stop):
+            asyncio.run(coord._async_update_data_impl())
+        coord._flush_preference_episode.assert_called_once()
+        coord._executor_job.assert_awaited_once_with(coord.learning.save_state)
+
     def test_end_of_day_watchdog_not_triggered_by_fan_only_only_night(self):
         """Issue #912 direct regression: a fan-only-only night must NOT trip the
         thermal_learning_no_observations watchdog.

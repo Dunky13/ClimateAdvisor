@@ -169,6 +169,7 @@
           "notifications": "Notificaties",
           "advanced": "Leren en gedrag",
           "classification_thresholds": "Drempels voor dagtypen",
+          "preference_learning": "Voorkeuren leren",
           "ai_settings": "Claude AI-instellingen",
           "github_settings": "GitHub-koppeling"
         }
@@ -447,6 +448,20 @@
           "threshold_warm": "Dagen met een verwachte maximumtemperatuur op of boven deze waarde worden ingedeeld als Warm (ramen aanbevolen, geen airco). Standaard: 75 °F / 24 °C.",
           "threshold_mild": "Dagen met een verwachte maximumtemperatuur op of boven deze waarde worden ingedeeld als Mild (comfortabel, ramen open). Standaard: 60 °F / 16 °C.",
           "threshold_cool": "Dagen met een verwachte maximumtemperatuur op of boven deze waarde worden ingedeeld als Koel (lichte verwarming). Daaronder is het Koud (volledige verwarming). Standaard: 45 °F / 7 °C."
+        }
+      },
+      "preference_learning": {
+        "title": "Voorkeuren leren",
+        "description": "Climate Advisor leert welke verwarmingstemperatuur je werkelijk wilt uit je eigen thermostaatwijzigingen, per soort dag, dagdeel en doordeweeks of weekend, en past die toe binnen de veilige grenzen hieronder. Alleen verwarming. Koeling wordt nooit aangepast. Zet eerst elk thermostaatschema of eco-modus uit.",
+        "data": {
+          "preference_learning_enabled": "Mijn verwarmingsvoorkeuren leren",
+          "preference_max_offset_f": "Maximale geleerde aanpassing",
+          "preference_weekly_step_f": "Maximale wekelijkse wijziging"
+        },
+        "data_description": {
+          "preference_learning_enabled": "Indien aan, verschuiven herhaalde thermostaatwijzigingen op vergelijkbare momenten de verwarmingstemperatuur die Climate Advisor voor dat soort moment instelt. Standaard uit.",
+          "preference_max_offset_f": "Het meeste dat een geleerde aanpassing de verwarmingstemperatuur omhoog of omlaag mag verschuiven ten opzichte van je ingestelde temperatuur.",
+          "preference_weekly_step_f": "Het meeste dat een geleerde aanpassing per week mag veranderen."
         }
       },
       "ai_settings": {
@@ -757,7 +772,8 @@
         "all": "Alle geleerde gegevens",
         "thermal_model": "Thermisch model",
         "weather_bias": "Afwijking weersvoorspelling",
-        "suggestions": "Genegeerde suggesties"
+        "suggestions": "Genegeerde suggesties",
+        "preferences": "Geleerde voorkeuren"
       }
     },
     "schedule_applies_to": {

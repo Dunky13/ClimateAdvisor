@@ -184,6 +184,8 @@
   "status.pre_cool_status.scheduled": "사전 냉방 예약됨 ({target} @ {t})",
   "status.pre_cool_status.suppressed_achieved": "사전 냉방 억제 — 자연 환기로 {indoor} 도달 (목표 {target})",
   "status.pre_cool_status.suppressed_session": "사전 냉방 억제 — 자연 환기/집 전체 환기 송풍기 세션 진행 중",
+  "status.preference.applied": "난방 하한 {armed}(설정값 {configured} 대신): {part, select, night {야간} morning {오전} afternoon {오후} evening {저녁} other {{part}}}, {day_class, select, weekday {평일} weekend {주말} other {{day_class}}}에서 학습한 {sign}{amount} (관측: {n, number}{has_update, select, yes {, 마지막 업데이트: {when}} other {, 아직 업데이트 없음}}).",
+  "status.preference.neutral": "선호도 학습이 켜져 있으며 현재 난방 하한은 그대로입니다 (관측: {n, number}{has_update, select, yes {, 마지막 업데이트: {when}} other {, 아직 업데이트 없음}}).",
   "status.promise.ac_whf_mutex": "{n}: 에어컨과 환기 송풍기 동시 작동 방지",
   "status.promise.blind_fan_continue": "{n}: 실내 온도 불명 시 팬 유지",
   "status.promise.comfort_kept": "{n}: 쾌적함 유지",

@@ -184,6 +184,8 @@
   "status.pre_cool_status.scheduled": "Prérefroidissement programmé ({target} à {t})",
   "status.pre_cool_status.suppressed_achieved": "prérefroidissement supprimé — la ventilation naturelle a atteint {indoor} (cible {target})",
   "status.pre_cool_status.suppressed_session": "prérefroidissement supprimé — session de ventilation naturelle/ventilateur active",
+  "status.preference.applied": "Seuil de chauffage {armed} au lieu de {configured} configuré : appris {sign}{amount} pour {part, select, night {nuit} morning {matin} afternoon {après-midi} evening {soir} other {{part}}}, {day_class, select, weekday {semaine} weekend {week-end} other {{day_class}}} (observations : {n, number}{has_update, select, yes {, dernière mise à jour : {when}} other {, pas encore de mise à jour}}).",
+  "status.preference.neutral": "L'apprentissage des préférences est actif ; le seuil de chauffage reste inchangé pour l'instant (observations : {n, number}{has_update, select, yes {, dernière mise à jour : {when}} other {, pas encore de mise à jour}}).",
   "status.promise.ac_whf_mutex": "{n} : climatisation et ventilateur jamais ensemble",
   "status.promise.blind_fan_continue": "{n} : ventilateur maintenu sans capteur intérieur",
   "status.promise.comfort_kept": "{n} : confort maintenu",

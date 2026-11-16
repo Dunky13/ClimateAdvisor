@@ -309,7 +309,7 @@
   "activity.pre_cool_overshoot_temps": "Ön soğutma aşımı -- iç mekan {indoor} < alt sınır {floor}",
   "activity.pre_cool_suppressed_nat_vent": "Ön soğutma bastırıldı -- doğal havalandırma hedefe zaten ulaştı",
   "activity.reason_band_edge_used": "{band} -- {edge} sınırı kullanıldı ({shape}, {target})",
-  "activity.reason_band_select": "{ctx} aralığı [{floor}/{ceiling}] (gün={day_type}, etkin={active}{aggressive, select, yes {, agresif} other {}}{has_tou, select, yes {, tou_expansion={tou}} other {}})",
+  "activity.reason_band_select": "{ctx} aralığı [{floor}/{ceiling}] (gün={day_type}, etkin={active}{aggressive, select, yes {, agresif} other {}}{has_tou, select, yes {, tou_expansion={tou}} other {}}{has_pref, select, yes {, preference={pref_bucket} {pref}} other {}})",
   "activity.reason_bedtime_no_classification": "yatma vakti — sınıflandırma yok",
   "activity.reason_bedtime_nv_not_active": "yatma vakti — doğal havalandırma etkin değil",
   "activity.reason_bedtime_sleep_band": "yatma vakti — uyku aralığı [{floor}/{ceiling}]",

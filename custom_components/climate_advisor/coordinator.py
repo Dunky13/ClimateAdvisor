@@ -68,11 +68,13 @@ from .automation import (
     hold_after_msg,
     hold_sentence_msg,
     hvac_outcome_label,
+    learned_heat_floors,
     pre_cool_sleep_window_config,
     pre_cool_waking_date,
     resolve_active_band,
     resolve_pre_cool_modifier,
     resolve_pre_cool_modifier_for_night,
+    select_comfort_band,
     tou_bank_band,
 )
 from .briefing import BriefingText, generate_briefing
@@ -156,9 +158,11 @@ from .const import (
     CONF_NAT_VENT_HYSTERESIS_F,
     CONF_NATURAL_VENT_DELTA,
     CONF_OUTDOOR_HUMIDITY_ENTITY,
+    CONF_PREFERENCE_LEARNING_ENABLED,
+    CONF_PREFERENCE_MAX_OFFSET_F,
+    CONF_PREFERENCE_WEEKLY_STEP_F,
     CONF_SENSOR_DEBOUNCE,
     CONF_SENSOR_POLARITY_INVERTED,
-    CONF_SLEEP_HEAT,
     CONF_SLEEP_INDOOR_HUMIDITY_ENTITY,
     CONF_THERMOSTAT_COMPANION_SENSOR,
     CONF_THRESHOLD_COOL,
@@ -181,6 +185,8 @@ from .const import (
     DEFAULT_COMFORT_HEAT,
     DEFAULT_MANUAL_GRACE_SECONDS,
     DEFAULT_NATURAL_VENT_DELTA,
+    DEFAULT_PREFERENCE_MAX_OFFSET_F,
+    DEFAULT_PREFERENCE_WEEKLY_STEP_F,
     DEFAULT_SENSOR_DEBOUNCE_SECONDS,
     DEFAULT_SETBACK_COOL,
     DEFAULT_SETBACK_DEPTH_COOL_F,
@@ -423,6 +429,7 @@ from .operation_timeline import to_dict as timeline_to_dict
 from .override_confirm_split import ca_expected_mode
 from .prediction_accuracy import RANGES as CHART_RANGE_DAYS
 from .prediction_accuracy import build_chart_v4, ca_swap_epochs, load_backtest
+from .preference_learning import PreferenceView, near_schedule_edge
 from .promise_journal import (
     PROMISE_STATS_WINDOW_DAYS,
     PromiseJournal,
@@ -1416,6 +1423,8 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         self.automation_engine._control_stepper_provider = self.control_house_stepper
         # Issue #1556/#1566: and this zone's learned thermostat fan profile for every fan_mode read/write.
         self.automation_engine._fan_profile_provider = self._fan_profile
+        # Fork Dunky13#1: and the learned setpoint preferences the band resolver adds to the heat floor (None = off).
+        self.automation_engine._preference_view_provider = self.preference_view
         _LOGGER.debug(
             "Climate Advisor startup: temp_unit=%s, comfort_heat=%.1f, comfort_cool=%.1f",
             config.get("temp_unit", "fahrenheit"),
@@ -4897,6 +4906,9 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         """Fetch forecast and update classification (runs every 30 min)."""
         # Re-resolve group membership in case it changed
         _LOGGER.debug("[coalesce-diag] _async_update_data: enter")
+        # fork Dunky13#1: close a finished preference episode (lazy, no timer)
+        if self._flush_preference_episode() is True:
+            await self._executor_job(self.learning.save_state)
         new_resolved = self._resolve_monitored_sensors()
         if set(new_resolved) != set(self._resolved_sensors):
             _LOGGER.info("Door/window sensor membership changed; updating listeners")
@@ -5595,6 +5607,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             ATTR_FORECAST_HIGH_TOMORROW: c.tomorrow_high if c else None,
             ATTR_FORECAST_LOW_TOMORROW: c.tomorrow_low if c else None,
             "pre_cool_status": self._pre_cool_status,
+            "preference_learning": self.preference_status(),  # fork Dunky13#1
             # Issue #361: WHF command-only mode status fields
             "whf_mode": (
                 "disabled"
@@ -7239,6 +7252,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
                 band_schedule=band_schedule,
                 tou_precondition_window=tou_window,
                 tomorrow_window=tomorrow_w,
+                preference_view=self.preference_view(),
             )
             pts = []
             for entry in out:
@@ -7335,7 +7349,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             sleep_sensor_label="bedroom sensor" if sleep_entity else None,
             sleep_gap_f=self._sleep_gap_f(reading.primary_value, sleep_entity),
             primary_sensor_label="thermostat",
-            band_at=band_resolver_for(c, self.config),
+            band_at=band_resolver_for(c, self.config, self.preference_view()),
             occupancy_mode=self._occupancy_mode,
             day_modes=day_modes,
             day_type=c.day_type,
@@ -7564,7 +7578,13 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             ae = self.automation_engine
             armed = decide_sync(self, ae._resolved_comfort_band, c) if ae is not None else None
             if armed is None:
-                armed = resolve_active_band(c, self.config, occupancy_mode=self._occupancy_mode, now=dt_util.now())
+                armed = resolve_active_band(
+                    c,
+                    self.config,
+                    occupancy_mode=self._occupancy_mode,
+                    now=dt_util.now(),
+                    preferences=self.preference_view(),
+                )
             return apply_direction_veto(
                 tl,
                 dt_util.now(),
@@ -9317,7 +9337,12 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         if classification is not None:
             hvac_mode = classification.hvac_mode
             if hvac_mode == "heat":
-                bedtime_setback_heat = compute_bedtime_setback(self.config, thermal_model, classification)
+                bedtime_setback_heat = compute_bedtime_setback(
+                    self.config,
+                    thermal_model,
+                    classification,
+                    preference_offset_f=self._preference_offset_now(classification, in_sleep_window=True),
+                )
             elif hvac_mode == "cool":
                 bedtime_setback_cool = compute_bedtime_setback(self.config, thermal_model, classification)
 
@@ -9373,6 +9398,8 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             timeline=self._surface_timeline(),
             # Issue #1404: a time-of-use bank holding the house right now (the shared display resolver).
             current_hold=self.current_hold(),
+            # Fork Dunky13#1: the learned setpoint preferences (None while the feature is off).
+            preferences=self.preference_view(),
         )
         return generate_briefing(**briefing_kwargs), generate_briefing(**briefing_kwargs, verbosity="tldr_only")
 
@@ -10017,6 +10044,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
                 occupancy_mode=occ,
                 now=bank.ends,
                 tou_expansion_f=float(res.expansion_f or 0.0) if away else 0.0,
+                preferences=self.preference_view(),
             )
             return CurrentHold(
                 band=tou_bank_band(schedule, bank.target, bank.mode),
@@ -10358,6 +10386,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
                 pre_cool_target=_pc_target,
                 tou_precondition_window=self._tou_precondition_window_tuple() if with_tou_window else None,
                 restore_hold=self._occupancy_restore_held_cache,
+                preference_view=self.preference_view(),
             )
         )
 
@@ -10615,8 +10644,10 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
                 confidence_k_passive=_conf,
             )
         else:
-            _comfort_heat_raw = float(self.config.get("comfort_heat", DEFAULT_COMFORT_HEAT))
-            _sleep_heat = float(self.config.get("sleep_heat", _comfort_heat_raw))
+            # fork Dunky13#1: the plan's heat floors carry the learned offsets (as of now, one scalar for the plan)
+            _comfort_heat_raw, _sleep_heat = learned_heat_floors(
+                self.config, self._current_classification, self.preference_view(), dt_util.now()
+            )
             raw_plan = compute_nat_vent_plan(
                 predicted_indoor=self.control_predicted_indoor(),
                 predicted_outdoor=_outdoor_curve,
@@ -10833,10 +10864,11 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         physically-running fan mechanism (a manual override or untracked run
         included), since the cycling formula itself doesn't care why the fan is on.
         """
-        comfort_heat = float(self.config.get("comfort_heat", DEFAULT_COMFORT_HEAT))
+        comfort_heat, sleep_heat = learned_heat_floors(
+            self.config, self._current_classification, self.preference_view(), dt_util.now()
+        )
         comfort_cool = float(self.config.get("comfort_cool", DEFAULT_COMFORT_COOL))
         hysteresis = float(self.config.get(CONF_NAT_VENT_HYSTERESIS_F, NAT_VENT_HYSTERESIS_F))
-        sleep_heat = float(self.config.get(CONF_SLEEP_HEAT, comfort_heat))
         in_sleep_window = _in_sleep_window(dt_util.now(), self.config)
         return compute_nat_vent_target(
             sleep_heat=sleep_heat,
@@ -11351,6 +11383,189 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             ca_ventilating=bool(ae._fan_active or ae._natural_vent_active),
         )
 
+    # ------------------------------------------------------------------ preference learning (fork Dunky13#1)
+
+    def preference_view(self) -> PreferenceView | None:
+        """The learned setpoint preferences for the band resolver; None while the feature is off.
+
+        ``is True`` keeps a stubbed config (a MagicMock) inert; ``getattr`` keeps bare test coordinators safe.
+        """
+        config = getattr(self, "config", None)
+        if not isinstance(config, dict) or config.get(CONF_PREFERENCE_LEARNING_ENABLED, False) is not True:
+            return None
+        learning = getattr(self, "learning", None)
+        if learning is None:
+            return None
+        return PreferenceView(
+            offsets=learning.preference_offsets(),
+            max_offset_f=float(config.get(CONF_PREFERENCE_MAX_OFFSET_F, DEFAULT_PREFERENCE_MAX_OFFSET_F)),
+        )
+
+    def _preference_offset_at(self, classification: DayClassification, at: datetime, *, in_sleep_window: bool) -> float:
+        """The learned heat-floor offset for ``classification`` at ``at`` (0.0 with the feature off)."""
+        view = self.preference_view()
+        if view is None:
+            return 0.0
+        return view.offset_at(at, str(classification.day_type), self.config, in_sleep_window=in_sleep_window)[0]
+
+    def _preference_offset_now(self, classification: DayClassification, *, in_sleep_window: bool) -> float:
+        """The offset the briefing's bedtime figure carries: tonight's bedtime bucket when ``in_sleep_window``."""
+        now = dt_util.now()
+        at = now
+        if in_sleep_window:
+            _sleep = _parse_time(self.config.get("sleep_time", "22:30"))
+            at = now.replace(hour=_sleep.hour, minute=_sleep.minute, second=0, microsecond=0)
+            if at <= now:
+                at += timedelta(days=1)
+        return self._preference_offset_at(classification, at, in_sleep_window=in_sleep_window)
+
+    def _promise_heat_offset(self, at: datetime, asleep: bool) -> float:
+        """The learned heat-floor offset the household promises judge against (0.0 with the feature off).
+
+        The same view and bucket as the band resolver. Uses the CURRENT classification's day type, so a reading from
+        before a day-type change is judged against today's offset (a small, bounded approximation).
+        """
+        c = self._current_classification
+        return 0.0 if c is None else self._preference_offset_at(c, at, in_sleep_window=asleep)
+
+    def _applied_remote_offset_f(self) -> float:
+        """The signed remote-sensor offset the thermostat's setpoint currently carries (heat: +), 0.0 when none."""
+        applied = getattr(self.automation_engine, "_remote_offset_applied_f", None)
+        return float(applied) if isinstance(applied, (int, float)) and not isinstance(applied, bool) else 0.0
+
+    def _record_preference_observation(
+        self, old_state: Any, new_state: Any, old_f: float | None, new_f: float | None
+    ) -> bool:
+        """Note an occupant setpoint change for preference learning; True when it was recorded.
+
+        Gated (docs/preference-learning-spec.md): feature on; automation on (observe-only reads every thermostat change,
+        including the thermostat's own schedule, as the occupant's); thermostat mode ``heat``; neither state in the Nest
+        Eco preset; occupancy home or guest; a classification; no time-of-use bank holding the setpoint. CA's own
+        writes and echoes never reach here (``_async_thermostat_changed`` excludes them first). An episode that starts
+        within 60 minutes before the wake time or bedtime is not learned from (a schedule signal).
+
+        The thermostat reports the setpoint it holds, which includes the applied bedroom remote-sensor offset; the
+        episode stores that offset when it opens and brings every reported value back to the comfort-target frame.
+        """
+        view = self.preference_view()
+        if view is None:
+            return False
+        c = self._current_classification
+        reasons = {
+            "automation off": not self._automation_enabled,
+            "mode not heat": getattr(new_state, "state", None) != "heat",
+            "eco preset": any(
+                str(getattr(st, "attributes", {}).get("preset_mode", "")).lower() == "eco"
+                for st in (old_state, new_state)
+            ),
+            "not home or guest": self._occupancy_mode not in (OCCUPANCY_HOME, OCCUPANCY_GUEST),
+            "no classification": c is None,
+            "no usable setpoint": old_f is None or new_f is None,
+        }
+        skipped = [why for why, hit in reasons.items() if hit]
+        if skipped:
+            _LOGGER.info("Preference observation skipped: reason=%s old=%s new=%s", ", ".join(skipped), old_f, new_f)
+            return False
+        now = dt_util.now()
+        if self._tou_bank_in_force(now) is not None:
+            _LOGGER.info("Preference observation skipped: reason=a time-of-use bank holds the setpoint")
+            return False
+        asleep = _in_sleep_window(now, self.config)
+        savings = bool(self.config.get("aggressive_savings", False))
+        common = {"occupancy_mode": self._occupancy_mode, "in_sleep_window": asleep, "aggressive_savings": savings}
+        base = select_comfort_band(c, self.config, **common, at=now, preferences=None)
+        target = select_comfort_band(c, self.config, **common, at=now, preferences=view)
+        bucket = view.offset_at(now, str(c.day_type), self.config, in_sleep_window=asleep)[1]
+        remote_f = self._applied_remote_offset_f()
+        changed = self.learning.record_preference_change(
+            at=now,
+            old_f=float(old_f),
+            new_f=float(new_f),
+            remote_f=remote_f,
+            bucket=bucket,
+            base_f=base.floor,
+            target_f=target.floor,
+            excluded=near_schedule_edge(now, self.config.get("wake_time"), self.config.get("sleep_time")),
+        )
+        return changed is True
+
+    def _flush_preference_episode(self) -> bool:
+        """Close the open preference episode once its 15 minutes have passed (lazy, no timer); True = state changed.
+
+        With the feature off the open episode is discarded, never recorded. A failure here must not stop the rest of
+        the update cycle, so it is logged and swallowed.
+        """
+        try:
+            if self.preference_view() is None:
+                return self.learning.discard_preference_episode() is True
+            return self.learning.flush_preference_episode(dt_util.now()) is True
+        except Exception:
+            _LOGGER.error("Preference episode flush failed; continuing the update cycle", exc_info=True)
+            return False
+
+    def _run_preference_update(self, now: datetime) -> bool:
+        """End-of-day hook: close the episode, then run the weekly update when due (only while enabled).
+
+        Returns True when the learning state changed and needs saving. A failure is logged and swallowed so the
+        end-of-day reset still runs.
+        """
+        try:
+            if self.preference_view() is None:
+                return self.learning.discard_preference_episode() is True
+            closed = self.learning.flush_preference_episode(now) is True
+            due = self.learning.run_preference_update(
+                now.date(),
+                max_offset_f=float(self.config.get(CONF_PREFERENCE_MAX_OFFSET_F, DEFAULT_PREFERENCE_MAX_OFFSET_F)),
+                step_f=float(self.config.get(CONF_PREFERENCE_WEEKLY_STEP_F, DEFAULT_PREFERENCE_WEEKLY_STEP_F)),
+            )
+            return closed or due is not None
+        except Exception:
+            _LOGGER.error("Preference weekly update failed; continuing end of day", exc_info=True)
+            return False
+
+    def preference_status(self) -> dict[str, Any]:
+        """Status/dashboard view of preference learning (always present; ``enabled`` False = nothing else matters).
+
+        ``active_offset_f`` is the offset the armed heat floor actually carries right now (armed minus configured, so an
+        away band or a ceiling cap shows 0.0 or the capped amount); ``bucket`` is the situation now. Each bucket row
+        carries the applied (cap-clamped) ``offset_f`` and the ``stored_offset_f`` the weekly update wrote.
+        """
+        view = self.preference_view()
+        out: dict[str, Any] = {"enabled": view is not None}
+        if view is None:
+            return out
+        summary = self.learning.preference_summary()
+        c = self._current_classification
+        now = dt_util.now()
+        bucket = armed_f = configured_f = None
+        active_f = 0.0
+        if c is not None:
+            asleep = _in_sleep_window(now, self.config)
+            bucket = view.offset_at(now, str(c.day_type), self.config, in_sleep_window=asleep)[1]
+            common = {
+                "occupancy_mode": self._occupancy_mode,
+                "in_sleep_window": asleep,
+                "aggressive_savings": bool(self.config.get("aggressive_savings", False)),
+                "at": now,
+            }
+            armed_f = select_comfort_band(c, self.config, **common, preferences=view).floor
+            configured_f = select_comfort_band(c, self.config, **common, preferences=None).floor
+            active_f = round(armed_f - configured_f, 1)
+        out.update(
+            bucket=bucket,
+            active_offset_f=active_f,
+            armed_floor_f=armed_f,
+            configured_floor_f=configured_f,
+            max_offset_f=view.max_offset_f,
+            observation_count=summary["observation_count"],
+            last_update=summary["last_update"],
+            buckets=[
+                {**b_, "stored_offset_f": b_["offset_f"], "offset_f": view.offset_for(b_["bucket"])}
+                for b_ in summary["buckets"]
+            ],
+        )
+        return out
+
     async def _async_end_of_day(self, now: datetime) -> None:
         """Finalize the day's record and reset for tomorrow."""
         if self._today_record:
@@ -11394,6 +11609,10 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             self.learning.record_day(self._today_record)
             await self._executor_job(self.learning.save_state)
             _LOGGER.info("Day record saved for learning")
+
+        # fork Dunky13#1: weekly preference update (when enabled and due)
+        if self._run_preference_update(now) is True:
+            await self._executor_job(self.learning.save_state)
 
         self._today_record = None
         self._briefing_sent_today = False
@@ -12522,6 +12741,18 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
                     _cmd_age,
                 )
             _LOGGER.debug("Possible manual override detected: %s -> %s", old_temp, new_temp)
+            try:
+                if _setpoint_numeric and self._record_preference_observation(
+                    old_state, new_state, old_setpoint_f, new_setpoint_f
+                ):
+                    await self._executor_job(self.learning.save_state)
+            except Exception:  # preference learning must never break override handling
+                _LOGGER.error(
+                    "Preference observation failed; continuing override handling: old=%s new=%s",
+                    old_setpoint_f,
+                    new_setpoint_f,
+                    exc_info=True,
+                )
             await self._async_save_state()
             # Setpoint-only override: mode matches what CA is actively controlling.
             # Use _last_commanded_hvac_mode so heat_cool mode is handled (classification.hvac_mode
@@ -13705,7 +13936,10 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             self._record_promise_reading()
             window = self._promise_journal.window(dt_util.now())
             cfg = PromiseConfig.from_config(
-                self.config, p2_min_overlap_s=AC_WHF_OVERLAP_TOLERANCE_S, p2_excuse_observe_only=False
+                self.config,
+                p2_min_overlap_s=AC_WHF_OVERLAP_TOLERANCE_S,
+                p2_excuse_observe_only=False,
+                heat_offset_at=self._promise_heat_offset,
             )
             return any(h.promise == "ac_whf_mutex" for h in run_promise_checks(window, cfg, scope=SCOPE_HOME))
         except Exception:
@@ -13875,7 +14109,9 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             )
         now = dt_util.now()
         window = journal.window(now)
-        cfg = PromiseConfig.from_config(self.config, p2_min_overlap_s=AC_WHF_OVERLAP_TOLERANCE_S)
+        cfg = PromiseConfig.from_config(
+            self.config, p2_min_overlap_s=AC_WHF_OVERLAP_TOLERANCE_S, heat_offset_at=self._promise_heat_offset
+        )
         hits = run_promise_checks(window, cfg, scope=SCOPE_HOME)
         # Issue #1260: time a promise did not count under a named exception, counted apart from hits.
         excused_changed = False
@@ -16902,6 +17138,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
                 self.config,
                 occupancy_mode=self._occupancy_mode,
                 now=dt_util.now(),
+                preferences=self.preference_view(),
             )
         _armed_heat, _armed_cool = _armed.floor, _armed.ceiling
         # Issues #1211/#1276: ONE direction rule for every branch of this card (the windows-day evening branch
@@ -18839,6 +19076,18 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
                     if c.hvac_mode == "heat"
                     else self.config.get(CONF_SLEEP_COOL, DEFAULT_SLEEP_COOL)
                 )
+                _pref_view = self.preference_view() if c.hvac_mode == "heat" else None
+                if _pref_view is not None:
+                    # Fork Dunky13#1: the sleep floor bedtime arms, learned night offset included (the seam).
+                    bedtime_target = select_comfort_band(
+                        c,
+                        self.config,
+                        occupancy_mode=OCCUPANCY_HOME,
+                        in_sleep_window=True,
+                        aggressive_savings=False,
+                        at=st_dt,
+                        preferences=_pref_view,
+                    ).floor
                 mode_label = "heat" if c.hvac_mode == "heat" else "cool"
                 candidates.append(
                     (
@@ -19328,6 +19577,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
                 occupancy_mode=self._occupancy_mode,
                 classification=self._current_classification,
                 band_schedule=_raw_band,
+                preference_view=self.preference_view(),
                 tomorrow_window=self._tomorrow_window_plan(),
             )
             predicted_indoor = [{"ts": p["ts"], "temp": _conv(p["temp"])} for p in _raw_predicted_indoor]
@@ -19412,6 +19662,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
                         occupancy_mode=self._occupancy_mode,
                         classification=self._current_classification,
                         band_schedule=_fallback_inputs[2],
+                        preference_view=self.preference_view(),
                         tomorrow_window=self._tomorrow_window_plan(),
                     )
                 ]
@@ -20765,6 +21016,7 @@ def _compute_target_band_schedule(
     pre_cool_target: float | None = None,
     tou_precondition_window: tuple[datetime, datetime, float, str] | None = None,
     restore_hold: bool = False,
+    preference_view: PreferenceView | None = None,
 ) -> list[dict]:
     """Compute the dynamic target band (lower/upper) for each hourly timestamp.
 
@@ -20809,6 +21061,11 @@ def _compute_target_band_schedule(
     the thermostat is still on the away setback. Home timestamps today that are not after
     ``now`` then show the setback band, so the chart never claims comfort the engine is not
     commanding. Later hours show the normal schedule (the hold is expected to clear).
+
+    ``preference_view`` (fork Dunky13#1): the learned setpoint preferences. Each home timestamp's heat floor (awake
+    and sleep branches, ramps included) carries the offset of its own bucket, through the same
+    ``awake_comfort_edges()`` / sleep-floor rule the engine's ``select_comfort_band()`` applies. Future days use the
+    live classification's day type (the same assumption the rest of this chart makes). None = feature off, unchanged.
     """
     comfort_heat = float(config.get("comfort_heat", DEFAULT_COMFORT_HEAT))
     comfort_cool = float(config.get("comfort_cool", DEFAULT_COMFORT_COOL))
@@ -20849,11 +21106,24 @@ def _compute_target_band_schedule(
 
     now_date = now.date() if hasattr(now, "date") else None
 
+    _aggressive = bool(config.get("aggressive_savings", False))
+
+    def _pref_off(ts: datetime, night: bool) -> float:
+        if preference_view is None or classification is None:
+            return 0.0
+        return preference_view.offset_at(ts, str(classification.day_type), config, in_sleep_window=night)[0]
+
     result = []
     for ts in hourly_timestamps:
         if ts is None:
             continue
         ts_date = ts.date() if hasattr(ts, "date") else None
+        # Per-timestamp heat floors with this bucket's learned offset (0.0 = feature off: exactly the values above).
+        _sleep_off = _pref_off(ts, True)
+        sleep_heat_ts = min(sleep_heat + _sleep_off, sleep_cool) if _sleep_off else sleep_heat
+        awake_heat_ts = awake_comfort_edges(
+            config, aggressive_savings=_aggressive, preference_offset_f=_pref_off(ts, False)
+        )[0]
 
         # I5: vacation applies setback to ALL days (not just today); away only applies to today
         if occupancy_mode == OCCUPANCY_VACATION:
@@ -20869,7 +21139,7 @@ def _compute_target_band_schedule(
 
             if h_n < wake_h:
                 # Pre-wake: sleep band; apply pre-cool ceiling from trigger time onward
-                lower = sleep_heat
+                lower = sleep_heat_ts
                 if pre_cool_trigger_h is not None and pre_cool_target is not None and h_n >= pre_cool_trigger_h:
                     upper = pre_cool_target
                 else:
@@ -20877,20 +21147,20 @@ def _compute_target_band_schedule(
             elif h_n < wake_h + wake_ramp_h:
                 # Wake ramp: interpolate toward comfort
                 frac = (h_n - wake_h) / wake_ramp_h
-                lower = sleep_heat + frac * (awake_heat - sleep_heat)
+                lower = sleep_heat_ts + frac * (awake_heat_ts - sleep_heat_ts)
                 upper = sleep_cool + frac * (awake_cool - sleep_cool)
             elif h_n < sleep_h:
                 # Awake: comfort band (Issue #1087: incl. the aggressive-savings margin)
-                lower = awake_heat
+                lower = awake_heat_ts
                 upper = awake_cool
             elif h_n < sleep_h + sleep_ramp_h:
                 # Sleep ramp: interpolate toward sleep setback
                 frac = (h_n - sleep_h) / sleep_ramp_h
-                lower = awake_heat + frac * (sleep_heat - awake_heat)
+                lower = awake_heat_ts + frac * (sleep_heat_ts - awake_heat_ts)
                 upper = awake_cool + frac * (sleep_cool - awake_cool)
             else:
                 # Post-sleep: sleep band; apply pre-cool ceiling from trigger time onward
-                lower = sleep_heat
+                lower = sleep_heat_ts
                 if pre_cool_trigger_h is not None and pre_cool_target is not None and h_n >= pre_cool_trigger_h:
                     upper = pre_cool_target
                 else:
@@ -21022,6 +21292,7 @@ def _build_predicted_indoor_future(
     band_schedule: list[dict] | None = None,
     tou_precondition_window: tuple[datetime, datetime, float, str] | None = None,
     tomorrow_window: tuple[bool, Any, Any] | None = None,
+    preference_view: PreferenceView | None = None,
 ) -> list[dict]:
     """Build future predicted indoor temps from the automation plan.
 
@@ -21229,6 +21500,7 @@ def _build_predicted_indoor_future(
             pre_cool_trigger_h=_ode_pc_trigger_h,
             pre_cool_target=_ode_pc_target,
             tou_precondition_window=tou_precondition_window,
+            preference_view=preference_view,
         )
         _band_lookup = {b["ts"]: b for b in _computed_band_schedule}
 

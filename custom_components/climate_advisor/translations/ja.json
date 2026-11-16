@@ -169,6 +169,7 @@
           "notifications": "通知",
           "advanced": "学習と動作",
           "classification_thresholds": "日のタイプのしきい値",
+          "preference_learning": "好みの学習",
           "ai_settings": "Claude AI の設定",
           "github_settings": "GitHub 連携"
         }
@@ -447,6 +448,20 @@
           "threshold_warm": "予報最高気温がこの温度以上の日は「暖かい」(窓の開放を推奨、エアコンなし)に分類されます。既定値: 75°F / 24°C。",
           "threshold_mild": "予報最高気温がこの温度以上の日は「穏やか」(快適、窓を開ける)に分類されます。既定値: 60°F / 16°C。",
           "threshold_cool": "予報最高気温がこの温度以上の日は「涼しい」(軽い暖房)に分類されます。これを下回る日は「寒い」(本格的な暖房)です。既定値: 45°F / 7°C。"
+        }
+      },
+      "preference_learning": {
+        "title": "好みの学習",
+        "description": "Climate Advisor は、あなた自身のサーモスタット操作から本当に望む暖房温度を、日の種類、時間帯、平日か週末かごとに学習し、下記の安全な範囲内で適用します。暖房のみ。冷房は変更されません。事前にサーモスタットのスケジュールとエコモードをオフにしてください。",
+        "data": {
+          "preference_learning_enabled": "暖房の好みを学習する",
+          "preference_max_offset_f": "学習による調整の上限",
+          "preference_weekly_step_f": "週ごとの変更の上限"
+        },
+        "data_description": {
+          "preference_learning_enabled": "オンにすると、似た時間帯に繰り返したサーモスタット操作に応じて、その時間帯に Climate Advisor が設定する暖房温度がずれます。初期設定はオフです。",
+          "preference_max_offset_f": "学習した調整が、設定した温度から暖房温度を上下に動かせる最大幅です。",
+          "preference_weekly_step_f": "学習した調整が1週間に変えられる最大幅です。"
         }
       },
       "ai_settings": {
@@ -757,7 +772,8 @@
         "all": "学習したすべてのデータ",
         "thermal_model": "熱モデル",
         "weather_bias": "天気予報の偏り",
-        "suggestions": "却下した提案"
+        "suggestions": "却下した提案",
+        "preferences": "学習した好み"
       }
     },
     "schedule_applies_to": {

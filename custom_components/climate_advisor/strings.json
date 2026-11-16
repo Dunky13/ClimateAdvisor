@@ -169,6 +169,7 @@
           "notifications": "Notifications",
           "advanced": "Learning & Behavior",
           "classification_thresholds": "Day-Type Thresholds",
+          "preference_learning": "Preference Learning",
           "ai_settings": "Claude AI Settings",
           "github_settings": "GitHub Integration"
         }
@@ -447,6 +448,20 @@
           "threshold_warm": "Days with a forecast high at or above this temperature are classified as Warm (windows recommended, no AC). Default: 75°F / 24°C.",
           "threshold_mild": "Days with a forecast high at or above this temperature are classified as Mild (comfortable, windows open). Default: 60°F / 16°C.",
           "threshold_cool": "Days with a forecast high at or above this temperature are classified as Cool (heating light). Below this is Cold (full heating). Default: 45°F / 7°C."
+        }
+      },
+      "preference_learning": {
+        "title": "Preference Learning",
+        "description": "Climate Advisor learns the heating temperature you actually want from your own thermostat changes, per kind of day, part of the day and weekday or weekend, and applies it within the safe limits below. Heating only. Cooling is never changed. Turn off any thermostat schedule or eco mode first.",
+        "data": {
+          "preference_learning_enabled": "Learn my heating preferences",
+          "preference_max_offset_f": "Maximum learned adjustment",
+          "preference_weekly_step_f": "Maximum weekly change"
+        },
+        "data_description": {
+          "preference_learning_enabled": "When on, repeated thermostat changes you make at similar times shift the heating temperature Climate Advisor sets for that kind of time. Off by default.",
+          "preference_max_offset_f": "The most a learned adjustment may move the heating temperature up or down from your configured setpoint.",
+          "preference_weekly_step_f": "The most one learned adjustment may change per week."
         }
       },
       "ai_settings": {
@@ -757,7 +772,8 @@
         "all": "All learned data",
         "thermal_model": "Thermal model",
         "weather_bias": "Weather forecast bias",
-        "suggestions": "Dismissed suggestions"
+        "suggestions": "Dismissed suggestions",
+        "preferences": "Learned preferences"
       }
     },
     "schedule_applies_to": {

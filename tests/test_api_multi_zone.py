@@ -247,6 +247,19 @@ class TestAmbiguousZonePostRefusal:
         zone_a.async_request_refresh.assert_not_called()
         zone_b.async_request_refresh.assert_not_called()
 
+    def test_reset_preferences_view_refuses_when_ambiguous(self):
+        from custom_components.climate_advisor.api import ClimateAdvisorResetPreferencesView
+
+        zone_a, zone_b = MagicMock(), MagicMock()
+        view = ClimateAdvisorResetPreferencesView()
+        request = self._make_ambiguous_request({"entry_a": zone_a, "entry_b": zone_b})
+        resp = asyncio.run(view.post(request))
+
+        assert resp.status == 400
+        assert resp.json_data["zone_selection_required"] is True
+        zone_a.learning.reset.assert_not_called()
+        zone_b.learning.reset.assert_not_called()
+
     def test_get_view_still_guesses_when_ambiguous_not_refused(self):
         """A GET (display-only) view keeps the pre-existing degrade-with-warning
         behavior — only POST/action views are made strict by this change."""

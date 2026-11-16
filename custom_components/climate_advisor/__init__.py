@@ -23,7 +23,7 @@ from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.start import async_at_started
 
 from . import i18n, log_capture, zone_registry
-from .api import API_VIEWS, ZONELESS_VIEWS
+from .api import API_VIEWS, ZONELESS_VIEWS, apply_accepted_changes
 from .const import (
     CONF_AI_API_KEY,
     CONF_AI_AUTO_REQUESTS_PER_DAY,
@@ -677,8 +677,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         log_capture.bind_zone_for_executor(zone_coordinator.learning.save_state)
                     )
                     _LOGGER.info("Suggestion accepted: %s → changes: %s", suggestion_key, changes)
-                    # Apply changes to coordinator config
-                    zone_coordinator.config.update(changes)
+                    # Same apply-and-persist path as the dashboard accept (api.apply_accepted_changes)
+                    apply_accepted_changes(hass, zone_coordinator, changes)
                 elif action == "dismiss":
                     zone_coordinator.learning.dismiss_suggestion(suggestion_key)
                     await hass.async_add_executor_job(
@@ -738,7 +738,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         RESET_LEARNING_SCHEMA = vol.Schema(
             {
                 vol.Required("entry_id"): cv.string,
-                vol.Optional("scope", default="all"): vol.In(["thermal_model", "weather_bias", "suggestions", "all"]),
+                vol.Optional("scope", default="all"): vol.In(
+                    ["thermal_model", "weather_bias", "suggestions", "preferences", "all"]
+                ),
             }
         )
 

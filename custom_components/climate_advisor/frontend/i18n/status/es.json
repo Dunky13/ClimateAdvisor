@@ -184,6 +184,8 @@
   "status.pre_cool_status.scheduled": "Preenfriamiento programado ({target} a las {t})",
   "status.pre_cool_status.suppressed_achieved": "preenfriamiento suprimido — la ventilación natural alcanzó {indoor} (objetivo {target})",
   "status.pre_cool_status.suppressed_session": "preenfriamiento suprimido — sesión de ventilación natural/ventilador activa",
+  "status.preference.applied": "Mínimo de calefacción {armed} en lugar del configurado {configured}: aprendido {sign}{amount} para {part, select, night {noche} morning {mañana} afternoon {tarde} evening {anochecer} other {{part}}}, {day_class, select, weekday {entre semana} weekend {fin de semana} other {{day_class}}} (observaciones: {n, number}{has_update, select, yes {, última actualización: {when}} other {, sin actualización aún}}).",
+  "status.preference.neutral": "El aprendizaje de preferencias está activo; el mínimo de calefacción no cambia ahora (observaciones: {n, number}{has_update, select, yes {, última actualización: {when}} other {, sin actualización aún}}).",
   "status.promise.ac_whf_mutex": "{n}: aire acondicionado y ventilador nunca a la vez",
   "status.promise.blind_fan_continue": "{n}: ventilador sigue sin sensor interior",
   "status.promise.comfort_kept": "{n}: confort mantenido",

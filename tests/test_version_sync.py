@@ -19,8 +19,8 @@ class TestVersionSync:
         )
 
     def test_version_is_semver(self):
-        """VERSION must be a valid semver string (MAJOR.MINOR.PATCH)."""
+        """VERSION must be MAJOR.MINOR.PATCH, plus an optional fourth fork revision (0.9.41.1)."""
         parts = VERSION.split(".")
-        assert len(parts) == 3, f"VERSION '{VERSION}' is not MAJOR.MINOR.PATCH"
+        assert len(parts) in (3, 4), f"VERSION '{VERSION}' is not MAJOR.MINOR.PATCH[.FORK]"
         for part in parts:
             assert part.isdigit(), f"VERSION segment '{part}' is not numeric"

@@ -101,7 +101,7 @@ def test_detached_head_reports_no_branch(repo: Path) -> None:
 
 
 def test_local_version_reads_const() -> None:
-    assert deploy.local_version().count(".") == 2
+    assert deploy.local_version().count(".") in (2, 3)  # MAJOR.MINOR.PATCH[.FORK]
 
 
 def test_no_branch_is_long_lived_since_0_9_was_promoted_to_main() -> None:

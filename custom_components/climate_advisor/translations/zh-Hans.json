@@ -169,6 +169,7 @@
           "notifications": "通知",
           "advanced": "学习与行为",
           "classification_thresholds": "日类型阈值",
+          "preference_learning": "偏好学习",
           "ai_settings": "Claude AI 设置",
           "github_settings": "GitHub 集成"
         }
@@ -447,6 +448,20 @@
           "threshold_warm": "预报最高温度达到或高于此温度的日子归为温暖（建议开窗，不用空调）。默认值：75°F / 24°C。",
           "threshold_mild": "预报最高温度达到或高于此温度的日子归为温和（舒适，开窗）。默认值：60°F / 16°C。",
           "threshold_cool": "预报最高温度达到或高于此温度的日子归为凉爽（少量制热）。低于此温度为寒冷（全力制热）。默认值：45°F / 7°C。"
+        }
+      },
+      "preference_learning": {
+        "title": "偏好学习",
+        "description": "Climate Advisor 会根据您自己对温控器的调整，按天气类型、一天中的时段以及工作日或周末，学习您真正想要的供暖温度，并在下方的安全范围内应用。仅限供暖。制冷永远不会被更改。请先关闭温控器的日程和节能模式。",
+        "data": {
+          "preference_learning_enabled": "学习我的供暖偏好",
+          "preference_max_offset_f": "学习调整的最大幅度",
+          "preference_weekly_step_f": "每周最大变化"
+        },
+        "data_description": {
+          "preference_learning_enabled": "开启后，您在相似时段反复进行的温控器调整会改变 Climate Advisor 为该类时段设定的供暖温度。默认关闭。",
+          "preference_max_offset_f": "学习到的调整相对于您设定的温度，最多可将供暖温度上调或下调的幅度。",
+          "preference_weekly_step_f": "学习到的调整每周最多可变化的幅度。"
         }
       },
       "ai_settings": {
@@ -757,7 +772,8 @@
         "all": "所有已学习的数据",
         "thermal_model": "热模型",
         "weather_bias": "天气预报偏差",
-        "suggestions": "已忽略的建议"
+        "suggestions": "已忽略的建议",
+        "preferences": "已学习的偏好"
       }
     },
     "schedule_applies_to": {

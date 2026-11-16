@@ -6,7 +6,7 @@ DOMAIN = "climate_advisor"
 
 # Integration version — MUST match manifest.json "version" field.
 # A test in tests/test_version_sync.py enforces this.
-VERSION = "0.9.41"
+VERSION = "0.9.41.1"
 
 GITHUB_REPO = "gunkl/ClimateAdvisor"
 GITHUB_REPO_URL = "https://github.com/gunkl/ClimateAdvisor"
@@ -110,6 +110,12 @@ CONF_MAX_PREHEAT_MINUTES = "max_preheat_minutes"
 CONF_DEFAULT_PREHEAT_MINUTES = "default_preheat_minutes"
 CONF_PREHEAT_SAFETY_MARGIN = "preheat_safety_margin"
 CONF_MAX_SETBACK_DEPTH = "max_setback_depth_f"
+# Fork Dunky13#1 (setpoint preference learning): the keys and the one canonical default each (degF deltas).
+CONF_PREFERENCE_LEARNING_ENABLED = "preference_learning_enabled"
+CONF_PREFERENCE_MAX_OFFSET_F = "preference_max_offset_f"
+CONF_PREFERENCE_WEEKLY_STEP_F = "preference_weekly_step_f"
+DEFAULT_PREFERENCE_MAX_OFFSET_F = 3.6  # 2 C
+DEFAULT_PREFERENCE_WEEKLY_STEP_F = 0.9  # 0.5 C
 
 # TOU pre-conditioning fallback lead time (Issue #797) — used by resolve_tou_phase()
 # when the thermal model hasn't learned k_active_heat/k_active_cool yet. Bounds stay
@@ -792,6 +798,7 @@ API_SEND_BRIEFING = f"{API_BASE}/send_briefing"
 API_RESPOND_SUGGESTION = f"{API_BASE}/respond_suggestion"
 API_CONFIG = f"{API_BASE}/config"
 API_CANCEL_OVERRIDE = f"{API_BASE}/cancel_override"
+API_RESET_PREFERENCES = f"{API_BASE}/reset_preferences"  # fork Dunky13#1: clears only the learned setpoint preferences
 API_CANCEL_FAN_OVERRIDE = f"{API_BASE}/cancel_fan_override"
 API_RESUME_FROM_PAUSE = f"{API_BASE}/resume_from_pause"
 API_TOGGLE_AUTOMATION = f"{API_BASE}/toggle_automation"
@@ -1323,6 +1330,27 @@ CONFIG_METADATA = {
     "max_setback_depth_f": {
         "label": "Maximum Setback Depth",
         "description": "Largest overnight setback the adaptive engine may compute.",
+        "category": "advanced",
+        "display_transform": "temp_delta",
+    },
+    "preference_learning_enabled": {
+        "label": "Learn Setpoint Preferences",
+        "description": (
+            "Learn the heating temperature you actually want from your own thermostat changes, per weather, part"
+            " of the day and weekday or weekend, and apply it automatically within the limits below. Heating only."
+            " Needs automation on (not observe-only)."
+        ),
+        "category": "advanced",
+    },
+    "preference_max_offset_f": {
+        "label": "Preference Learning Maximum Offset",
+        "description": "Largest change from your configured heat setpoint that learned preferences may apply.",
+        "category": "advanced",
+        "display_transform": "temp_delta",
+    },
+    "preference_weekly_step_f": {
+        "label": "Preference Learning Weekly Step",
+        "description": "Largest change to one learned preference in a single weekly update.",
         "category": "advanced",
         "display_transform": "temp_delta",
     },
@@ -2311,6 +2339,9 @@ _METADATA_DEFAULTS: dict[str, Any] = {
     "preheat_safety_margin": 1.3,
     "max_setback_depth_f": 8.0,  # config_flow._DELTA_FIELDS_F (a degF delta; guarded by a test)
     "aggressive_savings": False,
+    "preference_learning_enabled": False,
+    "preference_max_offset_f": DEFAULT_PREFERENCE_MAX_OFFSET_F,
+    "preference_weekly_step_f": DEFAULT_PREFERENCE_WEEKLY_STEP_F,
     "comfort_mode_switch_min_interval_s": 600,
     "comfort_deadband_hot_f": DEFAULT_COMFORT_DEADBAND_HOT_F,
     "comfort_deadband_warm_f": DEFAULT_COMFORT_DEADBAND_WARM_F,

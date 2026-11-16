@@ -309,7 +309,7 @@
   "activity.pre_cool_overshoot_temps": "予冷が行き過ぎ -- 室温 {indoor} < 下限 {floor}",
   "activity.pre_cool_suppressed_nat_vent": "予冷を見送り -- 自然換気ですでに目標に到達",
   "activity.reason_band_edge_used": "{band} -- {edge}の端を使用({target}で{shape})",
-  "activity.reason_band_select": "{ctx}の範囲 [{floor}/{ceiling}](日={day_type}、有効={active}{aggressive, select, yes {、積極的} other {}}{has_tou, select, yes {、tou_expansion={tou}} other {}})",
+  "activity.reason_band_select": "{ctx}の範囲 [{floor}/{ceiling}](日={day_type}、有効={active}{aggressive, select, yes {、積極的} other {}}{has_tou, select, yes {、tou_expansion={tou}} other {}}{has_pref, select, yes {, preference={pref_bucket} {pref}} other {}})",
   "activity.reason_bedtime_no_classification": "就寝時刻 — 分類なし",
   "activity.reason_bedtime_nv_not_active": "就寝時刻 — 自然換気は作動していません",
   "activity.reason_bedtime_sleep_band": "就寝時刻 — 就寝時の範囲 [{floor}/{ceiling}]",

@@ -57,6 +57,10 @@ PRODUCTION_ALLOWLIST: dict[tuple[str, str], str] = {
     ): "read-only provider install, once in __init__ (#1566): this zone's learned thermostat fan profile",
     (
         "custom_components/climate_advisor/coordinator.py",
+        "_preference_view_provider",
+    ): "read-only provider install, once in __init__ (fork Dunky13#1): this zone's learned setpoint preferences",
+    (
+        "custom_components/climate_advisor/coordinator.py",
         "_command_observer",
     ): "observer install, once in __init__ (#1128 promises): sees every command, changes nothing",
     (

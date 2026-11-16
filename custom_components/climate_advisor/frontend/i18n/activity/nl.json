@@ -309,7 +309,7 @@
   "activity.pre_cool_overshoot_temps": "Voorkoelen te ver doorgeschoten -- binnen {indoor} < ondergrens {floor}",
   "activity.pre_cool_suppressed_nat_vent": "Voorkoelen onderdrukt -- natuurlijke ventilatie bereikte het doel al",
   "activity.reason_band_edge_used": "{band} -- grens {edge} gebruikt ({shape} bij {target})",
-  "activity.reason_band_select": "{ctx}-bereik [{floor}/{ceiling}] (day={day_type}, active={active}{aggressive, select, yes {, aggressive} other {}}{has_tou, select, yes {, tou_expansion={tou}} other {}})",
+  "activity.reason_band_select": "{ctx}-bereik [{floor}/{ceiling}] (day={day_type}, active={active}{aggressive, select, yes {, aggressive} other {}}{has_tou, select, yes {, tou_expansion={tou}} other {}}{has_pref, select, yes {, preference={pref_bucket} {pref}} other {}})",
   "activity.reason_bedtime_no_classification": "bedtijd — geen classificatie",
   "activity.reason_bedtime_nv_not_active": "bedtijd — natuurlijke ventilatie niet actief",
   "activity.reason_bedtime_sleep_band": "bedtijd — slaapbereik [{floor}/{ceiling}]",

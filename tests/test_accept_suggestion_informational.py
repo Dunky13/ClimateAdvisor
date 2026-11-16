@@ -56,5 +56,5 @@ class TestAcceptSuggestionInformationalKeys:
         engine = LearningEngine(tmp_path)
         with caplog.at_level(logging.INFO, logger=LEARNING_LOGGER):
             result = engine.accept_suggestion("frequent_overrides")
-        assert result == {"request_setpoint_analysis": True}
+        assert result == {"preference_learning_enabled": True}
         assert not any(r.levelno >= logging.WARNING for r in caplog.records)

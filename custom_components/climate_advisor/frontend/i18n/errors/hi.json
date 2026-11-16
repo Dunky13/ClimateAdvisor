@@ -26,6 +26,7 @@
   "errors.night_strategy_not_ready": "आज रात की बेडरूम रणनीति अभी तैयार नहीं है।",
   "errors.not_configured": "GitHub में समस्या भेजना कॉन्फ़िगर नहीं है।",
   "errors.not_loaded": "Climate Advisor लोड नहीं है",
+  "errors.preferences_reset": "सीखी हुई प्राथमिकताएँ मिटा दी गईं।",
   "errors.reclassify_triggered": "पुनर्वर्गीकरण शुरू किया गया",
   "errors.resume_done": "विराम से फिर शुरू किया गया। HVAC को {mode, select, none {लागू नहीं} heat {हीट} cool {कूल} off {बंद} auto {ऑटो} heat_cool {हीट/कूल} fan_only {केवल पंखा} other {{mode}}} पर सेट किया गया। मैन्युअल विराम अवधि शुरू हुई।",
   "errors.resume_not_paused": "अभी विराम पर नहीं है",

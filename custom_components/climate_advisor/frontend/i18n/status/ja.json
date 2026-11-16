@@ -184,6 +184,8 @@
   "status.pre_cool_status.scheduled": "予冷を予定（{target} @ {t}）",
   "status.pre_cool_status.suppressed_achieved": "予冷を抑制 — 自然換気で{indoor}に到達（目標 {target}）",
   "status.pre_cool_status.suppressed_session": "予冷を抑制 — 自然換気/全館換気ファンのセッション作動中",
+  "status.preference.applied": "暖房の下限は設定値{configured}ではなく{armed}です：{part, select, night {夜間} morning {午前} afternoon {午後} evening {夕方} other {{part}}}・{day_class, select, weekday {平日} weekend {週末} other {{day_class}}}で学習した{sign}{amount} (観測：{n, number}{has_update, select, yes {、最終更新：{when}} other {、まだ更新なし}})。",
+  "status.preference.neutral": "好みの学習はオンです。現在、暖房の下限は変更されていません (観測：{n, number}{has_update, select, yes {、最終更新：{when}} other {、まだ更新なし}})。",
   "status.promise.ac_whf_mutex": "{n}: エアコンと全館換気ファンの排他制御",
   "status.promise.blind_fan_continue": "{n}: 室温不明時のファン継続",
   "status.promise.comfort_kept": "{n}: 快適さの維持",

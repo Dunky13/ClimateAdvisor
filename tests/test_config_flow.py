@@ -2230,6 +2230,7 @@ class TestOptionsFlowMenu:
             "notifications",
             "advanced",
             "classification_thresholds",
+            "preference_learning",
             "ai_settings",
             "github_settings",
         ]

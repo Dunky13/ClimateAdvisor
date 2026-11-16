@@ -309,7 +309,7 @@
   "activity.pre_cool_overshoot_temps": "Pre-cool overshoot -- indoor {indoor} < floor {floor}",
   "activity.pre_cool_suppressed_nat_vent": "Pre-cool suppressed -- nat-vent already achieved target",
   "activity.reason_band_edge_used": "{band} -- {edge} edge used ({shape} at {target})",
-  "activity.reason_band_select": "{ctx} band [{floor}/{ceiling}] (day={day_type}, active={active}{aggressive, select, yes {, aggressive} other {}}{has_tou, select, yes {, tou_expansion={tou}} other {}})",
+  "activity.reason_band_select": "{ctx} band [{floor}/{ceiling}] (day={day_type}, active={active}{aggressive, select, yes {, aggressive} other {}}{has_tou, select, yes {, tou_expansion={tou}} other {}}{has_pref, select, yes {, preference={pref_bucket} {pref}} other {}})",
   "activity.reason_bedtime_no_classification": "bedtime — no classification",
   "activity.reason_bedtime_nv_not_active": "bedtime — nat-vent not active",
   "activity.reason_bedtime_sleep_band": "bedtime — sleep band [{floor}/{ceiling}]",

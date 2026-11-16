@@ -169,6 +169,7 @@
           "notifications": "Bildirimler",
           "advanced": "Öğrenme ve davranış",
           "classification_thresholds": "Gün tipi eşikleri",
+          "preference_learning": "Tercih öğrenme",
           "ai_settings": "Claude yapay zekâ ayarları",
           "github_settings": "GitHub entegrasyonu"
         }
@@ -447,6 +448,20 @@
           "threshold_warm": "Tahmini en yüksek sıcaklığı bu değere eşit veya üstünde olan günler Ilık (pencereler önerilir, klima yok) olarak sınıflandırılır. Varsayılan: 75°F / 24°C.",
           "threshold_mild": "Tahmini en yüksek sıcaklığı bu değere eşit veya üstünde olan günler Ilıman (rahat, pencereler açık) olarak sınıflandırılır. Varsayılan: 60°F / 16°C.",
           "threshold_cool": "Tahmini en yüksek sıcaklığı bu değere eşit veya üstünde olan günler Serin (hafif ısıtma) olarak sınıflandırılır. Bunun altı Soğuk'tur (tam ısıtma). Varsayılan: 45°F / 7°C."
+        }
+      },
+      "preference_learning": {
+        "title": "Tercih öğrenme",
+        "description": "Climate Advisor, kendi termostat değişikliklerinizden gerçekten istediğiniz ısıtma sıcaklığını gün türüne, günün bölümüne ve hafta içi ya da hafta sonuna göre öğrenir ve aşağıdaki güvenli sınırlar içinde uygular. Yalnızca ısıtma. Soğutma asla değiştirilmez. Önce termostattaki zamanlamaları ve eko modunu kapatın.",
+        "data": {
+          "preference_learning_enabled": "Isıtma tercihlerimi öğren",
+          "preference_max_offset_f": "En yüksek öğrenilmiş ayar",
+          "preference_weekly_step_f": "Haftalık en yüksek değişim"
+        },
+        "data_description": {
+          "preference_learning_enabled": "Açıkken, benzer zamanlarda yaptığınız tekrarlı termostat değişiklikleri, Climate Advisor'ın o zaman türü için belirlediği ısıtma sıcaklığını kaydırır. Varsayılan olarak kapalıdır.",
+          "preference_max_offset_f": "Öğrenilmiş bir ayarın ısıtma sıcaklığını yapılandırılmış değerden en fazla ne kadar yükseltebileceği veya düşürebileceği.",
+          "preference_weekly_step_f": "Öğrenilmiş bir ayarın haftada en fazla ne kadar değişebileceği."
         }
       },
       "ai_settings": {
@@ -757,7 +772,8 @@
         "all": "Tüm öğrenilen veriler",
         "thermal_model": "Termal model",
         "weather_bias": "Hava durumu tahmin sapması",
-        "suggestions": "Reddedilen öneriler"
+        "suggestions": "Reddedilen öneriler",
+        "preferences": "Öğrenilmiş tercihler"
       }
     },
     "schedule_applies_to": {

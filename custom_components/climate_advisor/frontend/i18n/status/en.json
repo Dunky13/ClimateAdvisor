@@ -184,6 +184,8 @@
   "status.pre_cool_status.scheduled": "Pre-cool scheduled ({target} @ {t})",
   "status.pre_cool_status.suppressed_achieved": "pre-cool suppressed — nat-vent achieved {indoor} (target {target})",
   "status.pre_cool_status.suppressed_session": "pre-cool suppressed — nat-vent/WHF session active",
+  "status.preference.applied": "Heat floor {armed} instead of the configured {configured}: learned {sign}{amount} for {part, select, night {night} morning {morning} afternoon {afternoon} evening {evening} other {{part}}}, {day_class, select, weekday {weekday} weekend {weekend} other {{day_class}}} (observations: {n, number}{has_update, select, yes {, last update: {when}} other {, no update yet}}).",
+  "status.preference.neutral": "Preference learning is on, no change to the heat floor right now (observations: {n, number}{has_update, select, yes {, last update: {when}} other {, no update yet}}).",
   "status.promise.ac_whf_mutex": "{n}: ac whf mutex",
   "status.promise.blind_fan_continue": "{n}: blind fan continue",
   "status.promise.comfort_kept": "{n}: comfort kept",

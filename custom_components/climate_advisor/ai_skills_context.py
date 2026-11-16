@@ -57,6 +57,7 @@ from .const import (
 from .coordinator import _REJECTION_LOG_CAP
 from .fan_status import is_ca_fan_running
 from .hvac_action import is_hvac_action_active
+from .preference_learning import PreferenceView
 from .record_text import record_en
 from .remote_offset import remote_offset_lines, remote_offset_view_for
 from .setpoint_combinations import vacation_edges
@@ -1389,6 +1390,21 @@ async def build_event_log_context(hass: Any, coordinator: Any, **kwargs: Any) ->
     )
 
 
+def _learned_heat_offset_f(coordinator: Any, cfg: dict[str, Any]) -> tuple[float, str | None]:
+    """The learned awake heat-floor offset in force now ``(offset_f, bucket)``; ``(0.0, None)`` with the feature off.
+
+    Fork Dunky13#1: the comfort band the AI judges against is the one the thermostat is armed with, so the learned
+    offset moves its lower edge. Duck-typed so a stubbed coordinator (no real view) is inert.
+    """
+    view_fn = getattr(coordinator, "preference_view", None)
+    view = view_fn() if callable(view_fn) else None
+    classification = getattr(coordinator, "current_classification", None)
+    if not isinstance(view, PreferenceView) or classification is None:
+        return 0.0, None
+    offset, bucket = view.offset_at(dt_util.now(), str(classification.day_type), cfg, in_sleep_window=False)
+    return offset, bucket
+
+
 async def build_config_context(hass: Any, coordinator: Any, **kwargs: Any) -> str:
     """Build CONFIGURATION section (sensitive keys stripped)."""
     try:
@@ -1404,13 +1420,26 @@ async def build_config_context(hass: Any, coordinator: Any, **kwargs: Any) -> st
 
         _comfort_heat = _cfg_temp("comfort_heat")
         _comfort_cool = _cfg_temp("comfort_cool")
+        _pref_off_f, _pref_bucket = _learned_heat_offset_f(coordinator, cfg)
+        if _pref_off_f and isinstance(
+            cfg.get("comfort_heat"), (int, float)
+        ):  # the lower bound the thermostat is armed with
+            _comfort_heat = (
+                f"{display_temp(min(cfg['comfort_heat'] + _pref_off_f, cfg.get('comfort_cool', 1e9)), _cfg_unit):g}"
+            )
         _vac_heat_f, _vac_cool_f = vacation_edges(cfg)
         _vac_heat = round(display_temp(_vac_heat_f, _cfg_unit), 1)
         _vac_cool = round(display_temp(_vac_cool_f, _cfg_unit), 1)
         _vac_configured = cfg.get("vacation_heat") is not None or cfg.get("vacation_cool") is not None
         lines = [
             "=== CONFIGURATION ===",
-            f"  comfort_heat (lower bound): {_comfort_heat} — indoor must be >= this to be in comfort band",
+            f"  comfort_heat (lower bound): {_comfort_heat} — indoor must be >= this to be in comfort band"
+            + (
+                f" (configured {_cfg_temp('comfort_heat')} plus the learned preference {_pref_off_f:+.1f}F delta, "
+                f"bucket {_pref_bucket})"
+                if _pref_off_f
+                else ""
+            ),
             f"  comfort_cool (upper bound): {_comfort_cool} — indoor must be <= this to be in comfort band",
             f"  comfort_band: [{_comfort_heat}, {_comfort_cool}]{UNIT_SYMBOL.get(_cfg_unit, '°F')}"
             " — temperature T is in-band only if comfort_heat <= T <= comfort_cool",
@@ -4588,6 +4617,8 @@ async def build_state_cross_validation_context(hass: Any, coordinator: Any, **kw
     try:
         ch = float(options.get("comfort_heat", "unknown"))
         cc = float(options.get("comfort_cool", "unknown"))
+        if offset := _learned_heat_offset_f(coordinator, options)[0]:  # the floor the thermostat is armed with
+            ch = min(ch + offset, cc)
         if current_temp_f is None:
             raise ValueError("no indoor reading")
         ct = current_temp_f

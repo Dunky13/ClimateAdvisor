@@ -121,6 +121,26 @@ class TestServiceCallsResolveByEntryId:
         assert coord_1.learning._state.dismissed_suggestions == []
         assert zone_1_id  # sanity: fixture var used
 
+    def test_accepting_frequent_overrides_via_the_service_persists_to_the_config_entry(self):
+        """Fork #1: the service accept turns preference learning on in the live config AND the config entry."""
+        from custom_components.climate_advisor.const import DOMAIN
+
+        zones, fake_hass, _scheduler = build_headless_multi_zone(zone_count=2)
+        entry = zones["zone_0"]["entry"]
+        coord_0 = zones["zone_0"]["coordinator"]
+
+        run_coro(
+            fake_hass.services.async_call(
+                DOMAIN,
+                "respond_to_suggestion",
+                {"entry_id": entry.entry_id, "action": "accept", "suggestion_key": "frequent_overrides"},
+            )
+        )
+
+        assert coord_0.config["preference_learning_enabled"] is True
+        assert entry.data["preference_learning_enabled"] is True
+        assert "preference_learning_enabled" not in zones["zone_1"]["entry"].data
+
 
 def _record_and_noop(calls):
     async def _fn():
