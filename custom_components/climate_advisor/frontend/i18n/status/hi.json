@@ -189,6 +189,8 @@
   "status.pre_cool_status.suppressed_session": "पूर्व-कूलिंग रोकी गई — प्राकृतिक वेंटिलेशन/पूरे घर के पंखे का सत्र सक्रिय",
   "status.preference.applied": "हीटिंग की निचली सीमा {armed}, कॉन्फ़िगर किए गए {configured} के बजाय: सीखा हुआ {sign}{amount}, {part, select, night {रात} morning {सुबह} afternoon {दोपहर} evening {शाम} other {{part}}}, {day_class, select, weekday {कार्यदिवस} weekend {सप्ताहांत} other {{day_class}}} के लिए (अवलोकन: {n, number}{has_update, select, yes {, अंतिम अपडेट: {when}} other {, अभी तक कोई अपडेट नहीं}})。",
   "status.preference.neutral": "प्राथमिकता सीखना चालू है; हीटिंग की निचली सीमा अभी अपरिवर्तित है (अवलोकन: {n, number}{has_update, select, yes {, अंतिम अपडेट: {when}} other {, अभी तक कोई अपडेट नहीं}})。",
+  "status.preference.reference_room": "{name} ({source, select, pinned {पिन किया गया} learned {सीखा गया} sleep_sensor {नींद सेंसर} other {{source}}}) के अनुसार नियंत्रण: {value}, थर्मोस्टेट {sign}{offset}। नमी: {band, select, dry {सूखा} normal {सामान्य} humid {नम} other {अज्ञात}}।",
+  "status.preference.reference_thermostat": "थर्मोस्टेट के अनुसार नियंत्रण। नमी: {band, select, dry {सूखा} normal {सामान्य} humid {नम} other {अज्ञात}}।",
   "status.promise.ac_whf_mutex": "{n}: एसी और पूरे घर का पंखा साथ नहीं चलेंगे",
   "status.promise.blind_fan_continue": "{n}: अंदर का तापमान अज्ञात होने पर पंखा चलता रहे",
   "status.promise.comfort_kept": "{n}: आराम बनाए रखा",

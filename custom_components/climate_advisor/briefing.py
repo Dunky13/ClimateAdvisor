@@ -57,7 +57,7 @@ from .nat_vent_plan import (
     resolve_window_pair,
     resolve_with_fallback,
 )
-from .preference_learning import PreferenceView, bucket_parts
+from .preference_learning import PreferenceView, bucket_parts, steering_room
 from .temperature import FAHRENHEIT, format_temp, free_cooling_direction_ok, from_fahrenheit
 from .timeline_surfaces import TimelineWindows, operations_msgs, timeline_windows
 
@@ -199,7 +199,7 @@ class _BriefingFacts:
     current_hold: Any = None
     # Fork Dunky13#1: the learned heat-floor offsets for the rest of today and tonight, ``((bucket, offset_f), ...)`` in
     # time order, zero entries kept (the day class comes from them); empty with the feature off or an empty house.
-    preference: tuple[tuple[str, float], ...] = ()
+    preference: tuple[tuple[str, float, str | None], ...] = ()
 
 
 def _local(moment: datetime, now: datetime) -> datetime:
@@ -270,7 +270,9 @@ class _BriefingPreference(NamedTuple):
     offset_f: float  # awake offset the quoted awake band carries (the first awake part still ahead)
     awake_at: datetime  # the instant the quoted awake band is read at (now, or the coming wake time while asleep)
     bedtime_at: datetime  # the coming bedtime, for the quoted night band
-    remaining: tuple[tuple[str, float], ...]  # (bucket, offset_f) of every part of day from now to the next wake
+    # (bucket, offset_f, room name or None) of every part of day from now to the next wake; the room is the one that
+    # steers that part (phase 3), only on a heating day (D5: rooms never steer cooling)
+    remaining: tuple[tuple[str, float, str | None], ...]
 
 
 def _briefing_preference(
@@ -303,15 +305,21 @@ def _briefing_preference(
     if bedtime_at <= now:
         bedtime_at += timedelta(days=1)
     day_type = str(c.day_type)
-    remaining: list[tuple[str, float]] = []
+    remaining: list[tuple[str, float, str | None]] = []
     at = now
     end = (
         bedtime_at if asleep else wake_at
     )  # asleep: the rest of the night and the day ahead; awake: to tomorrow's wake
     while at < end:
-        offset, bucket = preferences.offset_at(at, day_type, config, in_sleep_window=_in_sleep_window(at, config))
-        if all(b != bucket for b, _ in remaining):
-            remaining.append((bucket, offset))
+        at_asleep = _in_sleep_window(at, config)
+        offset, bucket = preferences.offset_at(at, day_type, config, in_sleep_window=at_asleep)
+        if all(b != bucket for b, _o, _r in remaining):
+            room = (
+                steering_room(at, config, in_sleep_window=at_asleep, view=preferences)
+                if c.hvac_mode == "heat"
+                else None
+            )
+            remaining.append((bucket, offset, preferences.room_names.get(room, room) if room else None))
         at += timedelta(minutes=15)
     offset, _bucket = preferences.offset_at(awake_at, day_type, config, in_sleep_window=False)
     return _BriefingPreference(offset, awake_at, bedtime_at, tuple(remaining))
@@ -1049,14 +1057,14 @@ def _tldr_msg(
         occupancy_row = i18n.Msg("briefing.tldr.occupancy_guest")
     # Fork Dunky13#1: one line naming each learned offset still ahead today and tonight (non-zero ones only).
     preference_row: i18n.Msg | None = None
-    _shown = [(b, o) for b, o in facts.preference if o]
+    _shown = [(b, o, r) for b, o, r in facts.preference if o]
     if _shown:
         _day_type, _first_part, _day_class = bucket_parts(_shown[0][0])
-        _awake = [bucket_parts(b) for b, _o in facts.preference if bucket_parts(b)[1] != "night"]
+        _awake = [bucket_parts(b) for b, _o, _r in facts.preference if bucket_parts(b)[1] != "night"]
         if _awake:
             _day_type, _first_part, _day_class = _awake[0]
         entries = []
-        for _bucket, _offset_f in _shown:
+        for _bucket, _offset_f, _room in _shown:
             _, _part, _entry_class = bucket_parts(_bucket)
             # an entry whose own day class differs from the header's (a Friday or Sunday night) names it
             _mismatch = _entry_class != _day_class
@@ -1066,15 +1074,15 @@ def _tldr_msg(
                 (True, False): "briefing.pref.entry_night",
                 (True, True): "briefing.pref.entry_night_class",
             }[(_part == "night", _mismatch)]
-            entries.append(
-                i18n.Msg(
-                    _key,
-                    part=i18n.Msg(_PREF_PART_KEYS[_part]),
-                    sign="+" if _offset_f > 0 else "-",
-                    amount=i18n.TempDelta(abs(_offset_f), temp_unit, 1),
-                    **({"day_class": i18n.Msg(_PREF_CLASS_KEYS[_entry_class])} if _mismatch else {}),
-                )
+            _entry = i18n.Msg(
+                _key,
+                part=i18n.Msg(_PREF_PART_KEYS[_part]),
+                sign="+" if _offset_f > 0 else "-",
+                amount=i18n.TempDelta(abs(_offset_f), temp_unit, 1),
+                **({"day_class": i18n.Msg(_PREF_CLASS_KEYS[_entry_class])} if _mismatch else {}),
             )
+            # phase 3: the offset is measured in a room, so the line names it
+            entries.append(i18n.Msg("briefing.pref.entry_room", entry=_entry, room=_room) if _room else _entry)
         preference_row = i18n.Msg(
             "briefing.tldr.preference",
             day_type=_day_type_msg(_day_type),

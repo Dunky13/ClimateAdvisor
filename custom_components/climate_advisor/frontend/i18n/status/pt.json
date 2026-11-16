@@ -189,6 +189,8 @@
   "status.pre_cool_status.suppressed_session": "pré-arrefecimento suprimido — sessão de ventilação natural/ventoinha ativa",
   "status.preference.applied": "Mínimo de aquecimento {armed} em vez do configurado {configured}: aprendido {sign}{amount} para {part, select, night {noite} morning {manhã} afternoon {tarde} evening {fim do dia} other {{part}}}, {day_class, select, weekday {dia útil} weekend {fim de semana} other {{day_class}}} (observações: {n, number}{has_update, select, yes {, última atualização: {when}} other {, ainda sem atualização}}).",
   "status.preference.neutral": "A aprendizagem de preferências está ativa; o mínimo de aquecimento não muda neste momento (observações: {n, number}{has_update, select, yes {, última atualização: {when}} other {, ainda sem atualização}}).",
+  "status.preference.reference_room": "Controlo por {name} ({source, select, pinned {fixado} learned {aprendido} sleep_sensor {sensor de sono} other {{source}}}) a {value}, termóstato {sign}{offset}. Humidade: {band, select, dry {seco} normal {normal} humid {húmido} other {desconhecido}}.",
+  "status.preference.reference_thermostat": "Controlo pelo termóstato. Humidade: {band, select, dry {seco} normal {normal} humid {húmido} other {desconhecido}}.",
   "status.promise.ac_whf_mutex": "{n}: ar condicionado e ventoinha nunca em simultâneo",
   "status.promise.blind_fan_continue": "{n}: ventoinha continua sem sensor interior",
   "status.promise.comfort_kept": "{n}: conforto mantido",

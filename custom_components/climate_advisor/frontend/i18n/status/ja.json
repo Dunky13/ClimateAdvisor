@@ -189,6 +189,8 @@
   "status.pre_cool_status.suppressed_session": "予冷を抑制 — 自然換気/全館換気ファンのセッション作動中",
   "status.preference.applied": "暖房の下限は設定値{configured}ではなく{armed}です：{part, select, night {夜間} morning {午前} afternoon {午後} evening {夕方} other {{part}}}・{day_class, select, weekday {平日} weekend {週末} other {{day_class}}}で学習した{sign}{amount} (観測：{n, number}{has_update, select, yes {、最終更新：{when}} other {、まだ更新なし}})。",
   "status.preference.neutral": "好みの学習はオンです。現在、暖房の下限は変更されていません (観測：{n, number}{has_update, select, yes {、最終更新：{when}} other {、まだ更新なし}})。",
+  "status.preference.reference_room": "{name}（{source, select, pinned {固定} learned {学習済み} sleep_sensor {睡眠センサー} other {{source}}}）で制御中：{value}、サーモスタット {sign}{offset}。湿度：{band, select, dry {乾燥} normal {普通} humid {多湿} other {不明}}。",
+  "status.preference.reference_thermostat": "サーモスタットで制御中。湿度：{band, select, dry {乾燥} normal {普通} humid {多湿} other {不明}}。",
   "status.promise.ac_whf_mutex": "{n}: エアコンと全館換気ファンの排他制御",
   "status.promise.blind_fan_continue": "{n}: 室温不明時のファン継続",
   "status.promise.comfort_kept": "{n}: 快適さの維持",

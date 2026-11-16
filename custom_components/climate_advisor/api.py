@@ -360,7 +360,19 @@ def _preferences_payload(coordinator: Any, unit: str) -> dict[str, Any]:
             }
             for b in status.get("buckets", [])
         ],
+        "seed": _seed_payload(status.get("seed"), unit),
     }
+
+
+def _seed_payload(seed: dict[str, Any] | None, unit: str) -> dict[str, Any] | None:
+    """The history seed for review (fork Dunky13#1 phase 3): each row's median and offset in the display unit."""
+    if not isinstance(seed, dict):
+        return None
+    rows = [
+        {**r, "median": display_delta(r.get("median_f"), unit), "offset": display_delta(r.get("offset_f"), unit)}
+        for r in seed.get("rows", [])
+    ]
+    return {**seed, "rows": rows}
 
 
 def _preference_status_payload(hass: HomeAssistant, coordinator: Any, unit: str) -> dict[str, Any]:
@@ -400,13 +412,31 @@ def _preference_status_payload(hass: HomeAssistant, coordinator: Any, unit: str)
         )
     else:
         msg = i18n.Msg("status.preference.neutral", **common)
+    # Phase 3: where the comfort target is measured now, and the humidity band in force.
+    ref = status.get("reference") or {}
+    band = status.get("band") or "-"
+    if ref.get("in_use") and ref.get("value_f") is not None:
+        remote_f = ref.get("remote_offset_f") or 0.0
+        ref_msg = i18n.Msg(
+            "status.preference.reference_room",
+            name=str(ref.get("name") or ref.get("entity")),
+            source=str(ref.get("source")),
+            value=i18n.Temp(ref["value_f"], unit, 1),
+            sign="+" if remote_f >= 0 else "-",
+            offset=i18n.TempDelta(abs(remote_f), unit, 1),
+            band=band,
+        )
+    else:
+        ref_msg = i18n.Msg("status.preference.reference_thermostat", band=band)
     return {
         "enabled": True,
         "bucket": bucket,
         "active_offset": display_delta(active_f, unit),
         "observation_count": status.get("observation_count", 0),
         "last_update": last,
+        "band": band,
         **_msg_fields(hass, msg, "text"),
+        **_msg_fields(hass, ref_msg, "ref_text"),
     }
 
 

@@ -456,12 +456,22 @@
         "data": {
           "preference_learning_enabled": "내 난방 선호도 학습",
           "preference_max_offset_f": "최대 학습 조정폭",
-          "preference_weekly_step_f": "주간 최대 변경폭"
+          "preference_weekly_step_f": "주간 최대 변경폭",
+          "room_temp_entities": "방 센서",
+          "room_pin_night": "밤의 방",
+          "room_pin_morning": "아침의 방",
+          "room_pin_afternoon": "오후의 방",
+          "room_pin_evening": "저녁의 방"
         },
         "data_description": {
           "preference_learning_enabled": "켜면 비슷한 시간대에 반복한 온도조절기 변경이 해당 시간대에 Climate Advisor가 설정하는 난방 온도를 이동시킵니다. 기본값은 꺼짐입니다.",
           "preference_max_offset_f": "학습된 조정이 설정한 온도에서 난방 온도를 위아래로 움직일 수 있는 최대 폭입니다.",
-          "preference_weekly_step_f": "학습된 조정이 한 주에 바뀔 수 있는 최대 폭입니다."
+          "preference_weekly_step_f": "학습된 조정이 한 주에 바뀔 수 있는 최대 폭입니다.",
+          "room_temp_entities": "선택 사항. Climate Advisor가 시간대별로 난방을 조정하는 기준이 될 수 있는 방 온도 센서입니다. 난방 전용입니다. 다른 난방기나 에어컨에 내장된 센서는 고르지 마세요.",
+          "room_pin_night": "자동은 Climate Advisor가 사용자의 변경과 온도가 가장 잘 맞는 방을 고르게 합니다. 온도 조절기는 온도 조절기 자체의 측정값을 유지합니다. 또는 위의 방 센서 중 하나를 고르세요.",
+          "room_pin_morning": "자동은 Climate Advisor가 사용자의 변경과 온도가 가장 잘 맞는 방을 고르게 합니다. 온도 조절기는 온도 조절기 자체의 측정값을 유지합니다. 또는 위의 방 센서 중 하나를 고르세요.",
+          "room_pin_afternoon": "자동은 Climate Advisor가 사용자의 변경과 온도가 가장 잘 맞는 방을 고르게 합니다. 온도 조절기는 온도 조절기 자체의 측정값을 유지합니다. 또는 위의 방 센서 중 하나를 고르세요.",
+          "room_pin_evening": "자동은 Climate Advisor가 사용자의 변경과 온도가 가장 잘 맞는 방을 고르게 합니다. 온도 조절기는 온도 조절기 자체의 측정값을 유지합니다. 또는 위의 방 센서 중 하나를 고르세요."
         }
       },
       "ai_settings": {
@@ -537,7 +547,8 @@
       "sleep_cool_above_away_warning": "취침 냉방이 외출 냉방보다 높아서 밤에는 집에 사람이 없을 때보다 더 따뜻해지도록 허용됩니다. 그대로 사용하려면 다시 제출하세요.",
       "vacation_heat_above_away_warning": "휴가 난방이 외출 난방보다 높아서 휴가 중에 평소 외출한 날보다 에너지를 더 많이 씁니다. 그대로 사용하려면 다시 제출하세요.",
       "vacation_cool_below_away_warning": "휴가 냉방이 외출 냉방보다 낮아서 휴가 중에 평소 외출한 날보다 에너지를 더 많이 씁니다. 그대로 사용하려면 다시 제출하세요.",
-      "vacation_freeze_warning": "이 설정에서는 휴가 난방이 45 °F (7 °C) 아래로 내려갑니다. 장기 여행 중에 배관이 얼 수 있습니다. 그대로 사용하려면 다시 제출하세요."
+      "vacation_freeze_warning": "이 설정에서는 휴가 난방이 45 °F (7 °C) 아래로 내려갑니다. 장기 여행 중에 배관이 얼 수 있습니다. 그대로 사용하려면 다시 제출하세요.",
+      "room_pin_not_selected": "자동, 온도 조절기 또는 위에서 선택한 방 센서 중 하나를 고르세요."
     }
   },
   "issues": {
@@ -781,6 +792,12 @@
         "both": "냉방 및 난방",
         "cool": "냉방만",
         "heat": "난방만"
+      }
+    },
+    "room_pin": {
+      "options": {
+        "auto": "자동(학습)",
+        "thermostat": "온도 조절기"
       }
     }
   },

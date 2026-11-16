@@ -189,6 +189,8 @@
   "status.pre_cool_status.suppressed_session": "preenfriamiento suprimido — sesión de ventilación natural/ventilador activa",
   "status.preference.applied": "Mínimo de calefacción {armed} en lugar del configurado {configured}: aprendido {sign}{amount} para {part, select, night {noche} morning {mañana} afternoon {tarde} evening {anochecer} other {{part}}}, {day_class, select, weekday {entre semana} weekend {fin de semana} other {{day_class}}} (observaciones: {n, number}{has_update, select, yes {, última actualización: {when}} other {, sin actualización aún}}).",
   "status.preference.neutral": "El aprendizaje de preferencias está activo; el mínimo de calefacción no cambia ahora (observaciones: {n, number}{has_update, select, yes {, última actualización: {when}} other {, sin actualización aún}}).",
+  "status.preference.reference_room": "Control por {name} ({source, select, pinned {fijado} learned {aprendido} sleep_sensor {sensor de sueño} other {{source}}}) a {value}, termostato {sign}{offset}. Humedad: {band, select, dry {seco} normal {normal} humid {húmedo} other {desconocido}}.",
+  "status.preference.reference_thermostat": "Control por el termostato. Humedad: {band, select, dry {seco} normal {normal} humid {húmedo} other {desconocido}}.",
   "status.promise.ac_whf_mutex": "{n}: aire acondicionado y ventilador nunca a la vez",
   "status.promise.blind_fan_continue": "{n}: ventilador sigue sin sensor interior",
   "status.promise.comfort_kept": "{n}: confort mantenido",

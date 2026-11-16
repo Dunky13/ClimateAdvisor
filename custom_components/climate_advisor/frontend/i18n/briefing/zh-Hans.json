@@ -69,6 +69,7 @@
   "briefing.pref.entry_class": "{part} ({day_class}) {sign}{amount}",
   "briefing.pref.entry_night": "今晚 {sign}{amount}",
   "briefing.pref.entry_night_class": "今晚 ({day_class}) {sign}{amount}",
+  "briefing.pref.entry_room": "{entry}（{room}）",
   "briefing.pref.part.afternoon": "下午",
   "briefing.pref.part.evening": "晚上",
   "briefing.pref.part.morning": "上午",

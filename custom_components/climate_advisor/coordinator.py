@@ -11468,6 +11468,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             # Phase 3: the humidity band in force (``_refresh_preference_context``) and the learned rooms, snapshots.
             band=getattr(self, "_preference_band", None) or BAND_NONE,
             learned_rooms=learning.learned_room_map(),
+            room_names={room: self._indoor_friendly_name(room) for room in selected_rooms(config)},
         )
 
     def _preference_refs(self, view: PreferenceView | None) -> dict[str, str | None]:

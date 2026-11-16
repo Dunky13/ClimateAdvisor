@@ -189,6 +189,8 @@
   "status.pre_cool_status.suppressed_session": "preraffreddamento soppresso — sessione di ventilazione naturale/ventola attiva",
   "status.preference.applied": "Soglia minima di riscaldamento {armed} invece di {configured} configurato: appreso {sign}{amount} per {part, select, night {notte} morning {mattina} afternoon {pomeriggio} evening {sera} other {{part}}}, {day_class, select, weekday {feriale} weekend {fine settimana} other {{day_class}}} (osservazioni: {n, number}{has_update, select, yes {, ultimo aggiornamento: {when}} other {, nessun aggiornamento finora}}).",
   "status.preference.neutral": "L'apprendimento delle preferenze è attivo; la soglia minima di riscaldamento al momento è invariata (osservazioni: {n, number}{has_update, select, yes {, ultimo aggiornamento: {when}} other {, nessun aggiornamento finora}}).",
+  "status.preference.reference_room": "Regolazione su {name} ({source, select, pinned {fissato} learned {appreso} sleep_sensor {sensore notte} other {{source}}}) a {value}, termostato {sign}{offset}. Umidità: {band, select, dry {secco} normal {normale} humid {umido} other {sconosciuto}}.",
+  "status.preference.reference_thermostat": "Regolazione sul termostato. Umidità: {band, select, dry {secco} normal {normale} humid {umido} other {sconosciuto}}.",
   "status.promise.ac_whf_mutex": "{n}: condizionatore e ventola mai insieme",
   "status.promise.blind_fan_continue": "{n}: ventola continua senza sensore interno",
   "status.promise.comfort_kept": "{n}: comfort mantenuto",

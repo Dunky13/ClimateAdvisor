@@ -108,6 +108,12 @@ EXPECTED_KEYS = {
     "preference_learning_enabled",
     "preference_max_offset_f",
     "preference_weekly_step_f",
+    # Fork Dunky13#1 phase 3: room sensors and the per part of day pins
+    "room_temp_entities",
+    "room_pin_night",
+    "room_pin_morning",
+    "room_pin_afternoon",
+    "room_pin_evening",
 }
 
 VALID_CATEGORIES = {

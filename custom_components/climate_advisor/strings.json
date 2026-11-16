@@ -456,12 +456,22 @@
         "data": {
           "preference_learning_enabled": "Learn my heating preferences",
           "preference_max_offset_f": "Maximum learned adjustment",
-          "preference_weekly_step_f": "Maximum weekly change"
+          "preference_weekly_step_f": "Maximum weekly change",
+          "room_temp_entities": "Room sensors",
+          "room_pin_night": "Room For The Night",
+          "room_pin_morning": "Room For The Morning",
+          "room_pin_afternoon": "Room For The Afternoon",
+          "room_pin_evening": "Room For The Evening"
         },
         "data_description": {
           "preference_learning_enabled": "When on, repeated thermostat changes you make at similar times shift the heating temperature Climate Advisor sets for that kind of time. Off by default.",
           "preference_max_offset_f": "The most a learned adjustment may move the heating temperature up or down from your configured setpoint.",
-          "preference_weekly_step_f": "The most one learned adjustment may change per week."
+          "preference_weekly_step_f": "The most one learned adjustment may change per week.",
+          "room_temp_entities": "Optional. Room temperature sensors Climate Advisor may steer the heating by, per part of the day. Heating only. Do not pick a sensor built into another heater or air conditioner.",
+          "room_pin_night": "Auto lets Climate Advisor pick the room whose temperature best matches your changes. Thermostat keeps the thermostat's own reading. Or pick one of the room sensors above.",
+          "room_pin_morning": "Auto lets Climate Advisor pick the room whose temperature best matches your changes. Thermostat keeps the thermostat's own reading. Or pick one of the room sensors above.",
+          "room_pin_afternoon": "Auto lets Climate Advisor pick the room whose temperature best matches your changes. Thermostat keeps the thermostat's own reading. Or pick one of the room sensors above.",
+          "room_pin_evening": "Auto lets Climate Advisor pick the room whose temperature best matches your changes. Thermostat keeps the thermostat's own reading. Or pick one of the room sensors above."
         }
       },
       "ai_settings": {
@@ -537,7 +547,8 @@
       "sleep_cool_above_away_warning": "Sleep cooling is warmer than away cooling, so overnight the house is allowed to get warmer than when nobody is home. Submit again to keep this.",
       "vacation_heat_above_away_warning": "Vacation heating is warmer than away heating, so a vacation uses more energy than a normal day out. Submit again to keep this.",
       "vacation_cool_below_away_warning": "Vacation cooling is cooler than away cooling, so a vacation uses more energy than a normal day out. Submit again to keep this.",
-      "vacation_freeze_warning": "With this setting, vacation heating ends up below 45 °F (7 °C). Pipes can freeze during a long trip. Submit again to keep this."
+      "vacation_freeze_warning": "With this setting, vacation heating ends up below 45 °F (7 °C). Pipes can freeze during a long trip. Submit again to keep this.",
+      "room_pin_not_selected": "Pick auto, thermostat, or one of the room sensors selected above."
     }
   },
   "issues": {
@@ -781,6 +792,12 @@
         "both": "Cooling and heating",
         "cool": "Cooling only",
         "heat": "Heating only"
+      }
+    },
+    "room_pin": {
+      "options": {
+        "auto": "Auto (learned)",
+        "thermostat": "Thermostat"
       }
     }
   },

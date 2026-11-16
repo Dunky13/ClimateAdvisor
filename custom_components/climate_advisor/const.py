@@ -1378,6 +1378,34 @@ CONFIG_METADATA = {
         "category": "advanced",
         "display_transform": "temp_delta",
     },
+    CONF_ROOM_TEMP_ENTITIES: {
+        "label": "Preference Room Sensors",
+        "description": (
+            "Room temperature sensors Climate Advisor may measure your learned comfort temperature against, per part"
+            " of the day (needs preference learning on). Do not pick a sensor built into another heater or AC unit."
+        ),
+        "category": "advanced",
+    },
+    CONF_ROOM_PIN_NIGHT: {
+        "label": "Room For The Night",
+        "description": "Which room the comfort target is measured in at night: auto, the thermostat, or a room.",
+        "category": "advanced",
+    },
+    CONF_ROOM_PIN_MORNING: {
+        "label": "Room For The Morning",
+        "description": "Which room the comfort target is measured in each morning: auto, the thermostat, or a room.",
+        "category": "advanced",
+    },
+    CONF_ROOM_PIN_AFTERNOON: {
+        "label": "Room For The Afternoon",
+        "description": "Which room the comfort target is measured in each afternoon: auto, the thermostat, or a room.",
+        "category": "advanced",
+    },
+    CONF_ROOM_PIN_EVENING: {
+        "label": "Room For The Evening",
+        "description": "Which room the comfort target is measured in each evening: auto, the thermostat, or a room.",
+        "category": "advanced",
+    },
     "comfort_mode_switch_min_interval_s": {
         "label": "Minimum Time Between Heat/Cool Switches (sec)",
         "time_unit": "s",
@@ -2366,6 +2394,11 @@ _METADATA_DEFAULTS: dict[str, Any] = {
     "preference_learning_enabled": False,
     "preference_max_offset_f": DEFAULT_PREFERENCE_MAX_OFFSET_F,
     "preference_weekly_step_f": DEFAULT_PREFERENCE_WEEKLY_STEP_F,
+    CONF_ROOM_TEMP_ENTITIES: [],
+    CONF_ROOM_PIN_NIGHT: DEFAULT_ROOM_PIN,
+    CONF_ROOM_PIN_MORNING: DEFAULT_ROOM_PIN,
+    CONF_ROOM_PIN_AFTERNOON: DEFAULT_ROOM_PIN,
+    CONF_ROOM_PIN_EVENING: DEFAULT_ROOM_PIN,
     "comfort_mode_switch_min_interval_s": 600,
     "comfort_deadband_hot_f": DEFAULT_COMFORT_DEADBAND_HOT_F,
     "comfort_deadband_warm_f": DEFAULT_COMFORT_DEADBAND_WARM_F,

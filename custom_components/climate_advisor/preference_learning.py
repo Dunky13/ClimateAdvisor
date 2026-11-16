@@ -272,6 +272,7 @@ class PreferenceView:
     max_offset_f: float = DEFAULT_PREFERENCE_MAX_OFFSET_F
     band: str = BAND_NONE
     learned_rooms: Mapping[str, str | None] = field(default_factory=dict)
+    room_names: Mapping[str, str] = field(default_factory=dict)  # selected room -> friendly name (briefing text)
 
     def offset_for(self, bucket: str) -> float:
         """The offset for a bucket, clamped to the CURRENT cap (lowering the cap applies at once).

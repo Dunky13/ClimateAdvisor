@@ -456,12 +456,22 @@
         "data": {
           "preference_learning_enabled": "Meine Heizpräferenzen lernen",
           "preference_max_offset_f": "Maximale gelernte Anpassung",
-          "preference_weekly_step_f": "Maximale Änderung pro Woche"
+          "preference_weekly_step_f": "Maximale Änderung pro Woche",
+          "room_temp_entities": "Raumsensoren",
+          "room_pin_night": "Raum für die Nacht",
+          "room_pin_morning": "Raum für den Morgen",
+          "room_pin_afternoon": "Raum für den Nachmittag",
+          "room_pin_evening": "Raum für den Abend"
         },
         "data_description": {
           "preference_learning_enabled": "Wenn aktiv, verschieben wiederholte Thermostat-Änderungen zu ähnlichen Zeiten die Heiztemperatur, die Climate Advisor für diese Zeit setzt. Standardmäßig aus.",
           "preference_max_offset_f": "Um wie viel eine gelernte Anpassung die Heiztemperatur höchstens nach oben oder unten von Ihrem eingestellten Sollwert verschieben darf.",
-          "preference_weekly_step_f": "Um wie viel sich eine gelernte Anpassung pro Woche höchstens ändern darf."
+          "preference_weekly_step_f": "Um wie viel sich eine gelernte Anpassung pro Woche höchstens ändern darf.",
+          "room_temp_entities": "Optional. Raumtemperatursensoren, nach denen Climate Advisor die Heizung je Tagesabschnitt steuern darf. Nur Heizen. Wähle keinen Sensor, der in ein anderes Heiz- oder Klimagerät eingebaut ist.",
+          "room_pin_night": "Automatisch lässt Climate Advisor den Raum wählen, dessen Temperatur am besten zu deinen Änderungen passt. Thermostat behält die Messung des Thermostats. Oder wähle einen der Raumsensoren oben.",
+          "room_pin_morning": "Automatisch lässt Climate Advisor den Raum wählen, dessen Temperatur am besten zu deinen Änderungen passt. Thermostat behält die Messung des Thermostats. Oder wähle einen der Raumsensoren oben.",
+          "room_pin_afternoon": "Automatisch lässt Climate Advisor den Raum wählen, dessen Temperatur am besten zu deinen Änderungen passt. Thermostat behält die Messung des Thermostats. Oder wähle einen der Raumsensoren oben.",
+          "room_pin_evening": "Automatisch lässt Climate Advisor den Raum wählen, dessen Temperatur am besten zu deinen Änderungen passt. Thermostat behält die Messung des Thermostats. Oder wähle einen der Raumsensoren oben."
         }
       },
       "ai_settings": {
@@ -537,7 +547,8 @@
       "sleep_cool_above_away_warning": "Die Schlafkühlung ist wärmer als die Abwesenheitskühlung. Nachts darf das Haus also wärmer werden als bei Abwesenheit. Sende erneut ab, um das beizubehalten.",
       "vacation_heat_above_away_warning": "Die Urlaubsheizung ist wärmer als die Abwesenheitsheizung. Ein Urlaub verbraucht also mehr Energie als ein normaler Tag außer Haus. Sende erneut ab, um das beizubehalten.",
       "vacation_cool_below_away_warning": "Die Urlaubskühlung ist kühler als die Abwesenheitskühlung. Ein Urlaub verbraucht also mehr Energie als ein normaler Tag außer Haus. Sende erneut ab, um das beizubehalten.",
-      "vacation_freeze_warning": "Mit dieser Einstellung liegt die Urlaubsheizung unter 45 °F (7 °C). Bei einer langen Reise können Leitungen einfrieren. Sende erneut ab, um das beizubehalten."
+      "vacation_freeze_warning": "Mit dieser Einstellung liegt die Urlaubsheizung unter 45 °F (7 °C). Bei einer langen Reise können Leitungen einfrieren. Sende erneut ab, um das beizubehalten.",
+      "room_pin_not_selected": "Wähle automatisch, Thermostat oder einen der oben ausgewählten Raumsensoren."
     }
   },
   "issues": {
@@ -781,6 +792,12 @@
         "both": "Kühlen und Heizen",
         "cool": "Nur Kühlen",
         "heat": "Nur Heizen"
+      }
+    },
+    "room_pin": {
+      "options": {
+        "auto": "Automatisch (gelernt)",
+        "thermostat": "Thermostat"
       }
     }
   },

@@ -189,6 +189,8 @@
   "status.pre_cool_status.suppressed_session": "تم كبح التبريد المسبق — جلسة التهوية الطبيعية/مروحة المنزل بالكامل نشطة",
   "status.preference.applied": "حدّ التدفئة {armed} بدل المضبوط {configured}: تفضيل متعلَّم {sign}{amount} لفترة {part, select, night {الليل} morning {الصباح} afternoon {بعد الظهر} evening {المساء} other {{part}}}، {day_class, select, weekday {أيام الأسبوع} weekend {عطلة نهاية الأسبوع} other {{day_class}}} (الملاحظات: {n, number}{has_update, select, yes {، آخر تحديث: {when}} other {، لا تحديث بعد}}).",
   "status.preference.neutral": "التعلّم من التفضيلات مفعّل، ولا تغيير على حدّ التدفئة الآن (الملاحظات: {n, number}{has_update, select, yes {، آخر تحديث: {when}} other {، لا تحديث بعد}}).",
+  "status.preference.reference_room": "التحكم حسب {name} ({source, select, pinned {مثبّت} learned {مُتعلَّم} sleep_sensor {مستشعر النوم} other {{source}}}) عند {value}، منظم الحرارة {sign}{offset}. الرطوبة: {band, select, dry {جاف} normal {عادي} humid {رطب} other {غير معروف}}.",
+  "status.preference.reference_thermostat": "التحكم حسب منظم الحرارة. الرطوبة: {band, select, dry {جاف} normal {عادي} humid {رطب} other {غير معروف}}.",
   "status.promise.ac_whf_mutex": "{n}: عدم تشغيل المكيف ومروحة المنزل معًا",
   "status.promise.blind_fan_continue": "{n}: استمرار المروحة عند غياب قراءة الحرارة الداخلية",
   "status.promise.comfort_kept": "{n}: الحفاظ على الراحة",

@@ -189,6 +189,8 @@
   "status.pre_cool_status.suppressed_session": "wstępne chłodzenie wstrzymane — aktywna sesja wentylacji naturalnej/wentylatora całego domu",
   "status.preference.applied": "Dolna granica ogrzewania {armed} zamiast ustawionej {configured}: wyuczone {sign}{amount} dla {part, select, night {noc} morning {rano} afternoon {popołudnie} evening {wieczór} other {{part}}}, {day_class, select, weekday {dzień roboczy} weekend {weekend} other {{day_class}}} (obserwacje: {n, number}{has_update, select, yes {, ostatnia aktualizacja: {when}} other {, jeszcze bez aktualizacji}}).",
   "status.preference.neutral": "Uczenie preferencji jest włączone; dolna granica ogrzewania na razie bez zmian (obserwacje: {n, number}{has_update, select, yes {, ostatnia aktualizacja: {when}} other {, jeszcze bez aktualizacji}}).",
+  "status.preference.reference_room": "Sterowanie według: {name} ({source, select, pinned {przypięte} learned {wyuczone} sleep_sensor {czujnik snu} other {{source}}}), {value}, termostat {sign}{offset}. Wilgotność: {band, select, dry {sucho} normal {normalnie} humid {wilgotno} other {nieznana}}.",
+  "status.preference.reference_thermostat": "Sterowanie według termostatu. Wilgotność: {band, select, dry {sucho} normal {normalnie} humid {wilgotno} other {nieznana}}.",
   "status.promise.ac_whf_mutex": "{n}: klimatyzacja i wentylator całego domu nigdy razem",
   "status.promise.blind_fan_continue": "{n}: wentylator bez odczytu wewnętrznego nadal działa",
   "status.promise.comfort_kept": "{n}: komfort zachowany",

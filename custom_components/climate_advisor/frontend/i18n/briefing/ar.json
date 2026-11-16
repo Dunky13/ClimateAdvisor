@@ -69,6 +69,7 @@
   "briefing.pref.entry_class": "{part} ({day_class}) {sign}{amount}",
   "briefing.pref.entry_night": "هذه الليلة {sign}{amount}",
   "briefing.pref.entry_night_class": "هذه الليلة ({day_class}) {sign}{amount}",
+  "briefing.pref.entry_room": "{entry} في {room}",
   "briefing.pref.part.afternoon": "بعد الظهر",
   "briefing.pref.part.evening": "المساء",
   "briefing.pref.part.morning": "الصباح",

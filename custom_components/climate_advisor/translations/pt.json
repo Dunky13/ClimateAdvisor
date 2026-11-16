@@ -456,12 +456,22 @@
         "data": {
           "preference_learning_enabled": "Aprender as minhas preferências de aquecimento",
           "preference_max_offset_f": "Ajuste aprendido máximo",
-          "preference_weekly_step_f": "Alteração semanal máxima"
+          "preference_weekly_step_f": "Alteração semanal máxima",
+          "room_temp_entities": "Sensores de divisão",
+          "room_pin_night": "Divisão para a noite",
+          "room_pin_morning": "Divisão para a manhã",
+          "room_pin_afternoon": "Divisão para a tarde",
+          "room_pin_evening": "Divisão para o serão"
         },
         "data_description": {
           "preference_learning_enabled": "Quando ativo, as alterações repetidas que faz no termóstato em momentos semelhantes deslocam a temperatura de aquecimento definida pelo Climate Advisor para esse tipo de momento. Desativado por predefinição.",
           "preference_max_offset_f": "O máximo que um ajuste aprendido pode subir ou descer a temperatura de aquecimento em relação ao valor configurado.",
-          "preference_weekly_step_f": "O máximo que um ajuste aprendido pode mudar por semana."
+          "preference_weekly_step_f": "O máximo que um ajuste aprendido pode mudar por semana.",
+          "room_temp_entities": "Opcional. Sensores de temperatura das divisões pelos quais o Climate Advisor pode orientar o aquecimento em cada parte do dia. Só aquecimento. Não escolha um sensor integrado noutro aquecedor ou ar condicionado.",
+          "room_pin_night": "Automático deixa o Climate Advisor escolher a divisão cuja temperatura melhor corresponde às suas alterações. Termóstato mantém a leitura do próprio termóstato. Ou escolha um dos sensores de divisão acima.",
+          "room_pin_morning": "Automático deixa o Climate Advisor escolher a divisão cuja temperatura melhor corresponde às suas alterações. Termóstato mantém a leitura do próprio termóstato. Ou escolha um dos sensores de divisão acima.",
+          "room_pin_afternoon": "Automático deixa o Climate Advisor escolher a divisão cuja temperatura melhor corresponde às suas alterações. Termóstato mantém a leitura do próprio termóstato. Ou escolha um dos sensores de divisão acima.",
+          "room_pin_evening": "Automático deixa o Climate Advisor escolher a divisão cuja temperatura melhor corresponde às suas alterações. Termóstato mantém a leitura do próprio termóstato. Ou escolha um dos sensores de divisão acima."
         }
       },
       "ai_settings": {
@@ -537,7 +547,8 @@
       "sleep_cool_above_away_warning": "O arrefecimento de sono é mais quente do que o arrefecimento em ausência, pelo que durante a noite a casa pode ficar mais quente do que quando não está ninguém. Envie novamente para manter.",
       "vacation_heat_above_away_warning": "O aquecimento de férias é mais quente do que o aquecimento em ausência, pelo que umas férias gastam mais energia do que um dia normal fora. Envie novamente para manter.",
       "vacation_cool_below_away_warning": "O arrefecimento de férias é mais frio do que o arrefecimento em ausência, pelo que umas férias gastam mais energia do que um dia normal fora. Envie novamente para manter.",
-      "vacation_freeze_warning": "Com esta definição, o aquecimento de férias fica abaixo de 45 °F (7 °C). Os canos podem congelar durante uma viagem longa. Envie novamente para manter."
+      "vacation_freeze_warning": "Com esta definição, o aquecimento de férias fica abaixo de 45 °F (7 °C). Os canos podem congelar durante uma viagem longa. Envie novamente para manter.",
+      "room_pin_not_selected": "Escolha automático, termóstato ou um dos sensores de divisão selecionados acima."
     }
   },
   "issues": {
@@ -781,6 +792,12 @@
         "both": "Arrefecimento e aquecimento",
         "cool": "Só arrefecimento",
         "heat": "Só aquecimento"
+      }
+    },
+    "room_pin": {
+      "options": {
+        "auto": "Automático (aprendido)",
+        "thermostat": "Termóstato"
       }
     }
   },

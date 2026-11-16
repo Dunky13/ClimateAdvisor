@@ -73,6 +73,7 @@ from .const import (
     CONF_PUSH_DOOR_WINDOW_PAUSE,
     CONF_PUSH_ENTITY_HEALTH,
     CONF_PUSH_OCCUPANCY_HOME,
+    CONF_ROOM_TEMP_ENTITIES,
     CONF_SENSOR_DEBOUNCE,
     CONF_SENSOR_POLARITY_INVERTED,
     CONF_SHADOW_ENGINE,
@@ -110,6 +111,7 @@ from .const import (
     DEFAULT_PREFERENCE_MAX_OFFSET_F,
     DEFAULT_PREFERENCE_WEEKLY_STEP_F,
     DEFAULT_PRIMARY_ENGINE,
+    DEFAULT_ROOM_PIN,
     DEFAULT_SENSOR_DEBOUNCE_SECONDS,
     DEFAULT_SETBACK_COOL,
     DEFAULT_SETBACK_HEAT,
@@ -132,6 +134,9 @@ from .const import (
     HVAC_FAN_RESTRICT_BOTH,
     HVAC_FAN_RESTRICT_COOL,
     HVAC_FAN_RESTRICT_HEAT,
+    ROOM_PIN_AUTO,
+    ROOM_PIN_KEYS,
+    ROOM_PIN_THERMOSTAT,
     TEMP_SOURCE_CLIMATE_FALLBACK,
     TEMP_SOURCE_INPUT_NUMBER,
     TEMP_SOURCE_SENSOR,
@@ -269,6 +274,7 @@ OPTIONS_MENU_OPTIONS = [
 
 TEMP_UNIT_OPTIONS = [FAHRENHEIT, CELSIUS]
 TEMP_UNIT_SELECTOR = "temp_unit"
+ROOM_PIN_SELECTOR = "room_pin"  # fork Dunky13#1 phase 3: the auto / thermostat labels of a room pin
 
 # Day-of-week option values of the TOU schedule editor (the labels are ``selector.weekday``) and the AI reasoning
 # effort choices (``selector.ai_reasoning_effort``).
@@ -2181,12 +2187,36 @@ class ClimateAdvisorOptionsFlow(config_entries.OptionsFlow):
         """Setpoint preference learning: on/off and its two safety bounds (docs/preference-learning-spec.md)."""
         current = self.config_entry.data
         unit = current.get(CONF_TEMP_UNIT, FAHRENHEIT)
+        errors: dict[str, str] = {}
 
         if user_input is not None:
-            await self._commit_section(delta_fields_to_fahrenheit(user_input, current, unit))
-            return await self.async_step_init()
+            # Phase 3: a pin names "auto", "thermostat" or one of the room sensors selected in this same form.
+            rooms = list(user_input.get(CONF_ROOM_TEMP_ENTITIES) or [])
+            for key in ROOM_PIN_KEYS.values():
+                pin = user_input.get(key, DEFAULT_ROOM_PIN)
+                if pin not in (ROOM_PIN_AUTO, ROOM_PIN_THERMOSTAT, *rooms):
+                    errors[key] = "room_pin_not_selected"
+            if not errors:
+                await self._commit_section(
+                    {**delta_fields_to_fahrenheit(user_input, current, unit), CONF_ROOM_TEMP_ENTITIES: rooms}
+                )
+                return await self.async_step_init()
+            current = {**current, **user_input}
 
         unit_label = _unit_symbol(unit == CELSIUS)
+        pin_options = [
+            ROOM_PIN_AUTO,
+            ROOM_PIN_THERMOSTAT,
+            *(e for e in current.get(CONF_ROOM_TEMP_ENTITIES) or [] if isinstance(e, str)),
+        ]
+        pin_selector = selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=pin_options,
+                translation_key=ROOM_PIN_SELECTOR,
+                custom_value=True,
+                mode=selector.SelectSelectorMode.DROPDOWN,
+            )
+        )
 
         def _delta_selector(key: str) -> tuple[float, selector.NumberSelector]:
             default, lo, hi, step = delta_field_display(key, current.get(key), unit == CELSIUS)
@@ -2216,8 +2246,18 @@ class ClimateAdvisorOptionsFlow(config_entries.OptionsFlow):
                         CONF_PREFERENCE_WEEKLY_STEP_F,
                         default=_delta_selector(CONF_PREFERENCE_WEEKLY_STEP_F)[0],
                     ): _delta_selector(CONF_PREFERENCE_WEEKLY_STEP_F)[1],
+                    vol.Optional(
+                        CONF_ROOM_TEMP_ENTITIES, default=list(current.get(CONF_ROOM_TEMP_ENTITIES) or [])
+                    ): selector.EntitySelector(
+                        selector.EntitySelectorConfig(domain="sensor", device_class="temperature", multiple=True)
+                    ),
+                    **{
+                        vol.Required(key, default=current.get(key, DEFAULT_ROOM_PIN)): pin_selector
+                        for key in ROOM_PIN_KEYS.values()
+                    },
                 }
             ),
+            errors=errors,
         )
 
     # ---- AI Settings ----

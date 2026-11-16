@@ -69,6 +69,7 @@
   "briefing.pref.entry_class": "{part} ({day_class}) {sign}{amount}",
   "briefing.pref.entry_night": "esta noche {sign}{amount}",
   "briefing.pref.entry_night_class": "esta noche ({day_class}) {sign}{amount}",
+  "briefing.pref.entry_room": "{entry} en {room}",
   "briefing.pref.part.afternoon": "tarde",
   "briefing.pref.part.evening": "anochecer",
   "briefing.pref.part.morning": "mañana",

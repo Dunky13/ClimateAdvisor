@@ -189,6 +189,8 @@
   "status.pre_cool_status.suppressed_session": "预冷已抑制 — 自然通风/全屋换气扇会话进行中",
   "status.preference.applied": "供暖下限为 {armed}，而不是设置的 {configured}：在{part, select, night {夜间} morning {上午} afternoon {下午} evening {晚上} other {{part}}}、{day_class, select, weekday {工作日} weekend {周末} other {{day_class}}}学到的 {sign}{amount} (观察次数：{n, number}{has_update, select, yes {，上次更新：{when}} other {，尚未更新}})。",
   "status.preference.neutral": "偏好学习已开启，目前供暖下限没有变化 (观察次数：{n, number}{has_update, select, yes {，上次更新：{when}} other {，尚未更新}})。",
+  "status.preference.reference_room": "按 {name}（{source, select, pinned {固定} learned {已学习} sleep_sensor {睡眠传感器} other {{source}}}）控制：{value}，恒温器 {sign}{offset}。湿度：{band, select, dry {干燥} normal {正常} humid {潮湿} other {未知}}。",
+  "status.preference.reference_thermostat": "按恒温器控制。湿度：{band, select, dry {干燥} normal {正常} humid {潮湿} other {未知}}。",
   "status.promise.ac_whf_mutex": "{n}：空调与换气扇互斥",
   "status.promise.blind_fan_continue": "{n}：室温未知时风扇继续运行",
   "status.promise.comfort_kept": "{n}：保持舒适",

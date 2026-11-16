@@ -456,12 +456,22 @@
         "data": {
           "preference_learning_enabled": "学习我的供暖偏好",
           "preference_max_offset_f": "学习调整的最大幅度",
-          "preference_weekly_step_f": "每周最大变化"
+          "preference_weekly_step_f": "每周最大变化",
+          "room_temp_entities": "房间传感器",
+          "room_pin_night": "夜间房间",
+          "room_pin_morning": "早晨房间",
+          "room_pin_afternoon": "下午房间",
+          "room_pin_evening": "傍晚房间"
         },
         "data_description": {
           "preference_learning_enabled": "开启后，您在相似时段反复进行的温控器调整会改变 Climate Advisor 为该类时段设定的供暖温度。默认关闭。",
           "preference_max_offset_f": "学习到的调整相对于您设定的温度，最多可将供暖温度上调或下调的幅度。",
-          "preference_weekly_step_f": "学习到的调整每周最多可变化的幅度。"
+          "preference_weekly_step_f": "学习到的调整每周最多可变化的幅度。",
+          "room_temp_entities": "可选。Climate Advisor 在一天中各时段可据以控制供暖的房间温度传感器。仅限供暖。不要选择内置于其他取暖器或空调中的传感器。",
+          "room_pin_night": "自动让 Climate Advisor 选择温度最符合您更改的房间。恒温器保留恒温器自身的读数。或从上方的房间传感器中选择一个。",
+          "room_pin_morning": "自动让 Climate Advisor 选择温度最符合您更改的房间。恒温器保留恒温器自身的读数。或从上方的房间传感器中选择一个。",
+          "room_pin_afternoon": "自动让 Climate Advisor 选择温度最符合您更改的房间。恒温器保留恒温器自身的读数。或从上方的房间传感器中选择一个。",
+          "room_pin_evening": "自动让 Climate Advisor 选择温度最符合您更改的房间。恒温器保留恒温器自身的读数。或从上方的房间传感器中选择一个。"
         }
       },
       "ai_settings": {
@@ -537,7 +547,8 @@
       "sleep_cool_above_away_warning": "睡眠制冷温度高于离家制冷温度，因此夜间房子允许比没人在家时更热。再次提交可保留此设置。",
       "vacation_heat_above_away_warning": "度假制热温度高于离家制热温度，因此度假比平常外出的一天更耗能。再次提交可保留此设置。",
       "vacation_cool_below_away_warning": "度假制冷温度低于离家制冷温度，因此度假比平常外出的一天更耗能。再次提交可保留此设置。",
-      "vacation_freeze_warning": "按此设置，度假制热温度最终会低于 45 °F (7 °C)。长途旅行期间水管可能会冻结。再次提交可保留此设置。"
+      "vacation_freeze_warning": "按此设置，度假制热温度最终会低于 45 °F (7 °C)。长途旅行期间水管可能会冻结。再次提交可保留此设置。",
+      "room_pin_not_selected": "请选择自动、恒温器或上方已选的某个房间传感器。"
     }
   },
   "issues": {
@@ -781,6 +792,12 @@
         "both": "制冷和制热",
         "cool": "仅制冷",
         "heat": "仅制热"
+      }
+    },
+    "room_pin": {
+      "options": {
+        "auto": "自动（学习）",
+        "thermostat": "恒温器"
       }
     }
   },

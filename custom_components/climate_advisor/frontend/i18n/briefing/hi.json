@@ -69,6 +69,7 @@
   "briefing.pref.entry_class": "{part} ({day_class}) {sign}{amount}",
   "briefing.pref.entry_night": "आज रात {sign}{amount}",
   "briefing.pref.entry_night_class": "आज रात ({day_class}) {sign}{amount}",
+  "briefing.pref.entry_room": "{entry} ({room})",
   "briefing.pref.part.afternoon": "दोपहर",
   "briefing.pref.part.evening": "शाम",
   "briefing.pref.part.morning": "सुबह",

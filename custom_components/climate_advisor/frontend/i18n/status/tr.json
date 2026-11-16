@@ -189,6 +189,8 @@
   "status.pre_cool_status.suppressed_session": "ön soğutma engellendi — doğal havalandırma/tüm ev fanı oturumu etkin",
   "status.preference.applied": "Isıtma alt sınırı ayarlanan {configured} yerine {armed}: {part, select, night {gece} morning {sabah} afternoon {öğleden sonra} evening {akşam} other {{part}}}, {day_class, select, weekday {hafta içi} weekend {hafta sonu} other {{day_class}}} için öğrenilen {sign}{amount} (gözlem: {n, number}{has_update, select, yes {, son güncelleme: {when}} other {, henüz güncelleme yok}}).",
   "status.preference.neutral": "Tercih öğrenme açık; ısıtma alt sınırı şu anda değişmedi (gözlem: {n, number}{has_update, select, yes {, son güncelleme: {when}} other {, henüz güncelleme yok}}).",
+  "status.preference.reference_room": "{name} ({source, select, pinned {sabitlendi} learned {öğrenildi} sleep_sensor {uyku sensörü} other {{source}}}) ile yönetiliyor: {value}, termostat {sign}{offset}. Nem: {band, select, dry {kuru} normal {normal} humid {nemli} other {bilinmiyor}}.",
+  "status.preference.reference_thermostat": "Termostat ile yönetiliyor. Nem: {band, select, dry {kuru} normal {normal} humid {nemli} other {bilinmiyor}}.",
   "status.promise.ac_whf_mutex": "{n}: klima ve tüm ev fanı asla birlikte çalışmaz",
   "status.promise.blind_fan_continue": "{n}: iç okuma olmadan fan çalışmaya devam ediyor",
   "status.promise.comfort_kept": "{n}: konfor korundu",

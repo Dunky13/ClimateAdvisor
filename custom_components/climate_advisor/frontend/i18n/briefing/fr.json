@@ -69,6 +69,7 @@
   "briefing.pref.entry_class": "{part} ({day_class}) {sign}{amount}",
   "briefing.pref.entry_night": "ce soir {sign}{amount}",
   "briefing.pref.entry_night_class": "ce soir ({day_class}) {sign}{amount}",
+  "briefing.pref.entry_room": "{entry} dans {room}",
   "briefing.pref.part.afternoon": "après-midi",
   "briefing.pref.part.evening": "soir",
   "briefing.pref.part.morning": "matin",
