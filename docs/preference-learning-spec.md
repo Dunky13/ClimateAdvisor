@@ -369,3 +369,31 @@ reset scope clears all of them.
   loop; accept applies offsets now within the cap; discard.
 - Consistency: with a room reference and an offset active, chart band, briefing, Status line and written setpoint
   agree. Golden simulations unchanged.
+
+### Implementation notes (phase 3, as built)
+
+- `steering_reference` (pure, `preference_learning.py`) is the one source; the coordinator passes the room to
+  `resolve_indoor_temp_with_provenance(room_entity=)` (`steering_room`), which sets `REMOTE_CONTEXT_ROOM` only while
+  the thermostat heats (heat mode, or off on a heat-only unit; D5) and reports `room_reason` (`not_heating`, `stale`,
+  `unavailable`) when it falls back. The watchdog's readings and heat offset come from the same reading and view, so
+  P1/P7 parity with the sleep context holds by construction.
+- The chart's predicted-indoor curve still models the sleep node only; the band itself (the target) is the shared seam.
+- No separate entity-health episodes for room sensors: a stale or unavailable room is a fall-back to the thermostat,
+  logged on change, like the sleep sensor's.
+- Seed rows for a part of day that a room steers are shown disabled and skipped on Accept (their history deltas were
+  measured at the thermostat, not in the room).
+- Accept merges the seed's room background into `room_background` and requests a coordinator refresh so the new
+  floors are armed at once.
+- The first reconcile after the upgrade stamps existing observations and offsets with the current reference (the
+  thermostat), so phase 1 data is kept rather than restarted.
+- Recorder history rows carry no context, so the `user_id` keep rule rarely applies to history; the schedule filter
+  does the work.
+- The history humidity source is today's humidity source for the thermostat's room (entity or `entity#attribute`);
+  when it is not usable, history observations get band `-`.
+- Pins use a selector with `custom_value`, so a room added in the same form validates against the submitted
+  selection.
+- The briefing names a room only on a heating day (rooms never steer cooling).
+- No lock against two concurrent backfills; the second replaces the first seed.
+- Open: the evidence above puts the late 18.0 °C slot at about 23:59 (±2 minutes), but it was also described as
+  firing between 23:15 and 23:59. Changes more than 10 minutes from the slot's usual time, on fewer than 40 % of the
+  days, survive the schedule filter as occupant episodes; the filter was not widened.

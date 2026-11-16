@@ -146,6 +146,8 @@ Climate Advisor is the scheduler and the thermostat is the executor. Set the the
 
 Climate Advisor can learn the heating temperature you actually want from your own thermostat changes, per kind of day, part of the day and weekday or weekend, and apply it within safe limits (default at most 2 °C from your setpoint, at most 0.5 °C per week; heating only). Enable it under **Settings, Learning & prediction, Learn Setpoint Preferences**. Learned adjustments show on the Analysis tab, which has a **Reset learned preferences** button (with a confirmation); the Reset learning data service (scope "Learned preferences") does the same. Details: [preference-learning-spec](docs/preference-learning-spec.md).
 
+With preference learning on you can also pick room temperature sensors and, per part of the day, let a room steer the heating (Climate Advisor nudges the thermostat setpoint until that room is warm, the same way the bedroom sensor works at night; heating only), and learned adjustments are kept per humidity band (dry, normal, humid). **Analyse history** on the Analysis tab (or the `climate_advisor.backfill_preferences` service) proposes adjustments from your thermostat's recorded history; nothing applies until you accept them.
+
 Learning is only meaningful when Climate Advisor is the only thing that sets the temperature apart from you. On a Google Nest, turn off the Nest schedule, Eco temperatures, Home/Away Assist and Auto-Schedule in the Google Home app before enabling automation and preference learning.
 
 ### Multiple zones
