@@ -2,7 +2,8 @@
 
 # Preference Learning (fork feature, Dunky13#1)
 
-Status: phase 1 shipped (0.9.41.1); phase 3 (rooms, humidity, history backfill) specified; phase 2 planned. Fork-only feature; upstream is gunkl/ClimateAdvisor.
+Status: phase 1 shipped (0.9.41.1); phase 3 (rooms, humidity, history backfill) implemented in 0.9.41.2; phase 2
+planned. Fork-only feature; upstream is gunkl/ClimateAdvisor.
 
 ## Goal
 
@@ -377,15 +378,65 @@ reset scope clears all of them.
   the thermostat heats (heat mode, or off on a heat-only unit; D5) and reports `room_reason` (`not_heating`, `stale`,
   `unavailable`) when it falls back. The watchdog's readings and heat offset come from the same reading and view, so
   P1/P7 parity with the sleep context holds by construction.
-- The chart's predicted-indoor curve still models the sleep node only; the band itself (the target) is the shared seam.
+- Where the night is steered by a room instead of a sleep sensor, the operation timeline's plan holds the
+  thermostat's room the room gap away from the band (`night_room_gap_f`), heat edge only (D5). The v4 predictor's
+  node inputs, the v4 night strategy, the sleep-sensor health check and future `ca_swaps` breaks stay sleep-sensor
+  only: v4 models the bedroom node, and a failing room is announced by the indoor-source note (`room_unusable`)
+  rather than a health episode. Recorded `ca_swaps` rows already break on the room, and `prediction_accuracy` breaks
+  on the chart log's recorded `band_sensor`, which already names the steering room. The chart's predicted-indoor line
+  follows the v4 bedroom node; routing a room into it would mean modelling a per-room node in v4, out of proportion
+  for this phase. Rooms steering the morning, afternoon or evening are not modelled in the plan; the band itself (the
+  target) is the shared seam.
 - No separate entity-health episodes for room sensors: a stale or unavailable room is a fall-back to the thermostat,
   logged on change, like the sleep sensor's.
-- Seed rows for a part of day that a room steers are shown disabled and skipped on Accept (their history deltas were
-  measured at the thermostat, not in the room).
-- Accept merges the seed's room background into `room_background` and requests a coordinator refresh so the new
-  floors are armed at once.
-- The first reconcile after the upgrade stamps existing observations and offsets with the current reference (the
-  thermostat), so phase 1 data is kept rather than restarted.
+- Seed rows for a part of day that a room steers are shown disabled and set no offset on Accept (their history
+  deltas were measured at the thermostat, not in the room); their observations still join with `ref = null`, so they
+  count once the thermostat steers that part again.
+- Accept and Discard both keep the seed's room context: the background is merged into `room_background`, and raises
+  with room temperatures that do not join as observations are kept with `context_only: true`. Context-only raises
+  feed the learned-room score only, never an offset or the observation count; a later Accept of the same bucket turns
+  them into observations. Accept requests a coordinator refresh so the new floors are armed at once. Analysing the
+  same window again after a Discard repeats its background readings (a commented shortcut; each reservoir keeps its
+  newest 200). Imported room temperatures and background readings are limited to the rooms selected at import (and
+  the thermostat).
+- No raise counts twice. Every observation now stores its episode `start`; an import skips an episode already stored
+  under that start whatever its bucket or band (an observation from before 0.9.41.2 is identified by its close,
+  `date` + `time`). The seed also stops where live recording took over (`live_since`: the earliest live episode start,
+  the open episode included; the close of an older observation without `start`): a history episode that ends at or
+  after 15 minutes before it is left out (`counts.live`), because it would have been part of that live episode.
+- A seed without a valid window or counts is refused: nothing is stored, an earlier seed is kept, a WARNING is logged,
+  the Analysis tab shows `preference_seed_invalid` (HTTP 422) and the service raises the translated
+  `preference_seed_invalid` error.
+- With a sleep sensor configured at analysis time, history changes in the sleep window are left out
+  (`counts.sleep_sensor`) rather than tagged with the sleep sensor: that sensor's remote offset moved the setpoint the
+  thermostat reported and the recorder does not keep the offset, so their delta is known in neither frame (reference
+  frames: "only meaningful against the reference it was recorded under"). Live recording, which knows the offset,
+  learns those nights.
+- Background samples are taken at most once per 30 minutes per part of day (one minute of slack for a refresh that
+  fires slightly early), not on every coordinator update; the humidity band and the room readings are refreshed on
+  every update. The thermostat is sampled with the rooms so its ratio can be scored.
+- An episode records the reference actually used at open: the room only while the room steered (`remote_context`
+  set); a stale room or a cooling thermostat records `ref = null`. The same heat gate (mode heat, no eco preset)
+  decides both live recording and the history filter.
+- The first reconcile after the upgrade stamps each part, and its observations without a `ref`, with the phase 1
+  frame they were recorded under (`references_by_part(config, None)`: the sleep sensor at night, else the
+  thermostat). When the current reference differs (a pin set at upgrade), that part restarts like any other change.
+  Reconcile also prunes background reservoirs of rooms no longer selected.
+- Band levels: a band that appears for a bucket gets both its band row and a `-` row, each starting from the bucket's
+  current learned offset (a three-part phase 1 key counts), never from 0. A `-` row is written only when the bucket
+  also has a real band; an install without humidity keeps the three-part key alone (no mirror row). Application
+  reads the four-part key, then the three-part key.
+- Whole-degree detection (`is_whole_series`) judges a room's readings in the configured `temp_unit`, the unit every
+  sensor state is read in (`read_sensor_state_f`). A sensor's native unit is not in its state: Home Assistant converts
+  a whole-°C sensor on a °F system to 69.8, 71.6 °F, so that sensor is not recognised as whole there (it can still be
+  pinned); on a °C system (the target install's Daikin sensors) it is. A 0.1 °C sensor reading 21.1 °C (69.98 °F) is
+  never mistaken for a whole-°F one.
+- The room picker accepts temperature sensors and `input_number` helpers (the remote reader reads both).
+- Loading drops malformed learned rooms, seed rows, seed observations and background readings with a WARNING; a seed
+  without a valid window or counts is dropped whole. A failed Accept or Discard returns an error to the Analysis tab
+  (`preference_seed_failed`) instead of failing silently.
+- The backfill analyses a deep copy of the config taken when it starts, so an options change during the run cannot
+  mix two configurations.
 - Recorder history rows carry no context, so the `user_id` keep rule rarely applies to history; the schedule filter
   does the work.
 - The history humidity source is today's humidity source for the thermostat's room (entity or `entity#attribute`);
@@ -394,6 +445,8 @@ reset scope clears all of them.
   selection.
 - The briefing names a room only on a heating day (rooms never steer cooling).
 - No lock against two concurrent backfills; the second replaces the first seed.
-- Open: the evidence above puts the late 18.0 °C slot at about 23:59 (±2 minutes), but it was also described as
-  firing between 23:15 and 23:59. Changes more than 10 minutes from the slot's usual time, on fewer than 40 % of the
-  days, survive the schedule filter as occupant episodes; the filter was not widened.
+- The schedule filter keeps ±10 minutes. The test fixture adds the late 18.0 °C slot firing early on a few days
+  (23:15, 23:18, 23:22, 23:45, 23:46, 23:54, 23:56): the ones within 10 minutes of the usual 23:59 are removed with
+  the slot; the others survive as occupant episodes. With bedtime 23:00 they land in the night bucket with
+  `delta_f = 0` against an 18 °C sleep floor, so they teach no offset. With a bedtime of 00:00 the 60-minute bed
+  exclusion drops them all. With a sleep sensor configured they fall in the sleep window and are left out.
