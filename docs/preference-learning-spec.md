@@ -398,7 +398,7 @@ New `LearningState` fields: `learned_schedule` and `schedule_candidates`. Valida
   is a remembered run, or whose service call has a parent id, is an automation's. This covers time-triggered
   automations, whose context has no parent.
 - A reset (the dashboard button and the `reset_learning_data` service alike, through `async_reset_learning`) re-arms the
-  wake and bed timers. `night_replay` rolls a bedtime before noon (learned or configured) to the next calendar day. A failed workday lookup is retried after an hour and warns once per date.
+  wake and bed timers. `night_replay` rolls a bedtime earlier on the clock than the wake time (an after-midnight bedtime, learned or configured; the rule candidates and `instants_on` use) to the next calendar day. A failed workday lookup is retried after an hour and warns once per date.
 - The seed review's Current column is the stored shift clamped to the current cap, as read.
 - The weekly step starts from the current clamped shift, not the stored one (a lowered cap moves the step's base).
 - The `preference_seed_accepted` message does not mention schedule rows; the API response carries `schedule` (the keys

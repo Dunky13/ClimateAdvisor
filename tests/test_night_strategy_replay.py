@@ -152,6 +152,12 @@ def test_a_bedtime_after_midnight_starts_the_night_on_the_next_calendar_day(bed,
         assert (end - start).total_seconds() / 3600 == pytest.approx(hours, abs=0.01)  # never a 30 h night
 
 
+def test_a_day_sleepers_afternoon_bedtime_is_on_the_next_day_like_the_seam() -> None:
+    """Bed 13:00, wake 21:00: bed is earlier on the clock than wake, so (as in ``instants_on``) the night is 8 h."""
+    nights = nsr.find_nights(_history(6), TZ, (13, 0), (21, 0))
+    assert nights and all((end - start).total_seconds() == 8 * 3600 for start, end, _rows in nights)
+
+
 def test_a_learned_bedtime_past_midnight_through_the_seam_is_a_short_night() -> None:
     from custom_components.climate_advisor.preference_schedule import ScheduleView, night_times_fn
 

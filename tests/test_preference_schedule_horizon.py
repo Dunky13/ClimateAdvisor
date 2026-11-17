@@ -135,3 +135,18 @@ def test_the_fallback_edges_before_a_classification_use_the_learned_night():
     with patch.object(coord_mod.dt_util, "now", return_value=at):
         edges = ClimateAdvisorCoordinator._resolve_active_comfort_band(owner)
     assert edges == (CFG["comfort_heat"], CFG["comfort_cool"])  # the coordinator call site hands over its view
+
+
+@pytest.mark.parametrize("horizon", HORIZONS)
+def test_the_v4_ca_line_takes_the_sleep_node_in_each_instants_own_window(horizon):
+    """``ca_line`` (and ``predict``'s sleep-loop flags, through the same ``sleep_flags``) evaluate per step."""
+    from custom_components.climate_advisor.predictor_v4 import ca_line
+
+    start, count = HORIZONS[horizon]
+    ca = ClimateAdvisorCoordinator._v4_ca_schedule(_owner())["ca_schedule"]
+    steps = [start + timedelta(minutes=30 * k) for k in range(count * 2)]
+    preds = {"thermo": [(t, 1.0) for t in steps], "bed": [(t, 2.0) for t in steps]}
+    line = ca_line(
+        preds, primary="thermo", sleep_node="bed", sleep_time="22:30", wake_time="06:30", tz=AMS, schedule=ca
+    )
+    assert line == [(t, 2.0 if _asleep(t) else 1.0) for t in steps]

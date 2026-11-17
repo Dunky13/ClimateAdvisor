@@ -2379,14 +2379,7 @@ def predict(
         else None
     )
     in_window = (
-        [
-            in_sleep_window(
-                i.ts.astimezone(tz), *_pair_at(i.ts.astimezone(tz), ca_sleep_time, ca_wake_time, ca_schedule)
-            )
-            for i in inputs
-        ]
-        if loop_j is not None
-        else []
+        sleep_flags([i.ts for i in inputs], ca_sleep_time, ca_wake_time, tz, ca_schedule) if loop_j is not None else []
     )
     if loop_j is not None and any(in_window):
         roll = _rollout_with_sleep_loop(
@@ -2689,6 +2682,15 @@ def in_sleep_window(local: datetime, sleep_time: str | None, wake_time: str | No
     return now_m >= s_m or now_m < w_m
 
 
+def sleep_flags(
+    times: Sequence[datetime], sleep_time: str | None, wake_time: str | None, tz: tzinfo, schedule: SchedulePair | None
+) -> list[bool]:
+    """Sleep-window verdict per instant, each from the schedule pair in force then (fork Dunky13#1 phase 2)."""
+    return [
+        in_sleep_window(t.astimezone(tz), *_pair_at(t.astimezone(tz), sleep_time, wake_time, schedule)) for t in times
+    ]
+
+
 def ca_line(
     preds: Mapping[str, Sequence[tuple[datetime, float]]],
     *,
@@ -2716,8 +2718,10 @@ def ca_line(
         return list(base)
     by_ts = {t.timestamp(): v for t, v in (sleep or [])}
     out = []
-    for t, v in base:
-        if not in_sleep_window(t.astimezone(tz), *_pair_at(t.astimezone(tz), sleep_time, wake_time, schedule)):
+    for (t, v), asleep in zip(
+        base, sleep_flags([t for t, _ in base], sleep_time, wake_time, tz, schedule), strict=True
+    ):
+        if not asleep:
             out.append((t, v))
         elif t.timestamp() in by_ts:
             out.append((t, by_ts[t.timestamp()]))

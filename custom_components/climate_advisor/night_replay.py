@@ -72,7 +72,8 @@ def find_nights(
     while d <= last:
         night_bed, night_wake = night_times(d) if night_times is not None else (bed, wake)
         nxt = d + timedelta(days=1)
-        bed_day = nxt if night_bed[0] < 12 else d  # a bedtime after midnight belongs to the evening of ``d``
+        # A bedtime earlier on the clock than the wake time is after midnight (the seam's rule): the night of ``d``.
+        bed_day = nxt if night_bed < night_wake else d
         start = datetime(bed_day.year, bed_day.month, bed_day.day, night_bed[0], night_bed[1], tzinfo=tz)
         end = datetime(nxt.year, nxt.month, nxt.day, night_wake[0], night_wake[1], tzinfo=tz)
         n = int((end.timestamp() - start.timestamp()) // STEP_S)
