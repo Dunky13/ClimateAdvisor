@@ -32,7 +32,7 @@ def _coordinator(tmp_path, *, shifts=None, config=None):
     c.learning._state.learned_schedule = shifts or {}
     c._preference_band = None
     c._workdays = {}
-    c._workday_warned = set()
+    c._workday_failed = {}
     c._schedule_unsubs = []
     c._schedule_plan_armed = None
     c._schedule_fired = {}
@@ -74,7 +74,7 @@ def test_a_rearm_after_a_fire_never_fires_the_same_night_twice(tmp_path):
     late = datetime(2026, 11, 20, 23, 30, tzinfo=AMS)
     with patch.object(co.dt_util, "now", return_value=late):
         plan = c._schedule_plan(late)
-    assert plan[2] > datetime(2026, 11, 21, 9, 0, tzinfo=AMS)  # tomorrow's, not the later learned 23:20 tonight
+    assert plan.bed > datetime(2026, 11, 21, 9, 0, tzinfo=AMS)  # tomorrow's, not the later learned 23:20 tonight
 
 
 def test_the_seam_reads_the_learned_time_per_moment_and_the_configured_one_when_off(tmp_path):
@@ -107,7 +107,24 @@ def test_workdays_resolve_on_the_loop_cache_per_date_and_fall_back_with_one_warn
     assert first == {date(2026, 11, 20): False}
     assert c._workdays == {date(2026, 11, 20): False}
     assert calls[0] == ("workday", "check_date", {"check_date": "2026-11-20"}, {"entity_id": "binary_sensor.workday"})
+    assert len(calls) == 3, "a failed date is not asked again within the hour"
+    later = co.dt_util.utcnow() + timedelta(hours=1, minutes=1)
+    with patch.object(co.dt_util, "utcnow", return_value=later):
+        asyncio.run(c.async_resolve_workday_dates(days))
+    assert len(calls) == 5
     assert caplog.text.count("Workday unresolved, using the weekend rule") == 2  # once per date, not per retry
+
+
+def test_a_voluptuous_error_from_the_workday_service_falls_back_instead_of_breaking_the_cycle(tmp_path):
+    import voluptuous as vol
+
+    c = _coordinator(tmp_path)
+
+    async def answer(*args, **kw):
+        raise vol.Invalid("entity does not exist")
+
+    c.hass.services.async_call = answer
+    assert asyncio.run(c.async_resolve_workday_dates([date(2026, 11, 20)])) == {}
 
 
 def test_a_holiday_makes_a_weekday_a_weekend_day_for_the_schedule(tmp_path):
@@ -117,3 +134,12 @@ def test_a_holiday_makes_a_weekday_a_weekend_day_for_the_schedule(tmp_path):
     view = c.preference_view()
     assert view.schedule.effective_times(c.config, friday)[0] == "07:30"
     assert view.schedule.effective_times(c.config, friday - timedelta(days=1))[0] == "06:30:00"
+
+
+def test_an_invalid_shift_cap_is_replaced_with_one_warning(tmp_path, caplog):
+    c = _coordinator(tmp_path)
+    c.config["schedule_max_shift_min"] = "ninety"
+    caplog.set_level("WARNING")
+    assert c.schedule_view().max_shift_min == 90
+    c.schedule_view()
+    assert caplog.text.count("Invalid schedule_max_shift_min") == 1

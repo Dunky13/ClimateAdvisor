@@ -15493,8 +15493,7 @@ class AutomationEngine:
 
         The one seam for "the schedule at this moment": itself when nothing is learned (feature off, cap 0, no shift).
         """
-        prefs = self._preferences()
-        return prefs.config_at(self.config, at) if isinstance(prefs, PreferenceView) else self.config
+        return config_for(self.config, self._preferences(), at)
 
     def _asleep_at(self, at: datetime) -> bool:
         """``_in_sleep_window`` under the schedule at ``at``."""

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import math
 import sys
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -87,6 +87,19 @@ def test_classify_files_nights_under_the_right_class() -> None:
     classes = {c for c, _ in seen.values()}
     assert classes == {ns.CLS_CLOSED, ns.CLS_WINDOWS, ns.CLS_FAN}
     assert all(sub.startswith(cls) for cls, sub in seen.values())
+
+
+def test_a_learned_night_is_validated_against_its_own_bed_and_wake_times() -> None:
+    from custom_components.climate_advisor.preference_schedule import ScheduleView, night_times_fn
+
+    samples = _history(6)
+    config = {"sleep_time": "20:30", "wake_time": "06:30"}
+    view = ScheduleView(shifts={"weekday": {"wake": 0, "bed": 60}, "weekend": {"wake": 0, "bed": 60}}, max_shift_min=90)
+    night_times = night_times_fn(view, config)
+    assert night_times_fn(ScheduleView(), config) is None  # nothing learned: the configured times, unchanged
+    assert night_times(date(2026, 6, 2)) == ((21, 30), (6, 30))
+    nights = nsr.find_nights(samples, TZ, (20, 30), (6, 30), night_times=night_times)
+    assert nights and all((start.hour, start.minute) == (21, 30) for start, _end, _rows in nights)
 
 
 def test_nights_with_a_gap_are_dropped() -> None:

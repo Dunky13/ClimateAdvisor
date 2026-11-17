@@ -30,7 +30,7 @@ CONFIG = {
 
 
 def _context(parent_id=None):
-    return SimpleNamespace(parent_id=parent_id)
+    return SimpleNamespace(id="ctx", parent_id=parent_id)
 
 
 def _call(at, parent_id="run-1"):
@@ -54,6 +54,41 @@ def test_a_recent_call_service_with_a_parent_context_covers_the_entities_it_targ
     assert calls.caused(CLIMATE, _context(None), fired + timedelta(seconds=30))
     assert not calls.caused(LIGHT, _context(None), fired + timedelta(seconds=30))
     assert not calls.caused(CLIMATE, _context(None), fired + timedelta(seconds=121))
+
+
+def test_a_recorded_run_context_covers_its_state_changes_and_its_service_calls_for_two_minutes():
+    calls = ac.AutomationCalls()
+    fired = datetime(2026, 11, 20, 23, 59, tzinfo=UTC)
+    run = SimpleNamespace(context=SimpleNamespace(id="run-ctx", parent_id=None), time_fired=fired)
+    calls.record_run(run)
+    own = SimpleNamespace(id="run-ctx", parent_id=None)
+    assert calls.caused(LIGHT, own, fired + timedelta(seconds=1))
+    assert calls.caused(LIGHT, SimpleNamespace(id="x", parent_id="run-ctx"), fired + timedelta(seconds=1))
+    assert not calls.caused(LIGHT, SimpleNamespace(id="other", parent_id=None), fired + timedelta(seconds=1))
+    assert not calls.caused(LIGHT, own, fired + timedelta(seconds=121))
+    assert calls._runs == {}  # pruned
+
+
+def test_a_call_service_under_a_run_context_marks_its_targets():
+    calls = ac.AutomationCalls()
+    fired = datetime(2026, 11, 20, 23, 59, tzinfo=UTC)
+    calls.record_run(SimpleNamespace(context=SimpleNamespace(id="run-ctx", parent_id=None), time_fired=fired))
+    call = SimpleNamespace(
+        context=SimpleNamespace(id="svc", parent_id="run-ctx"),
+        time_fired=fired,
+        data={"service_data": {"entity_id": "x"}},
+    )
+    with patch.object(ac, "targeted_entities", return_value=frozenset({CLIMATE})):
+        calls.record(MagicMock(), call)
+    assert calls.caused(CLIMATE, _context(None), fired + timedelta(seconds=30))
+
+
+def test_the_run_memory_is_bounded():
+    calls = ac.AutomationCalls()
+    fired = datetime(2026, 11, 20, 23, 59, tzinfo=UTC)
+    for n in range(ac._MAX_RUNS + 5):
+        calls.record_run(SimpleNamespace(context=SimpleNamespace(id=f"r{n}", parent_id=None), time_fired=fired))
+    assert len(calls._runs) == ac._MAX_RUNS
 
 
 def test_a_call_without_a_parent_context_is_never_resolved():
@@ -119,20 +154,24 @@ def test_a_bedtime_after_midnight_belongs_to_the_previous_evening_and_the_last_o
     assert [(x["date"], x["delta_min"]) for x in c.learning.schedule_candidates()] == [("2026-11-21", 80)]
 
 
-def test_an_automation_caused_signal_is_skipped_by_context_and_by_a_recent_service_call(tmp_path):
+def test_an_automation_caused_signal_is_skipped_by_context_and_by_a_recent_service_call(tmp_path, caplog):
     c = _coordinator(tmp_path, config={"bed_signal_entities": []})
+    caplog.set_level("INFO")
     at = datetime(2026, 11, 20, 7, 12, tzinfo=AMS)
     _signal(c, _event(LIGHT, "off", "on", parent_id="run-1"), at)
     with patch.object(ac, "targeted_entities", return_value=frozenset({LIGHT})):
         c._automation_calls.record(c.hass, _call(at.astimezone(UTC) - timedelta(seconds=30)))
     _signal(c, _event(LIGHT, "off", "on"), at)
     assert c.learning.schedule_candidates() == []
+    assert "Schedule signal skipped: reason=caused by an automation" in caplog.text
 
 
-def test_a_signal_while_away_is_not_a_candidate(tmp_path):
+def test_a_signal_while_away_is_not_a_candidate(tmp_path, caplog):
     c = _coordinator(tmp_path, config={"bed_signal_entities": []}, occupancy="away")
+    caplog.set_level("INFO")
     _signal(c, _event(LIGHT, "off", "on"), datetime(2026, 11, 20, 7, 12, tzinfo=AMS))
     assert c.learning.schedule_candidates() == []
+    assert "Schedule signal skipped: reason=occupancy away" in caplog.text
 
 
 def test_an_event_entity_counts_each_new_event_for_both_kinds(tmp_path):
@@ -144,6 +183,16 @@ def test_an_event_entity_counts_each_new_event_for_both_kinds(tmp_path):
         _event("event.button", "2026-11-20T06:00:00", "2026-11-20T07:05:00"),
         datetime(2026, 11, 20, 7, 5, tzinfo=AMS),
     )
+    assert [x["kind"] for x in c.learning.schedule_candidates()] == ["wake"]
+
+
+def test_an_event_after_a_restart_counts_when_live_but_not_the_restored_last_event(tmp_path):
+    c = _coordinator(tmp_path, config={"bed_signal_entities": [], "wake_signal_entities": ["event.button"]})
+    at = datetime(2026, 11, 20, 7, 5, 30, tzinfo=AMS)
+    _signal(c, _event("event.button", None, "2026-11-19T22:00:00+00:00"), at)  # the restore at startup
+    _signal(c, _event("event.button", "unknown", "2026-11-19T22:00:00+00:00"), at)
+    assert c.learning.schedule_candidates() == []
+    _signal(c, _event("event.button", "unknown", at.astimezone(UTC).isoformat()), at)  # a press just now
     assert [x["kind"] for x in c.learning.schedule_candidates()] == ["wake"]
 
 

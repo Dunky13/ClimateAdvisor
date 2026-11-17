@@ -24,7 +24,7 @@ B = "cold|evening|weekday"
 
 def _state(mode="heat", preset=None):
     attrs = {} if preset is None else {"preset_mode": preset}
-    return SimpleNamespace(state=mode, attributes=attrs, context=SimpleNamespace(parent_id=None))
+    return SimpleNamespace(state=mode, attributes=attrs, context=SimpleNamespace(id="ctx", parent_id=None))
 
 
 def _coordinator(*, enabled=True, automation=True, occupancy="home", classified=True, offsets=None, remote_f=0.0):
@@ -247,7 +247,7 @@ def _drive(coord, event):
 
     from tests.test_heat_cool_override import _PATCH_CALLBACK
 
-    event.data["new_state"].context = SimpleNamespace(parent_id=None)
+    event.data["new_state"].context = SimpleNamespace(id="ctx", parent_id=None)
     with (
         patch(_PATCH_CALLBACK, side_effect=lambda fn: fn),
         patch.object(coord_mod.dt_util, "now", return_value=EVENING),

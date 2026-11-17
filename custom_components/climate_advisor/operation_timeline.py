@@ -46,6 +46,7 @@ from .const import (
     THERMAL_SWING_DEFAULT_F,
 )
 from .nat_vent_gate import NatVentGateInputs, decide_nat_vent_gate
+from .preference_schedule import KIND_BED, KIND_WAKE, WakeBed
 from .remote_offset import cap_f, max_magnitude_f
 from .temperature import outdoor_direction_ok_for_thermostat
 from .thermal_confidence import grade_hvac_confidence, grade_solar_confidence
@@ -774,42 +775,44 @@ class TimelineSnapshot:
     paused_by_door: bool = False
     nat_vent_active: bool = False
     # Learned wake and bed times (fork Dunky13#1 phase 2); None = the configured times hold on every day.
-    # ``schedule_at(at)`` is the (wake, sleep) of the night that matters at ``at``; ``instants_on(day, tz)`` the wake of
-    # that morning and the bedtime of that evening as instants.
-    schedule_at: Callable[[datetime], tuple[time | None, time | None]] | None = None
-    instants_on: Callable[[date, tzinfo | None], tuple[datetime | None, datetime | None]] | None = None
+    # ``schedule_at(at)`` is the ``WakeBed`` of the night that matters at ``at``; ``instants_on(day, tz)`` the
+    # ``WakeBed`` instants of that morning and evening.
+    schedule_at: Callable[[datetime], WakeBed] | None = None
+    instants_on: Callable[[date, tzinfo | None], WakeBed] | None = None
 
-    def schedule(self, at: datetime) -> tuple[time | None, time | None]:
-        """``(wake, sleep)`` of the night that matters at ``at``."""
-        return self.schedule_at(at) if self.schedule_at is not None else (self.wake_time, self.sleep_time)
+    def schedule(self, at: datetime) -> WakeBed:
+        """The wake and bed times (``time`` or None) of the night that matters at ``at``."""
+        return self.schedule_at(at) if self.schedule_at is not None else WakeBed(self.wake_time, self.sleep_time)
 
     def asleep(self, at: datetime) -> bool:
-        wake, sleep = self.schedule(at)
-        return asleep_at(at, wake, sleep)
+        night = self.schedule(at)
+        return asleep_at(at, night.wake, night.bed)
 
-    def instants(self, day: date, tz: tzinfo | None) -> tuple[datetime | None, datetime | None]:
-        """``(wake, bed)`` instants of ``day``'s morning and evening."""
+    def instants(self, day: date, tz: tzinfo | None) -> WakeBed:
+        """The wake and bed instants of ``day``'s morning and evening."""
         if self.instants_on is not None:
             return self.instants_on(day, tz)
         wake, bed = (
             None if t is None else datetime.combine(day, t, tzinfo=tz) for t in (self.wake_time, self.sleep_time)
         )
-        return wake, bed
+        return WakeBed(wake, bed)
 
-    def next_instant(self, index: int, after: datetime) -> datetime | None:
-        """The next wake (``index`` 0) or bedtime (1) strictly after ``after``."""
+    def next_instant(self, kind: str, after: datetime) -> datetime | None:
+        """The next wake or bedtime (``KIND_WAKE`` / ``KIND_BED``) strictly after ``after``."""
         found = [
             at
             for n in range(-1, 3)
-            if (at := self.instants(after.date() + timedelta(days=n), after.tzinfo)[index]) is not None and at > after
+            if (at := getattr(self.instants(after.date() + timedelta(days=n), after.tzinfo), kind)) is not None
+            and at > after
         ]
         return min(found) if found else None
 
-    def is_instant(self, index: int, at: datetime) -> bool:
-        """Whether ``at`` is, to the minute, a wake (0) or bedtime (1) instant."""
+    def is_instant(self, kind: str, at: datetime) -> bool:
+        """Whether ``at`` is, to the minute, a wake or bedtime (``KIND_WAKE`` / ``KIND_BED``) instant."""
         minute = at.replace(second=0, microsecond=0)
         return any(
-            (found := self.instants(at.date() + timedelta(days=n), at.tzinfo)[index]) is not None and found == minute
+            (found := getattr(self.instants(at.date() + timedelta(days=n), at.tzinfo), kind)) is not None
+            and found == minute
             for n in range(-1, 2)
         )
 
@@ -1655,7 +1658,7 @@ def _clip_to_awake(snap: TimelineSnapshot, a: datetime, b: datetime) -> tuple[da
         if wake is None or wake >= b:
             return None
         a = wake
-    bed = snap.next_instant(1, a)
+    bed = snap.next_instant(KIND_BED, a)
     if bed is not None and b > bed:
         return (a, bed, "bedtime") if bed - a >= timedelta(minutes=WINDOW_MIN_SPAN_MIN) else None
     return a, b, "planned_end"
@@ -2001,7 +2004,7 @@ def build_timeline(
                 "context": seg.context,
                 "mode": seg.mode,
             }
-            if snap.wake_time is not None and snap.is_instant(0, seg.start) and not seg.asleep:
+            if snap.wake_time is not None and snap.is_instant(KIND_WAKE, seg.start) and not seg.asleep:
                 if snap.sleep_sensor_label:
                     facts["sensor"] = snap.primary_sensor_label
                     add(
@@ -2023,7 +2026,7 @@ def build_timeline(
                         target_f=facts["setpoint"],
                         mode=seg.mode,
                     )
-            elif snap.sleep_time is not None and snap.is_instant(1, seg.start) and seg.asleep:
+            elif snap.sleep_time is not None and snap.is_instant(KIND_BED, seg.start) and seg.asleep:
                 if snap.sleep_sensor_label:
                     facts.update({"sensor": snap.sleep_sensor_label, "wake": _next_wake(snap, seg.start)})
                     add(
@@ -2049,7 +2052,7 @@ def build_timeline(
             # The day plan changes with the new calendar day; CA applies it when that day's schedule starts.
             at = seg.start
             if minute == time(0, 0) and snap.wake_time is not None:
-                at = snap.instants(seg.start.date(), seg.start.tzinfo)[0] or at
+                at = snap.instants(seg.start.date(), seg.start.tzinfo).wake or at
             if at > now:
                 add(
                     at,
@@ -2307,7 +2310,7 @@ def _regen_text(reasons: Sequence[str]) -> str | None:
 
 
 def _next_wake(snap: TimelineSnapshot, after: datetime) -> datetime | None:
-    return snap.next_instant(0, after) if snap.wake_time is not None else None
+    return snap.next_instant(KIND_WAKE, after) if snap.wake_time is not None else None
 
 
 def _edge_toward(final: Sim | None, cand: WindowCandidate) -> float | None:

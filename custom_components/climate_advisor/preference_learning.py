@@ -36,10 +36,12 @@ from .preference_schedule import (
     DAY_CLASS_WEEKDAY,
     DAY_CLASS_WEEKEND,
     DAY_CLASSES,
+    SOURCE_HISTORY,
     ScheduleView,
     clock_minutes,
     config_at,
     day_class,
+    next_times,
 )
 
 PART_NIGHT = "night"
@@ -86,7 +88,6 @@ SOURCE_SLEEP_SENSOR = "sleep_sensor"
 SOURCE_PINNED = "pinned"
 SOURCE_LEARNED = "learned"
 SOURCE_THERMOSTAT = "thermostat"
-SOURCE_HISTORY = "history"  # an observation from the recorder backfill
 EPISODE_CONTEXT_KEYS: tuple[str, ...] = ("ref", "rh", "band", "rooms")
 
 _NOON_MIN = 12 * 60
@@ -288,7 +289,7 @@ class PreferenceView:
         self, at: datetime, day_type: str, config: Mapping[str, Any], *, in_sleep_window: bool
     ) -> tuple[float, str]:
         """``(offset_f, bucket)`` for an instant under the schedule at that instant (four-part bucket)."""
-        schedule = self.config_at(config, at)
+        schedule = config_at(self.schedule, config, at)
         bucket = bucket_key(
             at,
             day_type,
@@ -300,17 +301,22 @@ class PreferenceView:
         )
         return self.offset_for(bucket), bucket
 
-    def config_at(self, config: dict, at: datetime) -> dict:
-        """``config`` with the wake and sleep times of the schedule at ``at`` (itself when nothing is learned)."""
-        return config_at(self.schedule, config, at)
-
 
 def config_for(config: dict, view: PreferenceView | None, at: datetime) -> dict:
     """``config`` with the wake and sleep times of the schedule at ``at``: the seam for callers without a coordinator.
 
     ``isinstance``: a stubbed engine or coordinator hands back a mock, which must read as "nothing learned".
     """
-    return view.config_at(config, at) if isinstance(view, PreferenceView) else config
+    return config_at(view.schedule, config, at) if isinstance(view, PreferenceView) else config
+
+
+def learned_next(
+    view: PreferenceView | None, config: dict, after: datetime, kind: str, default: datetime | None
+) -> datetime | None:
+    """The next learned wake or bedtime (``KIND_WAKE`` / ``KIND_BED``) after ``after``, else ``default``."""
+    if not isinstance(view, PreferenceView) or not view.schedule.active:
+        return default
+    return next_times(view.schedule, config, after)[kind] or default
 
 
 # --------------------------------------------------------------------------------------------------

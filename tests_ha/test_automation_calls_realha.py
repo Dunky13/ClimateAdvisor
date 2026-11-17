@@ -49,3 +49,69 @@ async def test_a_parent_context_call_to_a_device_marks_the_entity_for_two_minute
     )
     assert calls.caused("climate.nest", Context(), fired + timedelta(seconds=30))
     assert not calls.caused("climate.nest", Context(), fired + timedelta(seconds=130))
+
+
+async def _setup_light_and_time_automation(hass):
+    from homeassistant.setup import async_setup_component
+
+    assert await async_setup_component(hass, "input_boolean", {"input_boolean": {"tv_led": {"initial": True}}})
+    assert await async_setup_component(
+        hass,
+        "automation",
+        {
+            "automation": {
+                "trigger": {"platform": "time", "at": "23:59:00"},
+                "action": {"service": "input_boolean.turn_off", "target": {"entity_id": "input_boolean.tv_led"}},
+            }
+        },
+    )
+    await hass.async_block_till_done()
+
+
+async def _stop_automation(hass):
+    """Cancel the automation's time listener so the test leaves no timer behind."""
+    await hass.services.async_call("automation", "turn_off", {"entity_id": "all"}, blocking=True)
+
+
+def _track(hass):
+    """An AutomationCalls fed by the same events the coordinator listens to, and the verdict per state change."""
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.climate_advisor.automation_calls import RUN_EVENTS
+
+    calls, verdicts = AutomationCalls(), []
+    hass.bus.async_listen("call_service", lambda event: calls.record(hass, event))
+    for run_event in RUN_EVENTS:
+        hass.bus.async_listen(run_event, calls.record_run)
+
+    def _changed(event):
+        new = event.data["new_state"]
+        if event.data["entity_id"] == "input_boolean.tv_led" and event.data["old_state"] is not None:
+            verdicts.append(calls.caused("input_boolean.tv_led", new.context, dt_util.utcnow()))
+
+    hass.bus.async_listen("state_changed", _changed)
+    return verdicts
+
+
+async def test_a_time_triggered_automation_turning_a_light_off_is_automation_caused(hass):
+    from homeassistant.util import dt as dt_util
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+
+    await _setup_light_and_time_automation(hass)
+    verdicts = _track(hass)
+    now = dt_util.now()
+    async_fire_time_changed(hass, now.replace(hour=23, minute=59, second=1) + timedelta(days=1))
+    await hass.async_block_till_done()
+    assert hass.states.get("input_boolean.tv_led").state == "off"
+    assert verdicts == [True]
+    await _stop_automation(hass)
+
+
+async def test_a_plain_service_call_toggling_the_light_is_not_automation_caused(hass):
+    await _setup_light_and_time_automation(hass)
+    verdicts = _track(hass)
+    await hass.services.async_call(
+        "input_boolean", "turn_off", {"entity_id": "input_boolean.tv_led"}, blocking=True, context=Context()
+    )
+    assert verdicts == [False]
+    await _stop_automation(hass)

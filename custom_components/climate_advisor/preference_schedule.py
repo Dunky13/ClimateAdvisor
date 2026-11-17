@@ -14,11 +14,11 @@ Spec: docs/preference-learning-spec.md, "Phase 2: learned wake and bed times".
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta, tzinfo
 from statistics import median
-from typing import Any
+from typing import Any, NamedTuple
 
 from .const import DEFAULT_SCHEDULE_MAX_SHIFT_MIN
 
@@ -37,7 +37,6 @@ SIGNAL_WINDOW_MIN = 180  # a candidate lies within 3 hours of the configured tim
 FILTER_TOLERANCE_MIN = 2  # the same clock time: automations fire to the second
 FILTER_MIN_SHARE = 0.4  # of the days the history covers
 FILTER_MIN_DAYS = 4
-FALLBACK_WINDOW_MIN = 60  # the thermostat fallback: an episode starts this close before the effective time
 MIN_CANDIDATES = 4
 RECENT_CANDIDATES = 20
 ROUND_MIN = 5
@@ -45,6 +44,7 @@ RETENTION_DAYS = 400
 MAX_CANDIDATES = 2000
 _DAY_MIN = 24 * 60
 _NOON_HOUR = 12
+EVENT_LIVE_WINDOW = timedelta(seconds=60)  # an event this close to now is live, not the restored last event
 _UNKNOWN_STATES = frozenset({"unavailable", "unknown"})
 
 
@@ -102,6 +102,13 @@ def shift_time(configured: Any, shift_min: int) -> Any:
     return f"{shifted // 60:02d}:{shifted % 60:02d}"
 
 
+class WakeBed(NamedTuple):
+    """The wake and bed times of one night, always in this order (``"HH:MM"`` strings, or ``time`` for a timeline)."""
+
+    wake: Any
+    bed: Any
+
+
 @dataclass(frozen=True)
 class ScheduleView:
     """The learned shifts as the readers see them: a read-only snapshot (it is read from executor threads).
@@ -137,16 +144,20 @@ class ScheduleView:
         bed = shift_time(config.get("sleep_time"), self.shift(self.day_class(day + timedelta(days=1)), KIND_BED))
         return wake, bed
 
-    def schedule_at(self, config: Mapping[str, Any], at: datetime) -> tuple[Any, Any]:
-        """``(sleep_time, wake_time)`` of the night that matters at ``at`` (the noon pivot).
+    def schedule_at(self, config: Mapping[str, Any], at: datetime) -> WakeBed:
+        """The ``WakeBed`` of the night that matters at ``at`` (the noon pivot).
 
         Before 12:00 that is the night that ends this morning (yesterday's bedtime, today's wake); from 12:00 the coming
-        night (today's bedtime, tomorrow's wake). ``automation._in_sleep_window`` applies unchanged to the pair.
+        night (today's bedtime, tomorrow's wake).
         """
         today = at.date()
         if at.hour < _NOON_HOUR:
-            return self.effective_times(config, today - timedelta(days=1))[1], self.effective_times(config, today)[0]
-        return self.effective_times(config, today)[1], self.effective_times(config, today + timedelta(days=1))[0]
+            return WakeBed(
+                self.effective_times(config, today)[0], self.effective_times(config, today - timedelta(days=1))[1]
+            )
+        return WakeBed(
+            self.effective_times(config, today + timedelta(days=1))[0], self.effective_times(config, today)[1]
+        )
 
 
 def is_minutes(value: Any) -> bool:
@@ -161,8 +172,8 @@ def config_at(view: ScheduleView | None, config: dict, at: datetime) -> dict:
     """
     if view is None or not view.active:
         return config
-    sleep, wake = view.schedule_at(config, at)
-    return {**config, "sleep_time": sleep, "wake_time": wake}
+    night = view.schedule_at(config, at)
+    return {**config, "sleep_time": night.bed, "wake_time": night.wake}
 
 
 # --------------------------------------------------------------------------------------------------
@@ -226,17 +237,26 @@ def trim_candidates(candidates: list[dict], today: date) -> list[dict]:
     return kept[-MAX_CANDIDATES:]
 
 
-def transition_active(domain: str, old: Any, new: Any, kind: str) -> bool:
+def transition_active(domain: str, old: Any, new: Any, kind: str, now: datetime | None = None) -> bool:
     """True for a real qualifying transition of a signal entity of ``domain``.
 
     Both states must be known (not ``unavailable`` / ``unknown`` / missing): a restart or a dropped device never counts.
-    A wake is an activation (``on``), a bed a deactivation (``off``); for an ``event`` entity any new event counts (its
-    state is the time of the last event).
+    A wake is an activation (``on``), a bed a deactivation (``off``). An ``event`` entity's state is the time of its
+    last event, so any new event counts; when the old state is unknown (a restart), the event still counts if its
+    timestamp is within a minute of ``now``, which the restore of the last event at startup never is.
     """
-    if old is None or new is None or old in _UNKNOWN_STATES or new in _UNKNOWN_STATES or old == new:
+    if new is None or new in _UNKNOWN_STATES or old == new:
         return False
     if domain == "event":
-        return True
+        if old is not None and old not in _UNKNOWN_STATES:
+            return True
+        try:
+            fired = datetime.fromisoformat(str(new))
+        except ValueError:
+            return False
+        return now is not None and fired.tzinfo is not None and abs(now - fired) <= EVENT_LIVE_WINDOW
+    if old is None or old in _UNKNOWN_STATES:
+        return False
     return new == ("on" if kind == KIND_WAKE else "off")
 
 
@@ -347,8 +367,8 @@ def weekly_schedule_update(
     """One weekly pass over the four class and kind pairs: ``(new_shifts, changes)``.
 
     Per pair, the most recent 20 candidates; fewer than 4 means no change. ``target`` is their median clamped to
-    ``+-max_shift_min``; ``new = current + clamp(target - current, +-step_min)``, clamped again and rounded to 5
-    minutes.
+    ``+-max_shift_min``; ``new = current + clamp(target - current, +-step_min)`` from the stored shift clamped to the
+    cap, clamped again and rounded to 5 minutes.
     ``changes`` has one record per pair whose shift moved.
     """
     pool = list(candidates)
@@ -359,11 +379,12 @@ def weekly_schedule_update(
             deltas = recent_deltas(pool, cls, kind)
             if len(deltas) < MIN_CANDIDATES:
                 continue
-            current = new_shifts[cls][kind]
+            stored = new_shifts[cls][kind]
+            current = int(clamp_minutes(stored, max_shift_min))  # shifts are clamped when read: step from what applies
             target = clamp_minutes(float(median(deltas)), max_shift_min)
             new = round_minutes(clamp_minutes(current + clamp_minutes(target - current, step_min), max_shift_min))
             new_shifts[cls][kind] = new
-            if new != current:
+            if new != stored:
                 changes.append(
                     {
                         "date": today.isoformat(),
@@ -445,6 +466,28 @@ def instants_on(
                 at += timedelta(days=1)
         out[kind] = at
     return out
+
+
+def night_times_fn(
+    view: ScheduleView | None, config: Mapping[str, Any]
+) -> Callable[[date], tuple[tuple[int, int], tuple[int, int]]] | None:
+    """``evening date -> ((h, m) bed, (h, m) wake)`` of the learned night, None while nothing is learned.
+
+    For the nights the replay validates (``night_replay.find_nights``); an unparseable time falls back to 22:30 / 06:30.
+    """
+    if view is None or not view.active:
+        return None
+
+    def _hm(value: Any, default: int) -> tuple[int, int]:
+        minutes = clock_minutes(value)
+        return divmod(default if minutes is None else minutes, 60)
+
+    def _night(day: date) -> tuple[tuple[int, int], tuple[int, int]]:
+        bed = view.effective_times(config, day)[1]
+        wake = view.effective_times(config, day + timedelta(days=1))[0]
+        return _hm(bed, 22 * 60 + 30), _hm(wake, 6 * 60 + 30)
+
+    return _night
 
 
 def next_times(view: ScheduleView | None, config: Mapping[str, Any], after: datetime) -> dict[str, datetime | None]:

@@ -47,14 +47,21 @@ MASS_WARMUP_STEPS = 288
 
 
 # --------------------------------------------------------------------------------------------- nights
+NightTimes = Callable[[date], tuple[tuple[int, int], tuple[int, int]]]  # evening date -> (bed, wake) as (h, m)
+
+
 def find_nights(
     samples: Sequence[p4.V4Sample],
     tz: tzinfo,
     bed: tuple[int, int],
     wake: tuple[int, int],
     primary: str = CA,
+    night_times: NightTimes | None = None,
 ) -> list[tuple[datetime, datetime, list[p4.V4Sample]]]:
-    """(start, end, step samples) per local date with an unbroken run of readings from bedtime to wake time."""
+    """(start, end, step samples) per local date with an unbroken run of readings from bedtime to wake time.
+
+    ``night_times(date)`` (fork Dunky13#1 phase 2) gives that night's ``(bed, wake)``: the learned times in force then.
+    """
     by_epoch = {int(s.ts.timestamp()): s for s in samples}
     if not samples:
         return []
@@ -63,9 +70,10 @@ def find_nights(
     nights = []
     d = first
     while d <= last:
-        start = datetime(d.year, d.month, d.day, bed[0], bed[1], tzinfo=tz)
+        night_bed, night_wake = night_times(d) if night_times is not None else (bed, wake)
+        start = datetime(d.year, d.month, d.day, night_bed[0], night_bed[1], tzinfo=tz)
         nxt = d + timedelta(days=1)
-        end = datetime(nxt.year, nxt.month, nxt.day, wake[0], wake[1], tzinfo=tz)
+        end = datetime(nxt.year, nxt.month, nxt.day, night_wake[0], night_wake[1], tzinfo=tz)
         n = int((end.timestamp() - start.timestamp()) // STEP_S)
         grid = [start] + p4.grid_steps(start, n)
         rows = [by_epoch.get(int(t.timestamp())) for t in grid]
@@ -217,6 +225,7 @@ def run(
     sensors: Sequence[str] | None = None,
     bed: tuple[int, int] = (20, 30),
     wake: tuple[int, int] = (6, 30),
+    night_times: NightTimes | None = None,
     train_days: int = 0,
     since: date | None = None,
     until: date | None = None,
@@ -225,7 +234,7 @@ def run(
 ) -> dict[str, object]:
     """Walk forward by ISO week (fit before each Monday, replay that week's nights). Returns the report dict."""
     emit = log or (lambda _msg: None)
-    nights = find_nights(samples, tz, bed, wake, primary)
+    nights = find_nights(samples, tz, bed, wake, primary, night_times)
     if since:
         nights = [n for n in nights if n[0].astimezone(tz).date() >= since]
     if until:
@@ -463,6 +472,7 @@ def run_nightly(
     in_sleep: Callable[[datetime], bool] | None = None,
     bed: tuple[int, int] = (22, 30),
     wake: tuple[int, int] = (6, 30),
+    night_times: NightTimes | None = None,
     train_days: int = V4_FIT_TRAIN_DAYS,
     nights: int = NIGHT_REPLAY_NIGHTS,
     model_fitted_at: str | None = None,
@@ -499,6 +509,7 @@ def run_nightly(
         sensors=ordered,
         bed=bed,
         wake=wake,
+        night_times=night_times,
         train_days=train_days,
         max_nights=nights,
     )

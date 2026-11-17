@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from .ai_skills import AISkillRegistry
     from .claude_api import ClaudeAPIClient
 
+import voluptuous as vol
 from homeassistant.const import EVENT_CALL_SERVICE, EVENT_HOMEASSISTANT_STOP
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
@@ -78,7 +79,7 @@ from .automation import (
     select_comfort_band,
     tou_bank_band,
 )
-from .automation_calls import AutomationCalls
+from .automation_calls import RUN_EVENTS, AutomationCalls
 from .briefing import BriefingText, generate_briefing
 from .chart_log import ChartStateLog
 from .classifier import DayClassification, ForecastSnapshot, classify_day
@@ -455,6 +456,7 @@ from .preference_learning import (
     episode_context,
     heat_gate_reasons,
     humidity_band,
+    learned_next,
     near_schedule_edge,
     part_of_day,
     part_reference,
@@ -470,10 +472,12 @@ from .preference_schedule import (
     SOURCE_SENSOR,
     SOURCE_THERMOSTAT,
     ScheduleView,
+    WakeBed,
     candidate_for,
     hhmm,
     instants_on,
     next_times,
+    night_times_fn,
     transition_active,
 )
 from .promise_journal import (
@@ -583,6 +587,8 @@ from .whf_safety_decision import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+WORKDAY_RETRY = timedelta(hours=1)  # an unresolved workday date is asked again at most this often
 _V4_FIT_LOCK_KEY = "climate_advisor_v4_fit_lock"  # hass.data key of the domain-wide v4 fit lock (Issue #1230 R1b, M5)
 # Issue #1422: the off-cycle fit that only folds newly qualified display-only sensor nodes into the stored model.
 V4_DISPLAY_FIT_REASON = "display_nodes"
@@ -717,6 +723,15 @@ _HUMIDITY_KIND_KEYS: Final[dict[str, str]] = {
     "thermostat": "status.humidity_kind.thermostat",
     "device_sensor": "status.humidity_kind.device_sensor",
 }
+
+
+@dataclass(frozen=True)
+class _SchedulePlan:
+    """What the wake and bed timers should be: clock-time (``point`` False) or point-in-time at ``wake`` and ``bed``."""
+
+    point: bool = False
+    wake: datetime | None = None
+    bed: datetime | None = None
 
 
 @dataclass
@@ -1138,26 +1153,47 @@ def _config_at(owner: Any, at: datetime) -> dict:
     return config_for(owner.config, provider() if callable(provider) else None, at)
 
 
+def _config_at_fn(owner: Any) -> Callable[[datetime], dict]:
+    """``_config_at`` bound to ONE snapshot of the view, for a callback that runs many times (and off the loop)."""
+    provider = getattr(owner, "preference_view", None)
+    view = provider() if callable(provider) else None
+    return lambda at: config_for(owner.config, view, at)
+
+
+def _asleep_fn(owner: Any) -> Callable[[datetime], bool]:
+    """``_asleep_at`` bound to one snapshot of the view (see ``_config_at_fn``)."""
+    config_at = _config_at_fn(owner)
+    return lambda at: _in_sleep_window(at, config_at(at))
+
+
 def _asleep_at(owner: Any, at: datetime) -> bool:
     """``_in_sleep_window`` under the schedule at ``at``."""
     return _in_sleep_window(at, _config_at(owner, at))
 
 
-def _timeline_schedule(owner: Any) -> dict[str, Any]:
-    """The timeline snapshot's learned-schedule resolvers; empty while nothing is learned."""
+def _learned_schedule(owner: Any) -> tuple[ScheduleView, dict] | None:
+    """One snapshot of the learned schedule and the config it applies to; None while nothing is learned."""
     provider = getattr(owner, "preference_view", None)
     view = provider() if callable(provider) else None
     if not isinstance(view, PreferenceView) or not view.schedule.active:
+        return None
+    return view.schedule, dict(owner.config)
+
+
+def _timeline_schedule(owner: Any) -> dict[str, Any]:
+    """The timeline snapshot's learned-schedule resolvers; empty while nothing is learned."""
+    learned = _learned_schedule(owner)
+    if learned is None:
         return {}
-    schedule, config = view.schedule, dict(owner.config)
+    schedule, config = learned
 
-    def schedule_at(at: datetime) -> tuple[time, time]:
-        sleep, wake = schedule.schedule_at(config, at)
-        return _parse_time(wake), _parse_time(sleep)
+    def schedule_at(at: datetime) -> WakeBed:
+        night = schedule.schedule_at(config, at)
+        return WakeBed(_parse_time(night.wake), _parse_time(night.bed))
 
-    def instants(day: date, tz: Any) -> tuple[datetime | None, datetime | None]:
+    def instants(day: date, tz: Any) -> WakeBed:
         found = instants_on(schedule, config, day, tz)
-        return found[KIND_WAKE], found[KIND_BED]
+        return WakeBed(found[KIND_WAKE], found[KIND_BED])
 
     return {"schedule_at": schedule_at, "instants_on": instants}
 
@@ -1478,7 +1514,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         # whose lookup failed (warned once), the wake and bed timer handles (apart from ``_unsub_listeners``: they are
         # re-armed), what is armed, and when each last fired (a re-arm must not fire the same night twice).
         self._workdays: dict[date, bool] = {}
-        self._workday_warned: set[date] = set()
+        self._workday_failed: dict[date, datetime] = {}  # unresolved date -> last attempt (retried hourly)
         self._schedule_unsubs: list[Callable[[], None]] = []
         self._schedule_plan_armed: tuple[Any, ...] | None = None
         self._schedule_fired: dict[str, datetime] = {}
@@ -6959,6 +6995,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
 
             now = dt_util.now()
             node = self._v4_node_inputs()
+            view = self.preference_view()  # a snapshot: the replay runs in an executor thread
             sleep_t = _parse_time(self.config.get("sleep_time", "22:30"))
             wake_t = _parse_time(self.config.get("wake_time", "06:30"))
             async with self._v4_fit_lock():
@@ -6975,6 +7012,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
                         in_sleep=node["in_sleep"],
                         bed=(sleep_t.hour, sleep_t.minute),
                         wake=(wake_t.hour, wake_t.minute),
+                        night_times=night_times_fn(view.schedule if view else None, self.config),
                         train_days=V4_FIT_TRAIN_DAYS,
                         model_fitted_at=str(model_dict.get("fitted_at") or ""),
                         # Issue #1525: what newer nights have not displaced carries over (never fades with time)
@@ -8014,11 +8052,11 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         )
 
     def _v4_ca_schedule(self) -> dict[str, Any]:
-        """``{"ca_schedule": f}``: the (sleep, wake) pair at each instant of the horizon; empty when unlearned."""
-        view = self.preference_view()
-        if view is None or not view.schedule.active:
+        """``{"ca_schedule": f}``: the wake and bed times at each instant of the horizon; empty when unlearned."""
+        learned = _learned_schedule(self)
+        if learned is None:
             return {}
-        schedule, config = view.schedule, dict(self.config)
+        schedule, config = learned
         return {"ca_schedule": lambda at: schedule.schedule_at(config, at)}
 
     def _v4_cycle_kwargs(
@@ -10834,7 +10872,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
                 ceiling=_armed_ceiling,
                 comfort_heat_raw=_comfort_heat_raw,
                 sleep_heat=_sleep_heat,
-                in_sleep_window_fn=lambda ts: _asleep_at(self, ts),
+                in_sleep_window_fn=_asleep_fn(self),
                 window_open_time=c.window_open_time,
                 house_stepper=_stepper,
                 k_active_cool=_k_cool,
@@ -11588,9 +11626,19 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
     def schedule_view(self) -> ScheduleView:
         """The learned wake and bed shifts with the resolved workdays (a snapshot; nothing is learned when off)."""
         cap = self.config.get(CONF_SCHEDULE_MAX_SHIFT_MIN, DEFAULT_SCHEDULE_MAX_SHIFT_MIN)
+        if not isinstance(cap, int) or isinstance(cap, bool):
+            if not getattr(self, "_schedule_cap_warned", False):
+                self._schedule_cap_warned = True
+                _LOGGER.warning(
+                    "Invalid %s=%r, using the default %d",
+                    CONF_SCHEDULE_MAX_SHIFT_MIN,
+                    cap,
+                    DEFAULT_SCHEDULE_MAX_SHIFT_MIN,
+                )
+            cap = DEFAULT_SCHEDULE_MAX_SHIFT_MIN
         return ScheduleView(
             shifts=self.learning.schedule_shifts(),
-            max_shift_min=cap if isinstance(cap, int) and not isinstance(cap, bool) else DEFAULT_SCHEDULE_MAX_SHIFT_MIN,
+            max_shift_min=cap,
             workdays=dict(getattr(self, "_workdays", {})),
         )
 
@@ -11603,9 +11651,15 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         def _on_call_service(event: Event) -> None:
             self._automation_calls.record(self.hass, event)
 
+        @callback
+        def _on_run(event: Event) -> None:
+            self._automation_calls.record_run(event)
+
         self._unsub_listeners.append(
             self.hass.bus.async_listen(EVENT_CALL_SERVICE, self._zone_scoped_sync(_on_call_service))
         )
+        for run_event in RUN_EVENTS:
+            self._unsub_listeners.append(self.hass.bus.async_listen(run_event, self._zone_scoped_sync(_on_run)))
         signals = sorted(
             {*self.config.get(CONF_WAKE_SIGNAL_ENTITIES, []), *self.config.get(CONF_BED_SIGNAL_ENTITIES, [])}
         )
@@ -11624,9 +11678,10 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         if not isinstance(entity_id, str) or new is None or self.preference_view() is None:
             return
         if self._occupancy_mode not in (OCCUPANCY_HOME, OCCUPANCY_GUEST):
+            _LOGGER.info("Schedule signal skipped: reason=occupancy %s entity=%s", self._occupancy_mode, entity_id)
             return
         if self._automation_calls.caused(entity_id, new.context, dt_util.utcnow()):
-            _LOGGER.debug("Schedule signal skipped: reason=caused by an automation entity=%s", entity_id)
+            _LOGGER.info("Schedule signal skipped: reason=caused by an automation entity=%s", entity_id)
             return
         now = dt_util.now()
         domain = entity_id.partition(".")[0]
@@ -11634,7 +11689,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         for kind, key in ((KIND_WAKE, CONF_WAKE_SIGNAL_ENTITIES), (KIND_BED, CONF_BED_SIGNAL_ENTITIES)):
             if entity_id not in self.config.get(key, []):
                 continue
-            if not transition_active(domain, getattr(old, "state", None), new.state, kind):
+            if not transition_active(domain, getattr(old, "state", None), new.state, kind, dt_util.utcnow()):
                 continue
             candidate = candidate_for(kind, now, self.config, self._workdays)
             if candidate is not None and self.learning.add_schedule_candidate(
@@ -11671,8 +11726,11 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             return
         today = dt_util.now().date()
         await self.async_resolve_workday_dates([today + timedelta(days=n) for n in range(-1, 3)])
-        for stale in [d for d in self._workdays if d < today - timedelta(days=60)]:
+        horizon = today - timedelta(days=60)
+        for stale in [d for d in self._workdays if d < horizon]:
             del self._workdays[stale]
+        for stale in [d for d in self._workday_failed if d < horizon]:
+            del self._workday_failed[stale]
 
     async def async_resolve_workday_dates(self, days: list[date]) -> dict[date, bool]:
         """Resolve ``days`` into the cache and return those the entity answered for (a backfill resolves its window)."""
@@ -11680,9 +11738,13 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         if not entity:
             return {}
         out: dict[date, bool] = {}
+        now = dt_util.utcnow()
         for day in days:
             if day in self._workdays:
                 out[day] = self._workdays[day]
+                continue
+            failed_at = self._workday_failed.get(day)
+            if failed_at is not None and now - failed_at < WORKDAY_RETRY:
                 continue
             flag: bool | None = None
             try:
@@ -11697,21 +11759,22 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
                 answer = response.get(entity) if isinstance(response, dict) else None
                 value = answer.get("workday") if isinstance(answer, dict) else None
                 flag = value if isinstance(value, bool) else None
-            except HomeAssistantError as err:
-                _LOGGER.debug("Workday lookup failed: entity=%s date=%s error=%s", entity, day, err)
+            except HomeAssistantError, vol.Invalid:  # a removed or reconfigured entity fails the service call
+                _LOGGER.debug("Workday lookup failed: entity=%s date=%s", entity, day, exc_info=True)
             if flag is None:
-                if day not in self._workday_warned:
-                    self._workday_warned.add(day)
+                if day not in self._workday_failed:
                     _LOGGER.warning("Workday unresolved, using the weekend rule: entity=%s date=%s", entity, day)
+                self._workday_failed[day] = now
                 continue
+            self._workday_failed.pop(day, None)
             self._workdays[day] = out[day] = flag
         return out
 
-    def _schedule_plan(self, now: datetime) -> tuple[Any, ...]:
+    def _schedule_plan(self, now: datetime) -> _SchedulePlan:
         """What the wake and bed timers should be: clock-time while nothing is learned, else the next instants."""
         view = self.preference_view()
         if view is None or not view.schedule.active:
-            return ("clock",)  # the configured times only change with a reload, which builds a new coordinator
+            return _SchedulePlan()  # the configured times only change with a reload, which builds a new coordinator
         nxt: dict[str, datetime | None] = {}
         for kind in (KIND_WAKE, KIND_BED):
             after = now
@@ -11720,10 +11783,12 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
                 # A re-arm (weekly update, seed accept) must not fire the night it already fired a second time.
                 after = max(after, fired + timedelta(hours=12))
             nxt[kind] = next_times(view.schedule, self.config, after)[kind]
-        return ("point", nxt[KIND_WAKE], nxt[KIND_BED])
+        return _SchedulePlan(True, nxt[KIND_WAKE], nxt[KIND_BED])
 
     def _arm_schedule_timers(self) -> None:
         """(Re)arm the wake and bed timers for the current plan; a no-op when it is already armed."""
+        if _latched(self):  # shut down: a firing timer's re-arm must not register one that outlives the unload
+            return
         plan = self._schedule_plan(dt_util.now())
         if plan == self._schedule_plan_armed:
             return
@@ -11731,7 +11796,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             unsub()
         self._schedule_unsubs.clear()
         self._schedule_plan_armed = plan
-        if plan[0] == "clock":
+        if not plan.point:
             wake_time = _parse_time(self.config.get("wake_time", "06:30"))
             sleep_time = _parse_time(self.config.get("sleep_time", "22:30"))
             for handler, at in ((self._async_morning_wakeup, wake_time), (self._async_bedtime, sleep_time)):
@@ -11741,15 +11806,15 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
                     )
                 )
             return
-        for handler, at in ((self._async_morning_wakeup, plan[1]), (self._async_bedtime, plan[2])):
+        for handler, at in ((self._async_morning_wakeup, plan.wake), (self._async_bedtime, plan.bed)):
             if at is not None:
                 self._schedule_unsubs.append(
                     _track_point_in_time(self, self._zone_scoped(self._async_schedule_point(handler)), at)
                 )
         _LOGGER.info(
             "Learned schedule timers armed: wake=%s bed=%s",
-            plan[1].isoformat() if plan[1] else None,
-            plan[2].isoformat() if plan[2] else None,
+            plan.wake.isoformat() if plan.wake else None,
+            plan.bed.isoformat() if plan.bed else None,
         )
 
     def _async_schedule_point(self, handler: Callable[[datetime], Any]) -> Callable[[datetime], Any]:
@@ -11872,9 +11937,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             at = now.replace(hour=_sleep.hour, minute=_sleep.minute, second=0, microsecond=0)
             if at <= now:
                 at += timedelta(days=1)
-            view = self.preference_view()
-            if view is not None and view.schedule.active:  # tonight's learned bedtime, not the configured one
-                at = next_times(view.schedule, self.config, now)[KIND_BED] or at
+            at = learned_next(self.preference_view(), self.config, now, KIND_BED, at)  # tonight's learned bedtime
         return self._preference_offset_at(classification, at, in_sleep_window=in_sleep_window)
 
     def _promise_heat_offset(self, at: datetime, asleep: bool) -> float:
@@ -14629,7 +14692,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
                 p2_min_overlap_s=AC_WHF_OVERLAP_TOLERANCE_S,
                 p2_excuse_observe_only=False,
                 heat_offset_at=self._promise_heat_offset,
-                config_at=lambda at: _config_at(self, at),
+                config_at=_config_at_fn(self),
             )
             return any(h.promise == "ac_whf_mutex" for h in run_promise_checks(window, cfg, scope=SCOPE_HOME))
         except Exception:
@@ -14803,7 +14866,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             self.config,
             p2_min_overlap_s=AC_WHF_OVERLAP_TOLERANCE_S,
             heat_offset_at=self._promise_heat_offset,
-            config_at=lambda at: _config_at(self, at),
+            config_at=_config_at_fn(self),
         )
         hits = run_promise_checks(window, cfg, scope=SCOPE_HOME)
         # Issue #1260: time a promise did not count under a named exception, counted apart from hits.
@@ -18157,7 +18220,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             # engine is built unconditionally in __init__, so there is no engine-less branch).
             band = decide_sync(self, self.automation_engine._resolved_comfort_band, classification)
             return band.floor, band.ceiling
-        return fallback_edges_without_classification(dt_util.now(), self.config)
+        return fallback_edges_without_classification(dt_util.now(), self.config, self.preference_view())
 
     def _emit_incident(
         self,
@@ -21672,7 +21735,7 @@ def _compute_pre_cool_trigger_time_pure(
     if wake_dt < now:
         wake_dt = wake_dt + timedelta(days=1)
     if preference_view is not None and preference_view.schedule.active:
-        wake_dt = next_times(preference_view.schedule, config, now - timedelta(seconds=1))[KIND_WAKE] or wake_dt
+        wake_dt = learned_next(preference_view, config, now - timedelta(seconds=1), KIND_WAKE, wake_dt)
         wake_str = wake_dt.time().isoformat("minutes")
 
     def _night_trigger(wake_at: datetime) -> datetime:
@@ -21698,8 +21761,7 @@ def _compute_pre_cool_trigger_time_pure(
     # NEXT one, so move one day ahead.
     if trigger <= now:
         _next_wake = wake_dt + timedelta(days=1)
-        if preference_view is not None and preference_view.schedule.active:
-            _next_wake = next_times(preference_view.schedule, config, wake_dt)[KIND_WAKE] or _next_wake
+        _next_wake = learned_next(preference_view, config, wake_dt, KIND_WAKE, _next_wake)
         trigger = _night_trigger(_next_wake)
     pre_cool_target = _eligible_target(trigger)
     if pre_cool_target is None:
@@ -21833,7 +21895,7 @@ def _compute_target_band_schedule(
         """``(wake_h, sleep_h, night_owl)`` of the schedule at ``ts`` (the configured ones while nothing is learned)."""
         if preference_view is None or not preference_view.schedule.active:
             return wake_h, sleep_h, night_owl
-        learned = preference_view.config_at(config, ts)
+        learned = config_for(config, preference_view, ts)
         _wake, _sleep = _parse_time(learned.get("wake_time", "06:30")), _parse_time(learned.get("sleep_time", "22:30"))
         _wh, _sh = _wake.hour + _wake.minute / 60.0, _sleep.hour + _sleep.minute / 60.0
         return _wh, (_sh + 24 if _wh > _sh else _sh), _wh > _sh
@@ -22219,11 +22281,7 @@ def _build_predicted_indoor_future(
                 _ode_pc_trigger_h = _wct.hour + _wct.minute / 60.0 + PRE_COOL_POST_NAT_VENT_DELAY_MINUTES / 60.0
             else:
                 _wake_str = config.get("wake_time", "06:30")
-                _learned_wake = (
-                    next_times(preference_view.schedule, config, now)[KIND_WAKE]
-                    if preference_view is not None and preference_view.schedule.active
-                    else None
-                )
+                _learned_wake = learned_next(preference_view, config, now, KIND_WAKE, None)
                 if _learned_wake is not None:
                     _wake_str = _learned_wake.time().isoformat("minutes")
                 _wake_h_raw = int(_wake_str.split(":")[0]) + int(_wake_str.split(":")[1]) / 60.0

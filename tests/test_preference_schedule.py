@@ -56,7 +56,7 @@ def test_day_class_uses_the_workday_mapping_and_falls_back_for_a_missing_date():
 def test_nothing_learned_returns_the_configured_strings_verbatim():
     for view in (_view(), _view((35, 80), (90, 80), cap=0)):
         assert view.effective_times(CFG, FRI) == ("06:30:00", "22:30:00")
-        assert view.schedule_at(CFG, _at(FRI, 13)) == ("22:30:00", "06:30:00")
+        assert view.schedule_at(CFG, _at(FRI, 13)) == ("06:30:00", "22:30:00")
         assert ps.config_at(view, CFG, _at(FRI, 13)) is CFG
     assert ps.config_at(None, CFG, _at(FRI, 13)) is CFG
 
@@ -79,15 +79,15 @@ def test_the_shift_is_clamped_to_the_current_cap():
 def test_noon_pivot_pairs_the_night_that_matters():
     view = _view(weekday=(35, 80), weekend=(90, 80))
     # Saturday 11:00: the night that ends this morning: Friday's bedtime (wakes into Saturday), Saturday's wake.
-    assert view.schedule_at(CFG, _at(SAT, 11, 0)) == ("23:50", "08:00")
+    assert view.schedule_at(CFG, _at(SAT, 11, 0)) == ("08:00", "23:50")
     # Saturday 12:00: the coming night: Saturday's bedtime (wakes into Sunday), Sunday's wake.
-    assert view.schedule_at(CFG, _at(SAT, 12, 0)) == ("23:50", "08:00")
+    assert view.schedule_at(CFG, _at(SAT, 12, 0)) == ("08:00", "23:50")
     # Friday 13:00: Friday's bedtime, Saturday's wake.
-    assert view.schedule_at(CFG, _at(FRI, 13, 0)) == ("23:50", "08:00")
+    assert view.schedule_at(CFG, _at(FRI, 13, 0)) == ("08:00", "23:50")
     # Friday 11:59: Thursday's bedtime (wakes into Friday), Friday's wake.
-    assert view.schedule_at(CFG, _at(FRI, 11, 59)) == ("23:50", "07:05")
+    assert view.schedule_at(CFG, _at(FRI, 11, 59)) == ("07:05", "23:50")
     # Sunday 13:00: Sunday's bedtime wakes into Monday (weekday, bed shift 80); Monday's wake is shifted 35.
-    assert view.schedule_at(CFG, _at(SUN, 13, 0)) == ("23:50", "07:05")
+    assert view.schedule_at(CFG, _at(SUN, 13, 0)) == ("07:05", "23:50")
 
 
 def test_a_holiday_makes_the_day_before_a_weekend_night():
@@ -118,7 +118,7 @@ def test_the_sleep_window_branch_flips_at_midnight_and_both_implementations_agre
 def test_a_learned_bedtime_past_midnight_flips_the_branch_through_the_seam():
     view = _view(weekday=(0, 100), weekend=(0, 100), cap=180)  # 22:30 + 100 min = 00:10
     pair_evening = view.schedule_at(CFG, _at(FRI, 23, 30))
-    assert pair_evening == ("00:10", "06:30:00")
+    assert pair_evening == ("06:30:00", "00:10")
     assert _in_sleep_window(_at(FRI, 23, 30), ps.config_at(view, CFG, _at(FRI, 23, 30))) is False
     assert _in_sleep_window(_at(SAT, 0, 20), ps.config_at(view, CFG, _at(SAT, 0, 20))) is True
     assert _in_sleep_window(_at(SAT, 12, 30), ps.config_at(view, CFG, _at(SAT, 12, 30))) is False
@@ -332,6 +332,15 @@ def test_the_weekly_step_the_cap_and_the_rounding():
     assert capped["weekend"]["bed"] == 60
 
 
+def test_the_weekly_step_starts_from_the_shift_that_applies_after_the_cap_was_lowered():
+    stored = {"weekday": {"wake": 90, "bed": 0}}  # +90 stored, the cap is now 30: the shift in force is +30
+    shifts, changes = ps.weekly_schedule_update(
+        stored, _cands("weekday", "wake", [-30] * 5), max_shift_min=30, step_min=15, today=date(2026, 11, 20)
+    )
+    assert shifts["weekday"]["wake"] == 15
+    assert changes[0]["old_min"] == 30 and changes[0]["new_min"] == 15
+
+
 def test_the_median_uses_wrapped_deltas_and_the_newest_twenty():
     old = _cands("weekday", "bed", [0] * 30, start=date(2026, 9, 1))
     new = _cands("weekday", "bed", [80] * 20, start=date(2026, 11, 1))
@@ -377,7 +386,7 @@ def test_the_preference_view_buckets_through_the_seam():
     offset, bucket = view.offset_at(_at(FRI, 23, 40), "cold", CFG, in_sleep_window=False)
     assert bucket == "cold|evening|weekday|-"
     # 00:20 Saturday: the night in progress, waking Saturday (weekend).
-    asleep = _in_sleep_window(_at(SAT, 0, 20), view.config_at(CFG, _at(SAT, 0, 20)))
+    asleep = _in_sleep_window(_at(SAT, 0, 20), pl.config_for(CFG, view, _at(SAT, 0, 20)))
     assert asleep is True
     assert view.offset_at(_at(SAT, 0, 20), "cold", CFG, in_sleep_window=asleep)[1] == "cold|night|weekend|-"
     assert offset == 0.0

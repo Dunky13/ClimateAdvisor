@@ -1242,6 +1242,7 @@ class ClimateAdvisorResetPreferencesView(HomeAssistantView):
             await hass.async_add_executor_job(
                 log_capture.bind_zone_for_executor(coordinator.learning.reset), "preferences"
             )
+            await coordinator.async_refresh_schedule()  # the learned wake and bed shifts are gone: re-arm the timers
             _LOGGER.info("Learned preferences reset from the dashboard")
             return self.json({"status": "ok", **_msg_fields(hass, i18n.Msg("errors.preferences_reset"))})
 

@@ -1658,8 +1658,6 @@ class LearningEngine:
         if len(kept) != len(candidates):
             drop("schedule candidates", f"{len(candidates) - len(kept)} malformed")
         st.schedule_candidates = kept[-sched.MAX_CANDIDATES :]
-        if st.preference_seed is not None:
-            st.preference_seed = self._valid_seed_schedule(st.preference_seed, drop)
 
     def _valid_seed_schedule(self, seed: dict, drop: Any) -> dict:
         """The seed with its ``schedule`` section validated: bad candidates and rows dropped, a bad section removed."""
@@ -1694,9 +1692,11 @@ class LearningEngine:
             rows[key] = row
         section["rows"] = rows
         counts = section.get("counts")
-        section["counts"] = (
-            counts if isinstance(counts, dict) and all(sched.is_minutes(v) for v in counts.values()) else {}
-        )
+        if isinstance(counts, dict) and all(sched.is_minutes(v) for v in counts.values()):
+            section["counts"] = counts
+        else:
+            drop("history seed schedule counts", "malformed")
+            section["counts"] = {}
         return seed
 
     # ------------------------------------------------------------------ preference learning (fork Dunky13#1)

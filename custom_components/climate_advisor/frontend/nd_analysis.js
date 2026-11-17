@@ -432,13 +432,13 @@
       var parts = r.key.split('|'), box = '<input type="checkbox" class="pref-seed-sched-pick" data-row="' + esc(r.key) + '" id="pref-seed-sched-' + i + '"' + (r.enabled ? ' checked' : ' disabled') + '>';
       return '<tr><td>' + box + '</td><td><label for="pref-seed-sched-' + i + '">' + esc(schedLabel(parts[0], parts[1])) + '</label>' +
         (r.enabled ? '' : ' <span class="small">' + esc(T('pref.seed_disabled')) + '</span>') + '</td><td>' + esc(String(r.n)) + '</td><td>' + esc(schedMin(r.median_min)) +
-        '</td><td>' + esc(r.new_min == null ? '—' : schedMin(r.new_min)) + '</td></tr>';
+        '</td><td>' + esc(schedMin(r.current_min)) + '</td><td>' + esc(r.new_min == null ? '—' : schedMin(r.new_min)) + '</td></tr>';
     }).join('');
     return '<h3 class="sub" style="margin-top:10px">' + esc(T('pref.seed_title')) + '</h3><div class="small">' +
       esc(T('pref.seed_summary', { days: w.days || 0, observations: c.observations || 0, schedule: c.schedule || 0 })) + '</div>' +
       (rows ? '<table>' + th(['pref.seed_col_use', 'pref.col_bucket', 'pref.col_band', 'pref.col_n', 'pref.seed_col_median', 'pref.col_offset']) + '<tbody>' + rows + '</tbody></table>' : '') +
-      (srows ? '<table>' + th(['pref.seed_col_use', 'pref.sched_col_label', 'pref.col_n', 'pref.seed_col_median', 'pref.sched_col_target']) + '<tbody>' + srows + '</tbody></table>' : '') +
-      '<div class="row" style="margin-top:6px">' + (rows ? '<button type="button" class="btn small primary" id="pref-seed-accept">' + esc(T('pref.seed_accept')) + '</button> ' : '') +
+      (srows ? '<table>' + th(['pref.seed_col_use', 'pref.sched_col_label', 'pref.col_n', 'pref.seed_col_median', 'pref.sched_col_current', 'pref.sched_col_target']) + '<tbody>' + srows + '</tbody></table>' : '') +
+      '<div class="row" style="margin-top:6px">' + (rows || srows ? '<button type="button" class="btn small primary" id="pref-seed-accept">' + esc(T('pref.seed_accept')) + '</button> ' : '') +
       '<button type="button" class="btn small" id="pref-seed-discard">' + esc(T('pref.seed_discard')) + '</button></div>';
   }
   function renderPreferences() {

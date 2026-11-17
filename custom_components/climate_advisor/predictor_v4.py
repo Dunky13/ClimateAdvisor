@@ -2653,14 +2653,17 @@ def _carried_words(f: Mapping[str, Any]) -> str:
 
 
 # --------------------------------------------------------------------------- the "_ca" line
-# ``(sleep_time, wake_time)`` of the night that matters at an instant: the learned schedule (fork Dunky13#1 phase 2).
-SchedulePair = Callable[[datetime], tuple[str | None, str | None]]
+# The ``WakeBed`` of the night that matters at an instant: the learned schedule (fork Dunky13#1 phase 2).
+SchedulePair = Callable[[datetime], Any]  # a ``preference_schedule.WakeBed`` (this module imports nothing local)
 
 
 def _pair_at(
     local: datetime, sleep_time: str | None, wake_time: str | None, schedule: SchedulePair | None
 ) -> tuple[str | None, str | None]:
-    return schedule(local) if schedule is not None else (sleep_time, wake_time)
+    if schedule is None:
+        return sleep_time, wake_time
+    night = schedule(local)
+    return night.bed, night.wake
 
 
 def in_sleep_window(local: datetime, sleep_time: str | None, wake_time: str | None) -> bool:
