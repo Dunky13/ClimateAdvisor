@@ -2293,6 +2293,7 @@ def predict(
     ca_sleep_node: str | None = None,
     ca_sleep_time: str | None = None,
     ca_wake_time: str | None = None,
+    ca_schedule: SchedulePair | None = None,
     display_nodes: bool = False,
     sleep_loop: SleepLoop | None = None,
 ) -> dict[str, list[tuple[datetime, float]]] | None:
@@ -2378,7 +2379,12 @@ def predict(
         else None
     )
     in_window = (
-        [in_sleep_window(i.ts.astimezone(tz), ca_sleep_time, ca_wake_time) for i in inputs]
+        [
+            in_sleep_window(
+                i.ts.astimezone(tz), *_pair_at(i.ts.astimezone(tz), ca_sleep_time, ca_wake_time, ca_schedule)
+            )
+            for i in inputs
+        ]
         if loop_j is not None
         else []
     )
@@ -2440,6 +2446,7 @@ def predict(
             sleep_time=ca_sleep_time,
             wake_time=ca_wake_time,
             tz=tz,
+            schedule=ca_schedule,
         )
     return res
 
@@ -2646,6 +2653,16 @@ def _carried_words(f: Mapping[str, Any]) -> str:
 
 
 # --------------------------------------------------------------------------- the "_ca" line
+# ``(sleep_time, wake_time)`` of the night that matters at an instant: the learned schedule (fork Dunky13#1 phase 2).
+SchedulePair = Callable[[datetime], tuple[str | None, str | None]]
+
+
+def _pair_at(
+    local: datetime, sleep_time: str | None, wake_time: str | None, schedule: SchedulePair | None
+) -> tuple[str | None, str | None]:
+    return schedule(local) if schedule is not None else (sleep_time, wake_time)
+
+
 def in_sleep_window(local: datetime, sleep_time: str | None, wake_time: str | None) -> bool:
     """True when ``local`` is inside the ``sleep_time`` -> ``wake_time`` ("HH:MM") window.
 
@@ -2677,6 +2694,7 @@ def ca_line(
     sleep_time: str | None,
     wake_time: str | None,
     tz: tzinfo,
+    schedule: SchedulePair | None = None,
 ) -> list[tuple[datetime, float]]:
     """The ``_ca`` line: the reading Climate Advisor itself uses (R1b, M3).
 
@@ -2696,7 +2714,7 @@ def ca_line(
     by_ts = {t.timestamp(): v for t, v in (sleep or [])}
     out = []
     for t, v in base:
-        if not in_sleep_window(t.astimezone(tz), sleep_time, wake_time):
+        if not in_sleep_window(t.astimezone(tz), *_pair_at(t.astimezone(tz), sleep_time, wake_time, schedule)):
             out.append((t, v))
         elif t.timestamp() in by_ts:
             out.append((t, by_ts[t.timestamp()]))

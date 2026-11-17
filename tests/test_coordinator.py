@@ -1888,6 +1888,7 @@ class TestBriefingRegeneration:
         coord = self._make_coord()
         coord._executor_job = AsyncMock()
         coord._flush_preference_episode = MagicMock(return_value=True)
+        coord.async_refresh_schedule = AsyncMock()
         coord._resolve_monitored_sensors = MagicMock(side_effect=_Stop)
         coord._async_update_data_impl = types.MethodType(ClimateAdvisorCoordinator._async_update_data_impl, coord)
         with pytest.raises(_Stop):

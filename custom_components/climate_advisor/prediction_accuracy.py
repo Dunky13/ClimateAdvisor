@@ -35,8 +35,8 @@ import json
 import logging
 import math
 from collections import defaultdict
-from collections.abc import Mapping, Sequence
-from datetime import datetime, tzinfo
+from collections.abc import Callable, Mapping, Sequence
+from datetime import date, datetime, tzinfo
 from pathlib import Path
 from typing import Any
 
@@ -696,8 +696,18 @@ def _hhmm(value: Any) -> tuple[int, int] | None:
     return (h, m) if 0 <= h < 24 and 0 <= m < 60 else None
 
 
-def _sleep_boundaries(lo: float, hi: float, tz: tzinfo, sleep_time: Any, wake_time: Any) -> list[float]:
-    """Epochs of every bedtime and wake time in ``[lo, hi]`` (local clock; an empty window has none)."""
+def _sleep_boundaries(
+    lo: float,
+    hi: float,
+    tz: tzinfo,
+    sleep_time: Any,
+    wake_time: Any,
+    instants_on: Callable[[date, tzinfo], tuple[datetime | None, datetime | None]] | None = None,
+) -> list[float]:
+    """Epochs of every bedtime and wake time in ``[lo, hi]`` (local clock; an empty window has none).
+
+    ``instants_on`` (fork Dunky13#1 phase 2): each day's learned ``(wake, bed)`` instants, not the fixed times.
+    """
     st, wt = _hhmm(sleep_time), _hhmm(wake_time)
     if st is None or wt is None or st == wt:
         return []
@@ -705,10 +715,11 @@ def _sleep_boundaries(lo: float, hi: float, tz: tzinfo, sleep_time: Any, wake_ti
     day = datetime.fromtimestamp(lo, tz).date()
     last = datetime.fromtimestamp(hi, tz).date()
     while day <= last:
-        for h, m in (st, wt):
-            t = datetime(day.year, day.month, day.day, h, m, tzinfo=tz).timestamp()
-            if lo <= t <= hi:
-                out.append(t)
+        if instants_on is not None:
+            found = [at.timestamp() for at in instants_on(day, tz) if at is not None]
+        else:
+            found = [datetime(day.year, day.month, day.day, h, m, tzinfo=tz).timestamp() for h, m in (st, wt)]
+        out.extend(t for t in found if lo <= t <= hi)
         day = day.fromordinal(day.toordinal() + 1)
     return sorted(out)
 
@@ -722,6 +733,7 @@ def ca_swap_epochs(
     sleep_sensor: str | None,
     sleep_time: Any = None,
     wake_time: Any = None,
+    instants_on: Callable[[date, tzinfo], tuple[datetime | None, datetime | None]] | None = None,
 ) -> list[float]:
     """When the reading Climate Advisor uses (``_ca``) changed sensor in ``[lo, hi]`` (epochs, ascending; Issue #1400).
 
@@ -742,7 +754,9 @@ def ca_swap_epochs(
         ((t, r.get("band_sensor")) for r in rows if (t := _epoch(r.get("ts"))) is not None),
         key=lambda x: x[0],
     )
-    boundaries = _sleep_boundaries(lo - 86400, hi + 86400, tz, sleep_time, wake_time) if sleep_sensor else []
+    boundaries = (
+        _sleep_boundaries(lo - 86400, hi + 86400, tz, sleep_time, wake_time, instants_on) if sleep_sensor else []
+    )
     for t, sid in timed:
         if not isinstance(sid, str) or not sid:
             continue

@@ -36,6 +36,7 @@ from .preference_learning import (
     part_of_day,
     seed_offsets,
 )
+from .preference_schedule import ScheduleView, config_at
 from .temperature import read_attribute_temp_f, read_sensor_state_f
 
 SCHEDULE_TOLERANCE_F = 0.1 * 1.8 + 1e-6  # the same setpoint: within 0.1 C
@@ -197,19 +198,20 @@ def background_samples(
     tz: tzinfo,
     config: Mapping[str, Any],
     asleep: Callable[[datetime], bool],
+    schedule: ScheduleView | None = None,
 ) -> dict[str, dict[str, list[float]]]:
     """``{part: {entity: [temp_f, ...]}}``: each entity's reading every 30 minutes, newest 200 per part.
 
     The same sampling the live 30-minute refresh does, replayed over the history window. ``asleep(local)`` is the
     sleep-window test (the caller's ``automation._in_sleep_window`` on a config snapshot).
     """
-    wake, sleep = config.get("wake_time"), config.get("sleep_time")
     lookups = {entity: _Lookup(series) for entity, series in rooms.items()}
     out: dict[str, dict[str, list[float]]] = {}
     at = start
     while at <= end:
         loc = at.astimezone(tz)
-        part, _day = part_of_day(loc, wake, sleep, in_sleep_window=asleep(loc))
+        learned = config_at(schedule, config, loc)  # the wake and bed times of that day under the learned schedule
+        part, _day = part_of_day(loc, learned.get("wake_time"), learned.get("sleep_time"), in_sleep_window=asleep(loc))
         for entity, lookup in lookups.items():
             value = lookup.at(at, ROOM_MAX_AGE)
             if value is not None:
@@ -233,6 +235,7 @@ def build_seed(
     asleep: Callable[[datetime], bool],
     max_offset_f: float,
     live_since: datetime | None = None,
+    schedule: ScheduleView | None = None,
 ) -> dict[str, Any]:
     """The ``preference_seed`` for a recorder window (see the spec's steps 2 to 6).
 
@@ -249,7 +252,6 @@ def build_seed(
     Occupancy is not known historically and is assumed home. ``ref`` is null (the history was steered by the
     thermostat). The thermostat's own reading is kept under ``thermostat`` with the room temperatures.
     """
-    wake, sleep = config.get("wake_time"), config.get("sleep_time")
     rows = sorted(climate, key=lambda r: r.at)
     first = rows[0].at if rows else end
     days_covered = max(1, round((end - first) / timedelta(days=1)))  # round: a DST day is 23 or 25 hours
@@ -313,6 +315,8 @@ def build_seed(
             e: round(v, 2) for e, lk in temp_lookups.items() if (v := lk.at(change.at, ROOM_MAX_AGE)) is not None
         }
         base = base_floor(loc, c, in_sleep)
+        learned = config_at(schedule, config, loc)
+        wake, sleep = learned.get("wake_time"), learned.get("sleep_time")
         previous = episode
         # target_f = old: the CA target of the time is unknown, so an undo is a return to where the occupant started.
         episode, closed = extend_episode(
@@ -320,7 +324,15 @@ def build_seed(
             at=loc,
             old_f=change.old_f,
             new_f=change.new_f,
-            bucket=bucket_key(loc, str(c.day_type), wake, sleep, in_sleep_window=in_sleep, band=band),
+            bucket=bucket_key(
+                loc,
+                str(c.day_type),
+                wake,
+                sleep,
+                in_sleep_window=in_sleep,
+                band=band,
+                workdays=schedule.workdays if schedule is not None else None,
+            ),
             base_f=base,
             target_f=change.old_f,
             excluded=near_schedule_edge(loc, wake, sleep),
@@ -347,5 +359,7 @@ def build_seed(
         },
         "observations": observations,
         "summary": seed_offsets(observations, max_offset_f=max_offset_f),
-        "background": background_samples(temps, start=first, end=end, tz=tz, config=config, asleep=asleep),
+        "background": background_samples(
+            temps, start=first, end=end, tz=tz, config=config, asleep=asleep, schedule=schedule
+        ),
     }

@@ -968,6 +968,7 @@ def run_cycle(
     ca_sleep_node: str | None = None,
     ca_sleep_time: str | None = None,
     ca_wake_time: str | None = None,
+    ca_schedule: Callable[[datetime], tuple[str | None, str | None]] | None = None,
     baseline: bool = False,
     display: bool = False,
     sleep_loop: RemoteLoopEmulator | None = None,
@@ -1007,7 +1008,9 @@ def run_cycle(
     if hvac_action_now:
         extra.update(hvac_action_now=hvac_action_now, run_elapsed_min=run_elapsed_min)
     if ca_sleep_node:
-        extra.update(ca_sleep_node=ca_sleep_node, ca_sleep_time=ca_sleep_time, ca_wake_time=ca_wake_time)
+        extra.update(
+            ca_sleep_node=ca_sleep_node, ca_sleep_time=ca_sleep_time, ca_wake_time=ca_wake_time, ca_schedule=ca_schedule
+        )
     if display and getattr(model, "display_nodes", None):
         extra["display_nodes"] = True
     if sleep_loop is not None and not baseline and ca_sleep_node:
@@ -1072,6 +1075,7 @@ def chart_extras(
     ca_sleep_node: str | None = None,
     ca_sleep_time: str | None = None,
     ca_wake_time: str | None = None,
+    ca_schedule: Callable[[datetime], tuple[str | None, str | None]] | None = None,
 ) -> tuple[list[tuple[datetime, float]], dict[str, list[tuple[datetime, float]]]]:
     """The two extra future lines the Status chart draws: ``(corrected_outdoor, baseline_by_sensor)`` (Issue #1230 R2).
 
@@ -1107,7 +1111,12 @@ def chart_extras(
             # display only: the no-plan line includes the display-only nodes too (Issue #1422)
             disp: dict[str, Any] = {"display_nodes": True} if getattr(model, "display_nodes", None) else {}
             if ca_sleep_node:
-                disp.update(ca_sleep_node=ca_sleep_node, ca_sleep_time=ca_sleep_time, ca_wake_time=ca_wake_time)
+                disp.update(
+                    ca_sleep_node=ca_sleep_node,
+                    ca_sleep_time=ca_sleep_time,
+                    ca_wake_time=ca_wake_time,
+                    ca_schedule=ca_schedule,
+                )
             out = p.predict(
                 model,
                 now=now,

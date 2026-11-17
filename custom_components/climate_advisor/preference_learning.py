@@ -305,6 +305,14 @@ class PreferenceView:
         return config_at(self.schedule, config, at)
 
 
+def config_for(config: dict, view: PreferenceView | None, at: datetime) -> dict:
+    """``config`` with the wake and sleep times of the schedule at ``at``: the seam for callers without a coordinator.
+
+    ``isinstance``: a stubbed engine or coordinator hands back a mock, which must read as "nothing learned".
+    """
+    return view.config_at(config, at) if isinstance(view, PreferenceView) else config
+
+
 # --------------------------------------------------------------------------------------------------
 # Steering reference (phase 3)
 # --------------------------------------------------------------------------------------------------
@@ -387,7 +395,9 @@ def steering_room(
     sensor is the reference (the resolver handles the sleep sensor itself) or the feature is off (``view`` None)."""
     if view is None:
         return None
-    ref = steering_reference(at, config, in_sleep_window=in_sleep_window, learned_rooms=view.learned_rooms)
+    ref = steering_reference(
+        at, config_for(config, view, at), in_sleep_window=in_sleep_window, learned_rooms=view.learned_rooms
+    )
     return ref.entity if ref.context == REMOTE_CONTEXT_ROOM else None
 
 

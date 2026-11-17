@@ -16,7 +16,7 @@ from __future__ import annotations
 import math
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, tzinfo
 from statistics import median
 from typing import Any
 
@@ -418,30 +418,39 @@ def parse_schedule_row_key(key: Any) -> tuple[str, str] | None:
 # --------------------------------------------------------------------------------------------------
 
 
+def instants_on(
+    view: ScheduleView | None, config: Mapping[str, Any], day: date, tz: tzinfo | None
+) -> dict[str, datetime | None]:
+    """The wake of the morning of ``day`` and the bedtime of the evening of ``day`` as instants (None when unparseable).
+
+    A bedtime after midnight (earlier than the next wake on the clock) lands on the next calendar day.
+    """
+    schedule = view if view is not None else ScheduleView()
+    wake, bed = schedule.effective_times(config, day)
+    out: dict[str, datetime | None] = {KIND_WAKE: None, KIND_BED: None}
+    for kind, value in ((KIND_WAKE, wake), (KIND_BED, bed)):
+        minutes = clock_minutes(value)
+        if minutes is None:
+            continue
+        at = datetime.combine(day, time(minutes // 60, minutes % 60), tzinfo=tz)
+        if kind == KIND_BED:
+            wake_min = clock_minutes(schedule.effective_times(config, day + timedelta(days=1))[0])
+            if wake_min is not None and minutes < wake_min:
+                at += timedelta(days=1)
+        out[kind] = at
+    return out
+
+
 def next_times(view: ScheduleView | None, config: Mapping[str, Any], after: datetime) -> dict[str, datetime | None]:
     """The next effective wake and bedtime strictly after ``after`` (local, aware): ``{"wake": dt, "bed": dt}``.
 
     Candidates are the days around ``after`` (yesterday's through the day after tomorrow's evening, since a bedtime past
     midnight lands on the next calendar day). A view with nothing learned still answers from the configured times.
     """
-    schedule = view if view is not None else ScheduleView()
-    out: dict[str, datetime | None] = {KIND_WAKE: None, KIND_BED: None}
     best: dict[str, list[datetime]] = {KIND_WAKE: [], KIND_BED: []}
-    tz = after.tzinfo
     for offset in range(-1, 3):
-        day = after.date() + timedelta(days=offset)
-        wake, bed = schedule.effective_times(config, day)
-        for kind, value in ((KIND_WAKE, wake), (KIND_BED, bed)):
-            minutes = clock_minutes(value)
-            if minutes is None:
-                continue
-            at = datetime.combine(day, time(minutes // 60, minutes % 60), tzinfo=tz)
-            if kind == KIND_BED:
-                wake_min = clock_minutes(schedule.effective_times(config, day + timedelta(days=1))[0])
-                if wake_min is not None and minutes < wake_min:
-                    at += timedelta(days=1)  # a bedtime after midnight belongs to the evening of ``day``
-            if at > after:
+        found = instants_on(view, config, after.date() + timedelta(days=offset), after.tzinfo)
+        for kind, at in found.items():
+            if at is not None and at > after:
                 best[kind].append(at)
-    for kind, found in best.items():
-        out[kind] = min(found) if found else None
-    return out
+    return {kind: min(found) if found else None for kind, found in best.items()}
