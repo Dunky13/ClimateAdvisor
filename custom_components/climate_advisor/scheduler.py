@@ -62,6 +62,7 @@ from .const import (
 )
 from .nat_vent_gate import resolve_comfort_cool, resolve_comfort_heat
 from .own_write_echo import resolve_step
+from .preference_learning import PreferenceView, config_for
 from .setpoint_combinations import vacation_edges
 from .temperature import from_fahrenheit, to_fahrenheit
 from .thermal_lead_time import compute_lead_minutes_from_rate
@@ -440,6 +441,7 @@ def resolve_tou_phase(
     config: dict,
     outdoor_at: Callable[[datetime], float | None] | None = None,
     house_stepper: Any = None,
+    preference_view: PreferenceView | None = None,
 ) -> TOUPhaseResolution:
     """Should the home start pre-conditioning right now for an upcoming ``high``-tagged
     schedule?
@@ -484,7 +486,7 @@ def resolve_tou_phase(
     candidates.sort(key=lambda pair: pair[0])
     schedule_start, schedule = candidates[0]
 
-    in_sleep_window_at_start = _in_sleep_window(schedule_start, config)
+    in_sleep_window_at_start = _in_sleep_window(schedule_start, config_for(config, preference_view, schedule_start))
     if hvac_mode == "cool":
         target = resolve_comfort_heat(
             comfort_heat_raw=float(config.get("comfort_heat", 68.0)),

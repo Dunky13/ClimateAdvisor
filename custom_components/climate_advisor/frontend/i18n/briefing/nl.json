@@ -100,6 +100,7 @@
   "briefing.tldr.occupancy_vacation_deep": "  Aanwezigheid: Vakantie — diepe verlaging actief",
   "briefing.tldr.preference": "  Geleerde voorkeur ({day_type}, {day_class}): {entries}",
   "briefing.tldr.tomorrow": "  Morgen: {trend} ({high})",
+  "briefing.tldr.tomorrow_wake": "{tomorrow}\n  Wektijd morgen: {wake} (geleerd)",
   "briefing.tldr.windows_close_by": "  Ramen: Sluiten vóór {when}",
   "briefing.tldr.windows_closed": "  Ramen: De hele dag dicht",
   "briefing.tldr.windows_hot_both": "  Ramen: Sluiten vóór {when} (<{threshold}) / open {open}+",

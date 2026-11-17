@@ -240,6 +240,7 @@
   "status.remote_offset.waiting": "{label} offset starting: waiting for {band}",
   "status.remote_offset.why_clearing": "clearing",
   "status.remote_offset.why_retrying": "clearing, retrying after a refused write",
+  "status.schedule.line": "Learned times: wake tomorrow {wake} ({wake_sign}{wake_min, number} min), bed tonight {bed} ({bed_sign}{bed_min, number} min). Tomorrow is a {tomorrow, select, weekday {weekday} weekend {weekend} other {{tomorrow}}}.",
   "status.sensor_meta.ca_name": "Climate Advisor reading",
   "status.sensor_meta.ca_role": "the reading Climate Advisor uses",
   "status.sensor_role.bedroom_sensor": "bedroom sensor",

@@ -114,6 +114,12 @@ EXPECTED_KEYS = {
     "room_pin_morning",
     "room_pin_afternoon",
     "room_pin_evening",
+    # Fork Dunky13#1 phase 2: learned wake and bed times
+    "workday_entity",
+    "wake_signal_entities",
+    "bed_signal_entities",
+    "schedule_max_shift_min",
+    "schedule_weekly_step_min",
 }
 
 VALID_CATEGORIES = {

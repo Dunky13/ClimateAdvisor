@@ -40,8 +40,9 @@ _HANDLE_RETURNING = {
 # Issue #1580: the guards themselves pass the caller's (already zone-wrapped) callback through to HA.
 _TIMER_GUARD_FUNCTIONS = {"_call_later", "_track_point_in_time"}
 
-# Read-only data fetches (weather.get_forecasts): no device, no notification.
+# Read-only data fetches (weather.get_forecasts, workday.check_date): no device, no notification.
 _SERVICE_CALL_ALLOWLIST = {
+    ("coordinator.py", "async_resolve_workday_dates"),
     ("coordinator.py", "_get_forecast_data"),
     ("coordinator.py", "_get_hourly_forecast_data"),
 }

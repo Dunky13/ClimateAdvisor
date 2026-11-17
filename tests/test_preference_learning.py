@@ -678,16 +678,18 @@ def test_an_episode_saved_without_a_remote_offset_loads_with_zero(tmp_path):
 
 def test_reset_preferences_clears_nothing_but_the_preference_fields_via_the_view(tmp_path):
     import asyncio
-    from unittest.mock import MagicMock
+    from unittest.mock import AsyncMock, MagicMock
 
     from custom_components.climate_advisor.api import ClimateAdvisorResetPreferencesView
     from custom_components.climate_advisor.const import DOMAIN
+    from custom_components.climate_advisor.coordinator import ClimateAdvisorCoordinator
 
     engine = _engine(tmp_path)
     engine._state.preference_offsets = {B: {"offset_f": 1.0, "n": 3, "level": "bucket", "updated": "2026-11-16"}}
     engine._state.dismissed_suggestions = ["keep_me"]
     coordinator = MagicMock()
     coordinator.learning = engine
+    coordinator.async_refresh_schedule = AsyncMock()
     hass = MagicMock()
     hass.data = {DOMAIN: {"entry1": coordinator}}
 
@@ -695,11 +697,14 @@ def test_reset_preferences_clears_nothing_but_the_preference_fields_via_the_view
         return fn(*args)
 
     hass.async_add_executor_job = _run_in_executor
+    coordinator.hass = hass
+    coordinator.async_reset_learning = ClimateAdvisorCoordinator.async_reset_learning.__get__(coordinator)
     request = MagicMock()
     request.app = {"hass": hass}
     request.query = {}
     resp = asyncio.run(ClimateAdvisorResetPreferencesView().post(request))
 
     assert resp.json_data["status"] == "ok"
+    coordinator.async_refresh_schedule.assert_awaited_once()  # the timers follow the cleared shifts
     assert engine._state.preference_offsets == {}
     assert engine._state.dismissed_suggestions == ["keep_me"]

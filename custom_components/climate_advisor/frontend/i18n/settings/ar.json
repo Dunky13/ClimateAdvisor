@@ -44,6 +44,8 @@
   "settings.automation_grace_seconds.description": "بعد أن يستأنف Climate Advisor التدفئة والتبريد (كل الأبواب/النوافذ مغلقة)، تمنع فترة السماح هذه إيقافه مجددًا فورًا إذا فُتح باب لحظة.",
   "settings.automation_grace_seconds.label": "فترة سماح الأتمتة (دقائق)",
   "settings.badge_changed": "تغيّر",
+  "settings.bed_signal_entities.description": "اختياري. أضواء أو مفاتيح أو أزرار أو مساعدات تُطفئها أو تضغطها عند ذهابك إلى النوم. يتعلّم Climate Advisor منها وقت نومك. يتطلب تفعيل تعلّم التفضيلات.",
+  "settings.bed_signal_entities.label": "إشارات النوم",
   "settings.briefing_notifications_enabled.description": "في التركيب متعدد المناطق، يجب أن ترسل منطقة واحدة فقط الموجز اليومي المجدول (إشعار/بريد)، وإلا ستصلك نسخة من كل منطقة. فعّل هذا لمنطقة واحدة فقط. زر إرسال الموجز في تبويب التصحيح يرسل دائمًا حتى لو كان هذا معطّلًا.",
   "settings.briefing_notifications_enabled.label": "إرسال إشعارات الموجز اليومي (هذه المنطقة)",
   "settings.briefing_time.description": "وقت إنشاء الموجز المناخي اليومي وإرساله. ينبغي أن يسبق وقت الاستيقاظ لتراه عند نهوضك.",
@@ -222,6 +224,10 @@
   "settings.room_pin_night.label": "الغرفة ليلًا",
   "settings.room_temp_entities.description": "مستشعرات حرارة الغرف التي قد يقيس Climate Advisor عليها درجة الراحة المتعلَّمة لكل جزء من اليوم (يتطلب تشغيل تعلّم التفضيلات). لا تختر مستشعرًا مدمجًا في مدفأة أو مكيّف آخر.",
   "settings.room_temp_entities.label": "مستشعرات غرف التفضيلات",
+  "settings.schedule_max_shift_min.description": "أقصى مقدار يمكن أن يبتعد به وقت الاستيقاظ أو النوم المكتسب عن الوقت الذي ضبطته. القيمة 0 تُبقي أوقاتك المضبوطة ثابتة.",
+  "settings.schedule_max_shift_min.label": "أقصى إزاحة للجدول",
+  "settings.schedule_weekly_step_min.description": "أقصى مقدار يمكن أن يتغيّر به وقت الاستيقاظ أو النوم المكتسب في الأسبوع.",
+  "settings.schedule_weekly_step_min.label": "أقصى تغيير أسبوعي للجدول",
   "settings.sensor_debounce_seconds.description": "المدة التي يجب أن تبقى فيها حالة مستشعر الباب/النافذة ثابتة قبل أن يتصرف Climate Advisor — إيقاف/استئناف التكييف، أو الدخول في/الخروج من التحكم بمروحة التهوية الطبيعية (مروحة المنزل بالكامل أو مروحة التكييف). تنطبق على كل جهاز متحكَّم به، وليس التكييف فقط. القيم القصيرة أسرع استجابة لكنها أكثر عرضة لمرور سريع عبر باب أو ارتداد مستشعر معيب؛ والأطول أثبت لكنها أبطأ في الاستجابة لتغيير حقيقي.",
   "settings.sensor_debounce_seconds.label": "تثبيت المستشعر (دقائق)",
   "settings.sensor_polarity_inverted.description": "فعّله إذا كانت مستشعراتك تُبلغ 'off' عند الفتح (بعض مفاتيح القصب تعمل هكذا). القطبية الخاطئة تعني إيقاف التكييف والأبواب مغلقة.",
@@ -298,6 +304,8 @@
   "settings.value_configured": "مضبوط",
   "settings.value_n_configured": "{n, plural, zero {# مضبوط} one {# مضبوط} two {# مضبوطان} few {# مضبوطة} many {# مضبوطًا} other {# مضبوط}}",
   "settings.value_not_set": "غير مضبوط",
+  "settings.wake_signal_entities.description": "اختياري. أضواء أو مفاتيح أو أزرار أو مساعدات تُشغَّل أو تُفعَّل عند استيقاظك. يتعلّم Climate Advisor منها وقت استيقاظك. يتطلب تفعيل تعلّم التفضيلات.",
+  "settings.wake_signal_entities.label": "إشارات الاستيقاظ",
   "settings.wake_time.description": "وقت استعادة درجات حرارة الراحة صباحًا. الأوقات الأبكر تعني أن المنزل مريح عند استيقاظك لكنها تستهلك طاقة أكثر خلال الليل.",
   "settings.wake_time.label": "وقت الاستيقاظ",
   "settings.weather_bias_enabled.description": "طبّق تصحيحًا خاصًا بموقعك على توقعات الغد استنادًا إلى دقة التوقعات الملاحَظة.",
@@ -305,5 +313,7 @@
   "settings.weather_entity.description": "تكامل الطقس المستخدم لبيانات التوقعات. يحدد تصنيف نوع اليوم وكل قرارات الأتمتة اللاحقة.",
   "settings.weather_entity.label": "كيان الطقس",
   "settings.welcome_home_debounce_seconds.description": "أقل مدة بين إشعارات «أهلاً بك في المنزل». إن غادر أحد وعاد خلال هذه النافذة يُكتم الإشعار. اضبطه على 0 للإشعار دائمًا.",
-  "settings.welcome_home_debounce_seconds.label": "فترة الهدوء لإشعار أهلاً بك (دقائق)"
+  "settings.welcome_home_debounce_seconds.label": "فترة الهدوء لإشعار أهلاً بك (دقائق)",
+  "settings.workday_entity.description": "اختياري. مستشعر تكامل Workday. به تُعامل العطلات كأيام راحة للتفضيلات المكتسبة وأوقات الاستيقاظ والنوم المكتسبة. بدونه يكون السبت والأحد يومَي الراحة.",
+  "settings.workday_entity.label": "مستشعر يوم العمل"
 }

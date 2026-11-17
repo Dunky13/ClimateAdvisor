@@ -374,6 +374,24 @@
   function th(keys) {
     return '<thead><tr>' + keys.map(function (k) { return '<th scope="col">' + esc(T(k)) + '</th>'; }).join('') + '</tr></thead>';
   }
+  // phase 2: learned wake and bed times, one row per day class and kind, then the most recent candidates
+  function schedMin(v) { return T('pref.sched_min', { sign: v < 0 ? '-' : '+', minutes: Math.abs(v) }); }
+  function schedLabel(cls, kind) { return T('pref.sched_label', { kind: kind, day_class: cls }); }
+  function prefSchedule(P) {
+    var S = P.schedule;
+    if (!S) return '';
+    var rows = (S.rows || []).map(function (r) {
+      return '<tr><td>' + esc(schedLabel(r['class'], r.kind)) + '</td><td>' + esc(r.configured || '—') + '</td><td>' + esc(schedMin(r.shift_min)) +
+        '</td><td>' + esc(r.target_min == null ? '—' : schedMin(r.target_min)) + '</td><td>' + esc(String(r.n)) + '</td></tr>';
+    }).join('');
+    var recent = (S.recent || []).map(function (c) {
+      return '<li>' + esc(T('pref.sched_candidate', { date: c.date, kind: c.kind, sign: c.delta_min < 0 ? '-' : '+', minutes: Math.abs(c.delta_min), source: c.source })) + '</li>';
+    }).join('');
+    return '<h3 class="sub" style="margin-top:10px">' + esc(T('pref.sched_title')) + '</h3>' +
+      (S.candidate_count ? '<table>' + th(['pref.sched_col_label', 'pref.sched_col_configured', 'pref.sched_col_shift', 'pref.sched_col_target', 'pref.col_n']) + '<tbody>' + rows + '</tbody></table>' +
+        '<div class="small" style="margin-top:6px">' + esc(T('pref.sched_recent')) + '</div><ul class="small">' + recent + '</ul>'
+        : '<div class="small">' + esc(T('pref.sched_none')) + '</div>');
+  }
   // Per part of the day: where the comfort target is measured, why, and every candidate's spread ratio ('—' until it
   // has enough samples) and raise samples. Shown with rooms selected or any other reference (the sleep sensor at night).
   function prefReferences(P) {
@@ -410,10 +428,17 @@
         (r.disabled ? ' <span class="small">' + esc(T('pref.seed_disabled')) + '</span>' : '') + '</td><td>' + esc(prefBand(r.bucket)) +
         '</td><td>' + esc(String(r.n)) + '</td><td>' + esc(sgn(r.median)) + '</td><td>' + esc(sgn(r.offset)) + '</td></tr>';
     }).join('');
+    var srows = (S.schedule || []).map(function (r, i) {
+      var parts = r.key.split('|'), box = '<input type="checkbox" class="pref-seed-sched-pick" data-row="' + esc(r.key) + '" id="pref-seed-sched-' + i + '"' + (r.enabled ? ' checked' : ' disabled') + '>';
+      return '<tr><td>' + box + '</td><td><label for="pref-seed-sched-' + i + '">' + esc(schedLabel(parts[0], parts[1])) + '</label>' +
+        (r.enabled ? '' : ' <span class="small">' + esc(T('pref.seed_disabled')) + '</span>') + '</td><td>' + esc(String(r.n)) + '</td><td>' + esc(schedMin(r.median_min)) +
+        '</td><td>' + esc(schedMin(r.current_min)) + '</td><td>' + esc(r.new_min == null ? '—' : schedMin(r.new_min)) + '</td></tr>';
+    }).join('');
     return '<h3 class="sub" style="margin-top:10px">' + esc(T('pref.seed_title')) + '</h3><div class="small">' +
       esc(T('pref.seed_summary', { days: w.days || 0, observations: c.observations || 0, schedule: c.schedule || 0 })) + '</div>' +
       (rows ? '<table>' + th(['pref.seed_col_use', 'pref.col_bucket', 'pref.col_band', 'pref.col_n', 'pref.seed_col_median', 'pref.col_offset']) + '<tbody>' + rows + '</tbody></table>' : '') +
-      '<div class="row" style="margin-top:6px">' + (rows ? '<button type="button" class="btn small primary" id="pref-seed-accept">' + esc(T('pref.seed_accept')) + '</button> ' : '') +
+      (srows ? '<table>' + th(['pref.seed_col_use', 'pref.sched_col_label', 'pref.col_n', 'pref.seed_col_median', 'pref.sched_col_current', 'pref.sched_col_target']) + '<tbody>' + srows + '</tbody></table>' : '') +
+      '<div class="row" style="margin-top:6px">' + (rows || srows ? '<button type="button" class="btn small primary" id="pref-seed-accept">' + esc(T('pref.seed_accept')) + '</button> ' : '') +
       '<button type="button" class="btn small" id="pref-seed-discard">' + esc(T('pref.seed_discard')) + '</button></div>';
   }
   function renderPreferences() {
@@ -433,7 +458,7 @@
     }).join('');
     var reset = '<div class="row" id="pref-reset-row" style="margin-top:8px"><button type="button" class="btn small" id="pref-reset-btn">' + esc(T('pref.reset')) + '</button></div>';
     host.innerHTML = head + (rows ? '<table>' + th(['pref.col_bucket', 'pref.col_band', 'pref.col_offset', 'pref.col_n', 'pref.col_updated']) + '<tbody>' + rows + '</tbody></table>'
-      : '<div class="empty">' + esc(T('pref.none')) + '</div>') + reset + prefReferences(P) + prefSeed(P, sgn);
+      : '<div class="empty">' + esc(T('pref.none')) + '</div>') + reset + prefSchedule(P) + prefReferences(P) + prefSeed(P, sgn);
   }
   // Reset clears only the learned preferences (POST reset_preferences); one confirm step first, no native dialog.
   // The seed buttons POST backfill_preferences / preference_seed; each reloads the tab when done.
@@ -455,7 +480,11 @@
       ND.runAction('backfill_preferences', { days: days >= 1 && days <= 400 ? days : 30 }, t).then(function () { return load(); });
     } else if (t.id === 'pref-seed-accept') {
       var picks = Array.prototype.slice.call(document.querySelectorAll('.pref-seed-pick:checked')).map(function (b) { return b.getAttribute('data-bucket'); });
-      ND.runAction('preference_seed', { action: 'accept', buckets: picks }, t).then(function () { return load(); });
+      var body = { action: 'accept', buckets: picks };
+      if (document.querySelector('.pref-seed-sched-pick')) {
+        body.schedule_rows = Array.prototype.slice.call(document.querySelectorAll('.pref-seed-sched-pick:checked')).map(function (b) { return b.getAttribute('data-row'); });
+      }
+      ND.runAction('preference_seed', body, t).then(function () { return load(); });
     } else if (t.id === 'pref-seed-discard') {
       ND.runAction('preference_seed', { action: 'discard' }, t).then(function () { return load(); });
     }

@@ -29,8 +29,10 @@ if TYPE_CHECKING:
     from .ai_skills import AISkillRegistry
     from .claude_api import ClaudeAPIClient
 
+import voluptuous as vol
 from homeassistant.const import EVENT_CALL_SERVICE, EVENT_HOMEASSISTANT_STOP
 from homeassistant.core import Event, HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import (
@@ -77,6 +79,7 @@ from .automation import (
     select_comfort_band,
     tou_bank_band,
 )
+from .automation_calls import RUN_EVENTS, AutomationCalls
 from .briefing import BriefingText, generate_briefing
 from .chart_log import ChartStateLog
 from .classifier import DayClassification, ForecastSnapshot, classify_day
@@ -140,6 +143,7 @@ from .const import (
     CONF_AI_API_KEY,
     CONF_AI_ENABLED,
     CONF_AUTOMATION_GRACE_PERIOD,
+    CONF_BED_SIGNAL_ENTITIES,
     CONF_BRIEFING_NOTIFICATIONS_ENABLED,
     CONF_COOL_POWER_KW,
     CONF_ENERGY_RATE,
@@ -161,6 +165,8 @@ from .const import (
     CONF_PREFERENCE_LEARNING_ENABLED,
     CONF_PREFERENCE_MAX_OFFSET_F,
     CONF_PREFERENCE_WEEKLY_STEP_F,
+    CONF_SCHEDULE_MAX_SHIFT_MIN,
+    CONF_SCHEDULE_WEEKLY_STEP_MIN,
     CONF_SENSOR_DEBOUNCE,
     CONF_SENSOR_POLARITY_INVERTED,
     CONF_SLEEP_INDOOR_HUMIDITY_ENTITY,
@@ -171,7 +177,9 @@ from .const import (
     CONF_THRESHOLD_WARM,
     CONF_VACATION_TOGGLE,
     CONF_VACATION_TOGGLE_INVERT,
+    CONF_WAKE_SIGNAL_ENTITIES,
     CONF_WEATHER_BIAS,
+    CONF_WORKDAY_ENTITY,
     CYCLE_FILE,
     CYCLE_REFIT_MIN_INTERVAL_S,
     CYCLE_REFIT_MIN_NEW_ELIGIBLE,
@@ -187,6 +195,8 @@ from .const import (
     DEFAULT_NATURAL_VENT_DELTA,
     DEFAULT_PREFERENCE_MAX_OFFSET_F,
     DEFAULT_PREFERENCE_WEEKLY_STEP_F,
+    DEFAULT_SCHEDULE_MAX_SHIFT_MIN,
+    DEFAULT_SCHEDULE_WEEKLY_STEP_MIN,
     DEFAULT_SENSOR_DEBOUNCE_SECONDS,
     DEFAULT_SETBACK_COOL,
     DEFAULT_SETBACK_DEPTH_COOL_F,
@@ -434,7 +444,7 @@ from .operation_timeline import to_dict as timeline_to_dict
 from .override_confirm_split import ca_expected_mode
 from .prediction_accuracy import RANGES as CHART_RANGE_DAYS
 from .prediction_accuracy import build_chart_v4, ca_swap_epochs, load_backtest
-from .preference_backfill import build_seed, climate_rows, humidity_series, temperature_series
+from .preference_backfill import build_seed, climate_rows, humidity_series, signal_rows, temperature_series
 from .preference_learning import (
     BACKGROUND_INTERVAL,
     BAND_NONE,
@@ -442,9 +452,11 @@ from .preference_learning import (
     PARTS_OF_DAY,
     REF_THERMOSTAT,
     PreferenceView,
+    config_for,
     episode_context,
     heat_gate_reasons,
     humidity_band,
+    learned_next,
     near_schedule_edge,
     part_of_day,
     part_reference,
@@ -453,6 +465,20 @@ from .preference_learning import (
     selected_rooms,
     steering_reference,
     steering_room,
+)
+from .preference_schedule import (
+    KIND_BED,
+    KIND_WAKE,
+    SOURCE_SENSOR,
+    SOURCE_THERMOSTAT,
+    ScheduleView,
+    WakeBed,
+    candidate_for,
+    hhmm,
+    instants_on,
+    next_times,
+    night_times_fn,
+    transition_active,
 )
 from .promise_journal import (
     PROMISE_STATS_WINDOW_DAYS,
@@ -561,6 +587,8 @@ from .whf_safety_decision import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+WORKDAY_RETRY = timedelta(hours=1)  # an unresolved workday date is asked again at most this often
 _V4_FIT_LOCK_KEY = "climate_advisor_v4_fit_lock"  # hass.data key of the domain-wide v4 fit lock (Issue #1230 R1b, M5)
 # Issue #1422: the off-cycle fit that only folds newly qualified display-only sensor nodes into the stored model.
 V4_DISPLAY_FIT_REASON = "display_nodes"
@@ -695,6 +723,15 @@ _HUMIDITY_KIND_KEYS: Final[dict[str, str]] = {
     "thermostat": "status.humidity_kind.thermostat",
     "device_sensor": "status.humidity_kind.device_sensor",
 }
+
+
+@dataclass(frozen=True)
+class _SchedulePlan:
+    """What the wake and bed timers should be: clock-time (``point`` False) or point-in-time at ``wake`` and ``bed``."""
+
+    point: bool = False
+    wake: datetime | None = None
+    bed: datetime | None = None
 
 
 @dataclass
@@ -1106,6 +1143,61 @@ def _call_later(obj: Any, delay: float, fn: Any) -> Callable[[], None]:
     return async_call_later(obj.hass, delay, fn)
 
 
+def _config_at(owner: Any, at: datetime) -> dict:
+    """``owner.config`` with the wake and sleep times of the schedule at ``at`` (fork Dunky13#1 phase 2).
+
+    The one seam for "the schedule at this moment": the config itself when nothing is learned (feature off, cap 0, no
+    shift). A module function, not a method: tests drive coordinator methods on stubs.
+    """
+    provider = getattr(owner, "preference_view", None)
+    return config_for(owner.config, provider() if callable(provider) else None, at)
+
+
+def _config_at_fn(owner: Any) -> Callable[[datetime], dict]:
+    """``_config_at`` bound to ONE snapshot of the view, for a callback that runs many times (and off the loop)."""
+    provider = getattr(owner, "preference_view", None)
+    view = provider() if callable(provider) else None
+    return lambda at: config_for(owner.config, view, at)
+
+
+def _asleep_fn(owner: Any) -> Callable[[datetime], bool]:
+    """``_asleep_at`` bound to one snapshot of the view (see ``_config_at_fn``)."""
+    config_at = _config_at_fn(owner)
+    return lambda at: _in_sleep_window(at, config_at(at))
+
+
+def _asleep_at(owner: Any, at: datetime) -> bool:
+    """``_in_sleep_window`` under the schedule at ``at``."""
+    return _in_sleep_window(at, _config_at(owner, at))
+
+
+def _learned_schedule(owner: Any) -> tuple[ScheduleView, dict] | None:
+    """One snapshot of the learned schedule and the config it applies to; None while nothing is learned."""
+    provider = getattr(owner, "preference_view", None)
+    view = provider() if callable(provider) else None
+    if not isinstance(view, PreferenceView) or not view.schedule.active:
+        return None
+    return view.schedule, dict(owner.config)
+
+
+def _timeline_schedule(owner: Any) -> dict[str, Any]:
+    """The timeline snapshot's learned-schedule resolvers; empty while nothing is learned."""
+    learned = _learned_schedule(owner)
+    if learned is None:
+        return {}
+    schedule, config = learned
+
+    def schedule_at(at: datetime) -> WakeBed:
+        night = schedule.schedule_at(config, at)
+        return WakeBed(_parse_time(night.wake), _parse_time(night.bed))
+
+    def instants(day: date, tz: Any) -> WakeBed:
+        found = instants_on(schedule, config, day, tz)
+        return WakeBed(found[KIND_WAKE], found[KIND_BED])
+
+    return {"schedule_at": schedule_at, "instants_on": instants}
+
+
 def _track_point_in_time(obj: Any, fn: Any, when: Any) -> Callable[[], None]:
     """``async_track_point_in_time`` unless the coordinator is latched (Issue #1580)."""
     if _latched(obj):
@@ -1418,6 +1510,15 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         self._preference_band: str | None = None
         self._preference_rh: float | None = None
         self._preference_bg_sampled: dict[str, datetime] = {}
+        # Fork Dunky13#1 phase 2: resolved workday flags per date (the workday entity's answer, cached), the dates
+        # whose lookup failed (warned once), the wake and bed timer handles (apart from ``_unsub_listeners``: they are
+        # re-armed), what is armed, and when each last fired (a re-arm must not fire the same night twice).
+        self._workdays: dict[date, bool] = {}
+        self._workday_failed: dict[date, datetime] = {}  # unresolved date -> last attempt (retried hourly)
+        self._schedule_unsubs: list[Callable[[], None]] = []
+        self._schedule_plan_armed: tuple[Any, ...] | None = None
+        self._schedule_fired: dict[str, datetime] = {}
+        self._automation_calls = AutomationCalls()
         self.learning = LearningEngine(
             Path(hass.config.config_dir), entry_id=self._entry_id, temp_unit=config.get("temp_unit", "fahrenheit")
         )
@@ -1891,8 +1992,6 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
 
         # Parse schedule times
         briefing_time = _parse_time(self.config.get("briefing_time", "06:00"))
-        wake_time = _parse_time(self.config.get("wake_time", "06:30"))
-        sleep_time = _parse_time(self.config.get("sleep_time", "22:30"))
 
         # Schedule: daily briefing
         self._unsub_listeners.append(
@@ -1905,27 +2004,10 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             )
         )
 
-        # Schedule: morning wake-up
-        self._unsub_listeners.append(
-            async_track_time_change(
-                self.hass,
-                self._zone_scoped(self._async_morning_wakeup),
-                hour=wake_time.hour,
-                minute=wake_time.minute,
-                second=0,
-            )
-        )
-
-        # Schedule: bedtime
-        self._unsub_listeners.append(
-            async_track_time_change(
-                self.hass,
-                self._zone_scoped(self._async_bedtime),
-                hour=sleep_time.hour,
-                minute=sleep_time.minute,
-                second=0,
-            )
-        )
+        # Schedule: morning wake-up and bedtime (clock-time timers; point-in-time ones once a learned shift applies)
+        await self._async_resolve_workdays()
+        self._arm_schedule_timers()
+        self._listen_for_schedule_signals()
 
         # Schedule: midnight — finalize daily record and reset
         self._unsub_listeners.append(
@@ -4952,6 +5034,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         if self._flush_preference_episode() is True:
             await self._executor_job(self.learning.save_state)
         self._sample_preference_background(self.preference_view())  # phase 3 (saved with the next state save)
+        await self.async_refresh_schedule()  # phase 2: the workdays of today and tomorrow, and the timers they move
         new_resolved = self._resolve_monitored_sensors()
         if set(new_resolved) != set(self._resolved_sensors):
             _LOGGER.info("Door/window sensor membership changed; updating listeners")
@@ -5983,7 +6066,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         self._note_indoor_source(reading)
         sleep_entity = self.config.get("sleep_indoor_temp_entity")
         # Sleep sensor only (fork Dunky13#1): a failing steering room is a fall-back announced by _note_indoor_source.
-        if sleep_entity and _in_sleep_window(dt_util.now(), self.config):
+        if sleep_entity and _asleep_at(self, dt_util.now()):
             self._note_indoor_sensor_state("sleep", reading.sleep_reason, sleep_entity, reading.value)
         else:
             if getattr(self, "_indoor_sleep_fallback_announced", None) is not None:
@@ -6656,7 +6739,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         re-derive "was the sleep sensor used" separately from this result.
         """
         now = dt_util.now()
-        asleep = _in_sleep_window(now, self.config)
+        asleep = _asleep_at(self, now)
         return resolve_indoor_temp_with_provenance(
             hass=self.hass,
             source=self.config.get("indoor_temp_source", TEMP_SOURCE_CLIMATE_FALLBACK),
@@ -6879,7 +6962,12 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         aliases = tuple(c for c in (self.config.get("climate_entity"),) if c)
         cfg = dict(self.config)
         # v4 models the bedroom node only (fork Dunky13#1): a steering room is not a v4 node (spec phase 3 notes).
-        in_sleep = (lambda dt, _cfg=cfg: _in_sleep_window(dt, _cfg)) if cfg.get("sleep_indoor_temp_entity") else None
+        _view = self.preference_view()  # a snapshot: the lambda runs in an executor thread
+        in_sleep = (
+            (lambda dt, _cfg=cfg: _in_sleep_window(dt, config_for(_cfg, _view, dt)))
+            if cfg.get("sleep_indoor_temp_entity")
+            else None
+        )
         # Issue #1432: the separate sleep sensor (None: none configured, or it is the primary): the per-room model
         # needs it modelled before it is used, so sleep hours are never forecast from the thermostat's room.
         sleep = cfg.get("sleep_indoor_temp_entity") or None
@@ -6907,6 +6995,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
 
             now = dt_util.now()
             node = self._v4_node_inputs()
+            view = self.preference_view()  # a snapshot: the replay runs in an executor thread
             sleep_t = _parse_time(self.config.get("sleep_time", "22:30"))
             wake_t = _parse_time(self.config.get("wake_time", "06:30"))
             async with self._v4_fit_lock():
@@ -6923,6 +7012,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
                         in_sleep=node["in_sleep"],
                         bed=(sleep_t.hour, sleep_t.minute),
                         wake=(wake_t.hour, wake_t.minute),
+                        night_times=night_times_fn(view.schedule if view else None, self.config),
                         train_days=V4_FIT_TRAIN_DAYS,
                         model_fitted_at=str(model_dict.get("fitted_at") or ""),
                         # Issue #1525: what newer nights have not displaced carries over (never fades with time)
@@ -7446,6 +7536,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             unit=self.config.get("temp_unit", "fahrenheit"),
             wake_time=_parse_time(self.config.get("wake_time", "06:30")),
             sleep_time=_parse_time(self.config.get("sleep_time", "22:30")),
+            **_timeline_schedule(self),
             fan_mode=self.config.get(CONF_FAN_MODE, FAN_MODE_DISABLED),
             comfort_cool=float(self.config.get("comfort_cool", DEFAULT_COMFORT_COOL)),
             nat_vent_delta=float(self.config.get(CONF_NATURAL_VENT_DELTA, DEFAULT_NATURAL_VENT_DELTA)),
@@ -7524,8 +7615,9 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
                 return
             cache = getattr(self, "_timeline_night", None)
             window = None
-            if snap.sleep_time is not None and snap.wake_time is not None:
-                window = v4_shadow.night_window(now, snap.sleep_time, snap.wake_time)
+            _wake, _sleep = snap.schedule(now)
+            if _sleep is not None and _wake is not None:
+                window = v4_shadow.night_window(now, _sleep, _wake)
             if window is None or snap.occupancy_mode in (OCCUPANCY_AWAY, OCCUPANCY_VACATION):
                 self._timeline_night = {"strategy": None, "reason": "no_night_in_view", "at": now}
                 return
@@ -7952,11 +8044,20 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             and (sleep_entity in (model_dict.get("sensors") or []) or (isinstance(primary, str) and primary != "_ca"))
             else None
         )
+        schedule = _config_at(self, dt_util.now())
         return (
             sleep_node,
-            self.config.get("sleep_time") if sleep_node else None,
-            self.config.get("wake_time") if sleep_node else None,
+            schedule.get("sleep_time") if sleep_node else None,
+            schedule.get("wake_time") if sleep_node else None,
         )
+
+    def _v4_ca_schedule(self) -> dict[str, Any]:
+        """``{"ca_schedule": f}``: the wake and bed times at each instant of the horizon; empty when unlearned."""
+        learned = _learned_schedule(self)
+        if learned is None:
+            return {}
+        schedule, config = learned
+        return {"ca_schedule": lambda at: schedule.schedule_at(config, at)}
 
     def _v4_cycle_kwargs(
         self,
@@ -8053,6 +8154,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             "ca_sleep_node": sleep_node,
             "ca_sleep_time": sleep_time,
             "ca_wake_time": wake_time,
+            **self._v4_ca_schedule(),
             "mass_f": mass,
             "mass_steps": mass_steps,
             "sample_fields": sample_fields,
@@ -8164,6 +8266,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
                         ca_sleep_node=cycle["ca_sleep_node"],
                         ca_sleep_time=cycle["ca_sleep_time"],
                         ca_wake_time=cycle["ca_wake_time"],
+                        ca_schedule=cycle.get("ca_schedule"),
                     )
                 )
             except Exception:  # noqa: BLE001 - the extra lines are optional; v4 lines still draw
@@ -9430,8 +9533,10 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         if suggestions is None:
             # Issue #1341: the learner's messages, so the briefing renders them in the viewer's language.
             suggestions = self.learning.generate_suggestion_msgs()
+        now = dt_util.now()
         wake_time = _parse_time(self.config.get("wake_time", "06:30"))
         sleep_time = _parse_time(self.config.get("sleep_time", "22:30"))
+        tonight = _config_at(self, datetime.combine(now.date(), time(12), tzinfo=now.tzinfo))
 
         thermal_model = {}
         if self.config.get("learning_enabled", True):
@@ -9446,13 +9551,13 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             hvac_mode = classification.hvac_mode
             if hvac_mode == "heat":
                 bedtime_setback_heat = compute_bedtime_setback(
-                    self.config,
+                    tonight,
                     thermal_model,
                     classification,
                     preference_offset_f=self._preference_offset_now(classification, in_sleep_window=True),
                 )
             elif hvac_mode == "cool":
-                bedtime_setback_cool = compute_bedtime_setback(self.config, thermal_model, classification)
+                bedtime_setback_cool = compute_bedtime_setback(tonight, thermal_model, classification)
 
         _LOGGER.debug(
             "Bedtime setback: heat=%s cool=%s",
@@ -9802,11 +9907,13 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
 
     async def _async_morning_wakeup(self, now: datetime) -> None:
         """Handle morning wake-up."""
+        self._schedule_fired[KIND_WAKE] = now
         _indoor_temp = self._get_indoor_temp()
         await decide(self, self.automation_engine.handle_morning_wakeup, indoor_temp=_indoor_temp)
 
     async def _async_bedtime(self, now: datetime) -> None:
         """Handle bedtime setback."""
+        self._schedule_fired[KIND_BED] = now
         await decide(self, self.automation_engine.handle_bedtime)
 
     def _resolve_tou_schedule_state(self) -> None:
@@ -9880,6 +9987,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
                 self.config,
                 outdoor_at=self._outdoor_forecast_at,
                 house_stepper=_stepper,
+                preference_view=self.preference_view(),
             )
         self._sync_tou_away_vacation_state()
         self._maybe_emit_tou_active_window_event()
@@ -10174,7 +10282,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         None while asleep (the morning briefing is sent then and describes the day), away/vacation (the setback edge
         follows the day's mode) or when the selector has not resolved since the last non-selector mode change.
         """
-        if self._occupancy_mode in (OCCUPANCY_AWAY, OCCUPANCY_VACATION) or _in_sleep_window(now, self.config):
+        if self._occupancy_mode in (OCCUPANCY_AWAY, OCCUPANCY_VACATION) or _asleep_at(self, now):
             return None
         fam = getattr(self.automation_engine, "_last_resolved_family", None)
         return {"heating": "heat", "cooling": "cool"}.get(fam) if isinstance(fam, str) else None
@@ -10416,6 +10524,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             self.config,
             dt_util.now(),
             decided=self._pre_cool_decision(),
+            preference_view=self.preference_view(),
         )
 
     def _pre_cool_decision(self) -> PreCoolDecision | None:
@@ -10427,7 +10536,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         """Pre-cool eligibility for the night containing ``at``, on the day it wakes into (Issue #1378)."""
         return resolve_pre_cool_modifier_for_night(
             self._current_classification,
-            self.config,
+            _config_at(self, at),
             at=at,
             now=dt_util.now(),
             decided=self._pre_cool_decision(),
@@ -10763,7 +10872,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
                 ceiling=_armed_ceiling,
                 comfort_heat_raw=_comfort_heat_raw,
                 sleep_heat=_sleep_heat,
-                in_sleep_window_fn=lambda ts: _in_sleep_window(ts, self.config),
+                in_sleep_window_fn=_asleep_fn(self),
                 window_open_time=c.window_open_time,
                 house_stepper=_stepper,
                 k_active_cool=_k_cool,
@@ -10977,7 +11086,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         )
         comfort_cool = float(self.config.get("comfort_cool", DEFAULT_COMFORT_COOL))
         hysteresis = float(self.config.get(CONF_NAT_VENT_HYSTERESIS_F, NAT_VENT_HYSTERESIS_F))
-        in_sleep_window = _in_sleep_window(dt_util.now(), self.config)
+        in_sleep_window = _asleep_at(self, dt_util.now())
         return compute_nat_vent_target(
             sleep_heat=sleep_heat,
             in_sleep_window=in_sleep_window,
@@ -11058,7 +11167,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         now = dt_util.now()
         if self._pre_cool_trigger_scheduled:
             decided = self._pre_cool_decision()
-            if decided is None or decided[0] >= pre_cool_waking_date(now, self.config):
+            if decided is None or decided[0] >= pre_cool_waking_date(now, _config_at(self, now)):
                 return
             # Issue #1378: the night it was decided for is over (it fired before this morning's wake); decide the
             # next one now, while today's classification still sees that night's day as "tomorrow".
@@ -11080,7 +11189,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             # Issue #1378: remember which night this was decided for, and how, so it survives the 23:59 reset.
             # The deciding day's own forecast high/low is the base for the fire-time trend re-check -- only when
             # that day is the one before the night's waking day (decided before midnight / after wake).
-            _waking = pre_cool_waking_date(trigger_time, self.config)
+            _waking = pre_cool_waking_date(trigger_time, _config_at(self, trigger_time))
             _c = self._current_classification
             _prev_is_today = _waking != dt_util.as_local(now).date()
             self._pre_cool_decided = PreCoolDecision(
@@ -11511,7 +11620,230 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             band=self._preference_band or BAND_NONE,
             learned_rooms=learning.learned_room_map(),
             room_names={room: self._indoor_friendly_name(room) for room in selected_rooms(config)},
+            schedule=self.schedule_view(),
         )
+
+    def schedule_view(self) -> ScheduleView:
+        """The learned wake and bed shifts with the resolved workdays (a snapshot; nothing is learned when off)."""
+        cap = self.config.get(CONF_SCHEDULE_MAX_SHIFT_MIN, DEFAULT_SCHEDULE_MAX_SHIFT_MIN)
+        if not isinstance(cap, int) or isinstance(cap, bool):
+            if not getattr(self, "_schedule_cap_warned", False):
+                self._schedule_cap_warned = True
+                _LOGGER.warning(
+                    "Invalid %s=%r, using the default %d",
+                    CONF_SCHEDULE_MAX_SHIFT_MIN,
+                    cap,
+                    DEFAULT_SCHEDULE_MAX_SHIFT_MIN,
+                )
+            cap = DEFAULT_SCHEDULE_MAX_SHIFT_MIN
+        return ScheduleView(
+            shifts=self.learning.schedule_shifts(),
+            max_shift_min=cap,
+            workdays=dict(getattr(self, "_workdays", {})),
+        )
+
+    def _listen_for_schedule_signals(self) -> None:
+        """While learning is on: track automation-issued service calls and watch the wake and bed signal entities."""
+        if self.preference_view() is None:
+            return
+
+        @callback
+        def _on_call_service(event: Event) -> None:
+            self._automation_calls.record(self.hass, event)
+
+        @callback
+        def _on_run(event: Event) -> None:
+            self._automation_calls.record_run(event)
+
+        self._unsub_listeners.append(
+            self.hass.bus.async_listen(EVENT_CALL_SERVICE, self._zone_scoped_sync(_on_call_service))
+        )
+        for run_event in RUN_EVENTS:
+            self._unsub_listeners.append(self.hass.bus.async_listen(run_event, self._zone_scoped_sync(_on_run)))
+        signals = sorted(
+            {*self.config.get(CONF_WAKE_SIGNAL_ENTITIES, []), *self.config.get(CONF_BED_SIGNAL_ENTITIES, [])}
+        )
+        if signals:
+            self._unsub_listeners.append(
+                async_track_state_change_event(self.hass, signals, self._zone_scoped(self._async_schedule_signal))
+            )
+
+    async def _async_schedule_signal(self, event: Event) -> None:
+        """A wake or bed signal entity changed: store the candidate a real, occupant-made transition makes.
+
+        Observed in observe-only mode too (a light or a switch is not confounded by Climate Advisor's own writes).
+        """
+        entity_id = event.data.get("entity_id")
+        old, new = event.data.get("old_state"), event.data.get("new_state")
+        if not isinstance(entity_id, str) or new is None or self.preference_view() is None:
+            return
+        if self._occupancy_mode not in (OCCUPANCY_HOME, OCCUPANCY_GUEST):
+            _LOGGER.info("Schedule signal skipped: reason=occupancy %s entity=%s", self._occupancy_mode, entity_id)
+            return
+        if self._automation_calls.caused(entity_id, new.context, dt_util.utcnow()):
+            _LOGGER.info("Schedule signal skipped: reason=caused by an automation entity=%s", entity_id)
+            return
+        now = dt_util.now()
+        domain = entity_id.partition(".")[0]
+        changed = False
+        for kind, key in ((KIND_WAKE, CONF_WAKE_SIGNAL_ENTITIES), (KIND_BED, CONF_BED_SIGNAL_ENTITIES)):
+            if entity_id not in self.config.get(key, []):
+                continue
+            if not transition_active(domain, getattr(old, "state", None), new.state, kind, dt_util.utcnow()):
+                continue
+            candidate = candidate_for(kind, now, self.config, self._workdays)
+            if candidate is not None and self.learning.add_schedule_candidate(
+                candidate, SOURCE_SENSOR, today=now.date()
+            ):
+                changed = True
+        if changed:
+            await self._executor_job(self.learning.save_state)
+
+    def _record_thermostat_schedule_candidate(self, now: datetime, schedule: dict, old_f: float, new_f: float) -> bool:
+        """Thermostat fallback for a kind with no signal entity: an occupant raise in the hour before the wake time is a
+        wake candidate, a lowering in the hour before bedtime a bed candidate. True when one was stored."""
+        if new_f == old_f:
+            return False
+        kind, key, edge = (
+            (KIND_WAKE, CONF_WAKE_SIGNAL_ENTITIES, (schedule.get("wake_time"), None))
+            if new_f > old_f
+            else (KIND_BED, CONF_BED_SIGNAL_ENTITIES, (None, schedule.get("sleep_time")))
+        )
+        if self.config.get(key) or not near_schedule_edge(now, *edge):
+            return False
+        candidate = candidate_for(kind, now, self.config, self._workdays)
+        return candidate is not None and self.learning.add_schedule_candidate(
+            candidate, SOURCE_THERMOSTAT, today=now.date()
+        )
+
+    async def _async_resolve_workdays(self) -> None:
+        """Resolve yesterday through the day after tomorrow with the workday entity (cached per date).
+
+        Runs on the event loop: the ``workday.check_date`` service answers with ``{entity_id: {"workday": bool}}``.
+        An unresolved date keeps the Saturday and Sunday rule, with one warning per date.
+        """
+        if not self.config.get(CONF_WORKDAY_ENTITY) or self.preference_view() is None:
+            return
+        today = dt_util.now().date()
+        await self.async_resolve_workday_dates([today + timedelta(days=n) for n in range(-1, 3)])
+        horizon = today - timedelta(days=60)
+        for stale in [d for d in self._workdays if d < horizon]:
+            del self._workdays[stale]
+        for stale in [d for d in self._workday_failed if d < horizon]:
+            del self._workday_failed[stale]
+
+    async def async_resolve_workday_dates(self, days: list[date]) -> dict[date, bool]:
+        """Resolve ``days`` into the cache and return those the entity answered for (a backfill resolves its window)."""
+        entity = self.config.get(CONF_WORKDAY_ENTITY)
+        if not entity:
+            return {}
+        out: dict[date, bool] = {}
+        now = dt_util.utcnow()
+        for day in days:
+            if day in self._workdays:
+                out[day] = self._workdays[day]
+                continue
+            failed_at = self._workday_failed.get(day)
+            if failed_at is not None and now - failed_at < WORKDAY_RETRY:
+                continue
+            flag: bool | None = None
+            try:
+                response = await self.hass.services.async_call(
+                    "workday",
+                    "check_date",
+                    {"check_date": day.isoformat()},
+                    target={"entity_id": entity},
+                    blocking=True,
+                    return_response=True,
+                )
+                answer = response.get(entity) if isinstance(response, dict) else None
+                value = answer.get("workday") if isinstance(answer, dict) else None
+                flag = value if isinstance(value, bool) else None
+            except HomeAssistantError, vol.Invalid:  # a removed or reconfigured entity fails the service call
+                _LOGGER.debug("Workday lookup failed: entity=%s date=%s", entity, day, exc_info=True)
+            if flag is None:
+                if day not in self._workday_failed:
+                    _LOGGER.warning("Workday unresolved, using the weekend rule: entity=%s date=%s", entity, day)
+                self._workday_failed[day] = now
+                continue
+            self._workday_failed.pop(day, None)
+            self._workdays[day] = out[day] = flag
+        return out
+
+    def _schedule_plan(self, now: datetime) -> _SchedulePlan:
+        """What the wake and bed timers should be: clock-time while nothing is learned, else the next instants."""
+        view = self.preference_view()
+        if view is None or not view.schedule.active:
+            return _SchedulePlan()  # the configured times only change with a reload, which builds a new coordinator
+        nxt: dict[str, datetime | None] = {}
+        for kind in (KIND_WAKE, KIND_BED):
+            after = now
+            fired = self._schedule_fired.get(kind)
+            if fired is not None:
+                # A re-arm (weekly update, seed accept) must not fire the night it already fired a second time.
+                after = max(after, fired + timedelta(hours=12))
+            nxt[kind] = next_times(view.schedule, self.config, after)[kind]
+        return _SchedulePlan(True, nxt[KIND_WAKE], nxt[KIND_BED])
+
+    def _arm_schedule_timers(self) -> None:
+        """(Re)arm the wake and bed timers for the current plan; a no-op when it is already armed."""
+        if _latched(self):  # shut down: a firing timer's re-arm must not register one that outlives the unload
+            return
+        plan = self._schedule_plan(dt_util.now())
+        if plan == self._schedule_plan_armed:
+            return
+        for unsub in self._schedule_unsubs:
+            unsub()
+        self._schedule_unsubs.clear()
+        self._schedule_plan_armed = plan
+        if not plan.point:
+            wake_time = _parse_time(self.config.get("wake_time", "06:30"))
+            sleep_time = _parse_time(self.config.get("sleep_time", "22:30"))
+            for handler, at in ((self._async_morning_wakeup, wake_time), (self._async_bedtime, sleep_time)):
+                self._schedule_unsubs.append(
+                    async_track_time_change(
+                        self.hass, self._zone_scoped(handler), hour=at.hour, minute=at.minute, second=0
+                    )
+                )
+            return
+        for handler, at in ((self._async_morning_wakeup, plan.wake), (self._async_bedtime, plan.bed)):
+            if at is not None:
+                self._schedule_unsubs.append(
+                    _track_point_in_time(self, self._zone_scoped(self._async_schedule_point(handler)), at)
+                )
+        _LOGGER.info(
+            "Learned schedule timers armed: wake=%s bed=%s",
+            plan.wake.isoformat() if plan.wake else None,
+            plan.bed.isoformat() if plan.bed else None,
+        )
+
+    def _async_schedule_point(self, handler: Callable[[datetime], Any]) -> Callable[[datetime], Any]:
+        """A point-in-time timer callback: run ``handler``, then arm the next instant."""
+
+        async def _fire(now: datetime) -> None:
+            self._schedule_plan_armed = None  # this instant is spent; the next arm must not read as unchanged
+            try:
+                await handler(now)
+            finally:
+                self._arm_schedule_timers()
+
+        _fire.__name__ = handler.__name__
+        return _fire
+
+    async def async_refresh_schedule(self) -> None:
+        """Resolve the workdays and re-arm the timers (each update cycle, and after a weekly update or seed accept).
+
+        ``_schedule_plan_armed`` None means ``async_setup`` has not run (or it is shut down): nothing to re-arm.
+        """
+        if getattr(self, "_schedule_plan_armed", None) is None:
+            return
+        await self._async_resolve_workdays()
+        self._arm_schedule_timers()
+
+    async def async_reset_learning(self, scope: str) -> None:
+        """Reset learned data in ``scope``, then re-arm the wake and bed timers (learned shifts may be gone)."""
+        await self.hass.async_add_executor_job(log_capture.bind_zone_for_executor(self.learning.reset), scope)
+        await self.async_refresh_schedule()
 
     def _preference_refs(self, view: PreferenceView | None) -> dict[str, str | None]:
         """``{part: reference entity}`` under the current config (``view`` None = the feature is off)."""
@@ -11554,11 +11886,12 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             if not selected_rooms(self.config):
                 return
             now = dt_util.now()
+            schedule = _config_at(self, now)
             part = part_of_day(
                 now,
-                self.config.get("wake_time"),
-                self.config.get("sleep_time"),
-                in_sleep_window=_in_sleep_window(now, self.config),
+                schedule.get("wake_time"),
+                schedule.get("sleep_time"),
+                in_sleep_window=_in_sleep_window(now, schedule),
             )[0]
             last = self._preference_bg_sampled.get(part)
             # A minute of slack: the next scheduled refresh may run a moment under 30 minutes after this one.
@@ -11609,6 +11942,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             at = now.replace(hour=_sleep.hour, minute=_sleep.minute, second=0, microsecond=0)
             if at <= now:
                 at += timedelta(days=1)
+            at = learned_next(self.preference_view(), self.config, now, KIND_BED, at)  # tonight's learned bedtime
         return self._preference_offset_at(classification, at, in_sleep_window=in_sleep_window)
 
     def _promise_heat_offset(self, at: datetime, asleep: bool) -> float:
@@ -11642,6 +11976,9 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         view = self.preference_view()
         if view is None:
             return False
+        if self._automation_calls.caused(self.config["climate_entity"], new_state.context, dt_util.utcnow()):
+            _LOGGER.info("Preference observation skipped: reason=caused by an automation")
+            return False
         c = self._current_classification
         gate = heat_gate_reasons(
             getattr(new_state, "state", None),
@@ -11662,7 +11999,10 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         if self._tou_bank_in_force(now) is not None:
             _LOGGER.info("Preference observation skipped: reason=a time-of-use bank holds the setpoint")
             return False
-        asleep = _in_sleep_window(now, self.config)
+        schedule = _config_at(self, now)
+        excluded = near_schedule_edge(now, schedule.get("wake_time"), schedule.get("sleep_time"))
+        recorded = excluded and self._record_thermostat_schedule_candidate(now, schedule, old_f, new_f)
+        asleep = _in_sleep_window(now, schedule)
         savings = bool(self.config.get("aggressive_savings", False))
         common = {"occupancy_mode": self._occupancy_mode, "in_sleep_window": asleep, "aggressive_savings": savings}
         base = select_comfort_band(c, self.config, **common, at=now, preferences=None)
@@ -11684,10 +12024,10 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             bucket=bucket,
             base_f=base.floor,
             target_f=target.floor,
-            excluded=near_schedule_edge(now, self.config.get("wake_time"), self.config.get("sleep_time")),
+            excluded=excluded,
             context=context,
         )
-        return changed is True
+        return recorded or changed is True
 
     def _flush_preference_episode(self) -> bool:
         """Close the open preference episode once its 15 minutes have passed (lazy, no timer); True = state changed.
@@ -11710,7 +12050,8 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         end-of-day reset still runs.
         """
         try:
-            if self.preference_view() is None:
+            view = self.preference_view()
+            if view is None:
                 return self.learning.discard_preference_episode() is True
             closed = self.learning.flush_preference_episode(now) is True
             due = self.learning.run_preference_update(
@@ -11720,6 +12061,8 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
                 unit=self.config.get("temp_unit", "fahrenheit"),
                 rooms=selected_rooms(self.config),
                 references=lambda learned: references_by_part(self.config, learned),
+                max_shift_min=view.schedule.max_shift_min,
+                step_min=int(self.config.get(CONF_SCHEDULE_WEEKLY_STEP_MIN, DEFAULT_SCHEDULE_WEEKLY_STEP_MIN)),
             )
             return closed or due is not None
         except Exception:
@@ -11755,7 +12098,8 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             else None
         )
         outdoor = outdoor_sensor or cfg.get("weather_entity")
-        entities = sorted({e for e in (climate, *rooms, rh_entity, outdoor) if e})
+        signal_entities = [*cfg.get(CONF_WAKE_SIGNAL_ENTITIES, []), *cfg.get(CONF_BED_SIGNAL_ENTITIES, [])]
+        entities = sorted({e for e in (climate, *rooms, rh_entity, outdoor, *signal_entities) if e})
         end = dt_util.utcnow()
         start = end - timedelta(days=days)
         _LOGGER.info(
@@ -11765,6 +12109,9 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             rh_source,
             live_since,
         )
+        # The workdays of every day in the window are resolved here, on the loop, before the executor job needs them.
+        first_day = dt_util.as_local(start).date()
+        await self.async_resolve_workday_dates([first_day + timedelta(days=n) for n in range(-1, days + 3)])
         raw = await get_instance(self.hass).async_add_executor_job(
             functools.partial(
                 history.get_significant_states, self.hass, start, end, entities, significant_changes_only=False
@@ -11772,6 +12119,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         )
         savings = bool(cfg.get("aggressive_savings", False))
         classify_kwargs = self._classify_kwargs(seed_hysteresis=False)
+        pref_view = self.preference_view()  # a snapshot with the resolved workdays: the executor job reads only it
 
         def _base_floor(at: datetime, c: DayClassification, asleep: bool) -> float:
             band = select_comfort_band(
@@ -11793,9 +12141,11 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
                 config=cfg,
                 classify=lambda snapshot: classify_day(snapshot, **classify_kwargs),
                 base_floor=_base_floor,
-                asleep=lambda local: _in_sleep_window(local, cfg),
+                asleep=lambda local: _in_sleep_window(local, config_for(cfg, pref_view, local)),
                 max_offset_f=float(cfg.get(CONF_PREFERENCE_MAX_OFFSET_F, DEFAULT_PREFERENCE_MAX_OFFSET_F)),
                 live_since=live_since,
+                schedule=pref_view.schedule if pref_view is not None else None,
+                signals={e: signal_rows(raw.get(e, [])) for e in signal_entities} if signal_entities else None,
             )
 
         seed = await self._executor_job(_build)
@@ -11804,8 +12154,11 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         _LOGGER.info("Preference history backfill finished: counts=%s buckets=%d", seed["counts"], len(seed["summary"]))
         return {"counts": seed["counts"], "buckets": len(seed["summary"]), "window": seed["window"]}
 
-    async def async_accept_preference_seed(self, buckets: list[str] | None) -> dict[str, Any] | None:
-        """Accept the history seed (``buckets`` None = every row): offsets apply now, within the cap; None = no seed."""
+    async def async_accept_preference_seed(
+        self, buckets: list[str] | None, schedule_rows: list[str] | None = None
+    ) -> dict[str, Any] | None:
+        """Accept the history seed (``buckets``, ``schedule_rows`` None = every row): offsets and learned wake and bed
+        shifts apply now, within their caps; None = no seed."""
         view = self.preference_view()
         if view is None:
             return None
@@ -11815,9 +12168,12 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             refs=self._preference_refs(view),
             max_offset_f=view.max_offset_f,
             rooms=selected_rooms(self.config),
+            schedule_rows=schedule_rows,
+            max_shift_min=view.schedule.max_shift_min,
         )
         if result is not None:
             await self._executor_job(self.learning.save_state)
+            await self.async_refresh_schedule()
             await self.async_request_refresh()  # the next decision arms the new floors
         return result
 
@@ -11826,6 +12182,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         if not self.learning.discard_preference_seed(dt_util.now().date(), rooms=selected_rooms(self.config)):
             return False
         await self._executor_job(self.learning.save_state)
+        await self.async_refresh_schedule()
         return True
 
     def preference_status(self) -> dict[str, Any]:
@@ -11845,7 +12202,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         bucket = armed_f = configured_f = None
         active_f = 0.0
         if c is not None:
-            asleep = _in_sleep_window(now, self.config)
+            asleep = _asleep_at(self, now)
             bucket = view.offset_at(now, str(c.day_type), self.config, in_sleep_window=asleep)[1]
             common = {
                 "occupancy_mode": self._occupancy_mode,
@@ -11870,13 +12227,32 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             ],
         )
         out.update(self._preference_room_status(view, summary, now))
+        out["schedule"] = self._preference_schedule_status(view.schedule, now)
         return out
+
+    def _preference_schedule_status(self, schedule: ScheduleView, now: datetime) -> dict[str, Any]:
+        """Phase 2 status: the learned shifts with their evidence, tomorrow's wake and tonight's bed as HH:MM."""
+        tomorrow = now.date() + timedelta(days=1)
+        cls = schedule.day_class(tomorrow)  # tomorrow's class decides both tomorrow's wake and tonight's bedtime
+        summary = self.learning.schedule_summary(schedule.max_shift_min)
+        for row in summary["rows"]:
+            configured = self.config.get("wake_time" if row["kind"] == KIND_WAKE else "sleep_time")
+            row["configured"] = hhmm(configured)
+        return {
+            **summary,
+            "active": schedule.active,
+            "tomorrow_class": cls,
+            "wake": hhmm(schedule.effective_times(self.config, tomorrow)[0]),
+            "bed": hhmm(schedule.effective_times(self.config, now.date())[1]),
+            "wake_shift_min": schedule.shift(cls, KIND_WAKE),
+            "bed_shift_min": schedule.shift(cls, KIND_BED),
+        }
 
     def _preference_room_status(self, view: PreferenceView, summary: dict[str, Any], now: datetime) -> dict[str, Any]:
         """Phase 3 status: the reference now, the humidity band, the per part of day references and the seed."""
         cfg = self.config
-        asleep = _in_sleep_window(now, cfg)
-        ref = steering_reference(now, cfg, in_sleep_window=asleep, learned_rooms=view.learned_rooms)
+        asleep = _asleep_at(self, now)
+        ref = steering_reference(now, _config_at(self, now), in_sleep_window=asleep, learned_rooms=view.learned_rooms)
         reading = self._get_indoor_temp_with_provenance()
         in_use = ref.entity is not None and reading.remote_context is not None and reading.source_entity == ref.entity
         learned = summary.get("learned_rooms") or {}
@@ -11913,6 +12289,8 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
                 ],
             }
             seed.pop("summary", None)
+            if "schedule" in seed:  # the review rows only; the candidates stay in storage
+                seed["schedule"] = [{"key": key, **row} for key, row in sorted(seed["schedule"]["rows"].items())]
         return {
             "reference": {
                 "entity": ref.entity,
@@ -11978,6 +12356,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         # fork Dunky13#1: weekly preference update (when enabled and due)
         if self._run_preference_update(now) is True:
             await self._executor_job(self.learning.save_state)
+            await self.async_refresh_schedule()  # a moved shift moves the next wake and bed timers
 
         self._today_record = None
         self._briefing_sent_today = False
@@ -12293,7 +12672,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         (``_async_thermostat_changed``) already covers that case.
         """
         self._refresh_indoor_sensor_health()  # Issue #1033: before the window gate so exit/recovery are seen
-        if not _in_sleep_window(dt_util.now(), self.config):
+        if not _asleep_at(self, dt_util.now()):
             return
         await self._async_run_temp_reactive_checks()
         # Issue #1194 (a): every remote-sensor update is also a check of the outer loop's offset.
@@ -14318,6 +14697,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
                 p2_min_overlap_s=AC_WHF_OVERLAP_TOLERANCE_S,
                 p2_excuse_observe_only=False,
                 heat_offset_at=self._promise_heat_offset,
+                config_at=_config_at_fn(self),
             )
             return any(h.promise == "ac_whf_mutex" for h in run_promise_checks(window, cfg, scope=SCOPE_HOME))
         except Exception:
@@ -14488,7 +14868,10 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         now = dt_util.now()
         window = journal.window(now)
         cfg = PromiseConfig.from_config(
-            self.config, p2_min_overlap_s=AC_WHF_OVERLAP_TOLERANCE_S, heat_offset_at=self._promise_heat_offset
+            self.config,
+            p2_min_overlap_s=AC_WHF_OVERLAP_TOLERANCE_S,
+            heat_offset_at=self._promise_heat_offset,
+            config_at=_config_at_fn(self),
         )
         hits = run_promise_checks(window, cfg, scope=SCOPE_HOME)
         # Issue #1260: time a promise did not count under a named exception, counted apart from hits.
@@ -17842,7 +18225,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             # engine is built unconditionally in __init__, so there is no engine-less branch).
             band = decide_sync(self, self.automation_engine._resolved_comfort_band, classification)
             return band.floor, band.ceiling
-        return fallback_edges_without_classification(dt_util.now(), self.config)
+        return fallback_edges_without_classification(dt_util.now(), self.config, self.preference_view())
 
     def _emit_incident(
         self,
@@ -19418,6 +19801,9 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         # pre-cool (e.g. 2:30 AM tomorrow) compare correctly against now.
         wake_time = self.config.get("wake_time", "06:30:00")
         sleep_time = self.config.get("sleep_time", "22:30:00")
+        _view = self.preference_view()
+        if _view is not None and _view.schedule.active:  # today's wake and tonight's bedtime, learned
+            wake_time, sleep_time = _view.schedule.effective_times(self.config, today)
         briefing_time = self.config.get("briefing_time", "06:00:00")
 
         def _parse_time(t: str) -> time:
@@ -19808,6 +20194,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
                 sleep_sensor=self.config.get("sleep_indoor_temp_entity"),
                 sleep_time=self.config.get("sleep_time"),
                 wake_time=self.config.get("wake_time"),
+                instants_on=_timeline_schedule(self).get("instants_on"),
             )
         except Exception:  # noqa: BLE001 - display only: an unbroken line beats no line
             _LOGGER.debug("chart: sensor swap times failed", exc_info=True)
@@ -20098,6 +20485,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
                 _ceiling_threshold,
                 _ae._natural_vent_active if _ae else False,
                 house_stepper=self.control_house_stepper() if _control_path is not None else None,
+                preference_view=self.preference_view(),
             )
 
         # Issue #1436: the window and nat-vent flags per hour are the PLAN's (the operation timeline's window periods
@@ -20138,6 +20526,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
                     _nv_hysteresis,
                     self.config,
                     tou_precondition_window=self._tou_precondition_window_tuple(),
+                    preference_view=self.preference_view(),
                 )
             ]
 
@@ -20809,6 +21198,10 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             for unsub in self._unsub_listeners:
                 unsub()
             self._unsub_listeners.clear()
+            for unsub in self._schedule_unsubs:
+                unsub()
+            self._schedule_unsubs.clear()
+            self._schedule_plan_armed = None
             self._unsubscribe_door_window_listeners()
             if engine is not None:
                 engine.cleanup()
@@ -21249,6 +21642,7 @@ def _compute_pre_cool_trigger_time_pure(
     now: datetime,
     *,
     decided: PreCoolDecision | None = None,
+    preference_view: PreferenceView | None = None,
 ) -> datetime | None:
     """Pure computation behind ``ClimateAdvisorCoordinator._compute_pre_cool_trigger_time()``
     (Issue #514) — takes ``classification``/``config``/``now`` explicitly instead of reading
@@ -21276,11 +21670,16 @@ def _compute_pre_cool_trigger_time_pure(
     c = classification
     if c is None:
         return None
+
+    def _cfg(at: datetime) -> dict[str, Any]:
+        return config_for(config, preference_view, at)  # the schedule at ``at``: the learned wake and bed times
+
     # Neither night this could land on (one waking into today, one into tomorrow) is eligible: nothing to schedule.
     _local_midnight = dt_util.as_local(now).replace(hour=0, minute=0, second=0, microsecond=0)
     if (
         resolve_pre_cool_modifier(c, config) is None
-        and resolve_pre_cool_modifier_for_night(c, config, at=_local_midnight, now=now, decided=decided) is None
+        and resolve_pre_cool_modifier_for_night(c, _cfg(_local_midnight), at=_local_midnight, now=now, decided=decided)
+        is None
     ):
         return None
     sleep_cool = float(config.get(CONF_SLEEP_COOL, DEFAULT_SLEEP_COOL))
@@ -21288,7 +21687,7 @@ def _compute_pre_cool_trigger_time_pure(
     def _eligible_target(trigger_at: datetime) -> float | None:
         # Issue #1378: eligibility belongs to the trigger's own night -- the day it wakes into -- not always to the
         # classification's "tomorrow" (a day too far once the classification is the new day's, after midnight).
-        _modifier = resolve_pre_cool_modifier_for_night(c, config, at=trigger_at, now=now, decided=decided)
+        _modifier = resolve_pre_cool_modifier_for_night(c, _cfg(trigger_at), at=trigger_at, now=now, decided=decided)
         if _modifier is None:
             return None
         # Verify the pre-cool target would actually differ from sleep_cool
@@ -21315,7 +21714,7 @@ def _compute_pre_cool_trigger_time_pure(
         # day and 17:00 on a mild one, so "close + 30 min" used to fire at 10:30 AM / 5:30 PM while people were
         # awake: it armed the sleep band's lowered ceiling for one cycle and the thermostat flipped
         # cool -> heat -> cool. The window-close trigger now counts only when it lands in the sleep window.
-        if _in_sleep_window(dt_util.as_local(trigger), pre_cool_sleep_window_config(config)):
+        if _in_sleep_window(dt_util.as_local(trigger), pre_cool_sleep_window_config(_cfg(dt_util.as_local(trigger)))):
             pre_cool_target = _eligible_target(trigger)
             if pre_cool_target is None:
                 return None
@@ -21340,13 +21739,16 @@ def _compute_pre_cool_trigger_time_pure(
     # If wake_time already passed, schedule for tomorrow night
     if wake_dt < now:
         wake_dt = wake_dt + timedelta(days=1)
+    if preference_view is not None and preference_view.schedule.active:
+        wake_dt = learned_next(preference_view, config, now - timedelta(seconds=1), KIND_WAKE, wake_dt)
+        wake_str = wake_dt.time().isoformat("minutes")
 
     def _night_trigger(wake_at: datetime) -> datetime:
         trig = instant_after(-PRE_COOL_WAKE_OFFSET_HOURS * 3600.0, now=wake_at)  # Issue #1199: UTC
         # Issue #1371: never earlier than bedtime (a short night, e.g. 02:00 -> 05:00, would put wake - 4 h
         # before the occupant is asleep). Bedtime is the last sleep_time before this wake time.
         try:
-            _sp = str(config.get("sleep_time", "22:30")).split(":")
+            _sp = str(_cfg(wake_at - timedelta(hours=12)).get("sleep_time", "22:30")).split(":")
             sleep_dt = dt_util.as_local(
                 datetime.combine(wake_at.date(), time(int(_sp[0]), int(_sp[1]))).replace(tzinfo=None)
             )
@@ -21363,7 +21765,9 @@ def _compute_pre_cool_trigger_time_pure(
     # past, and the caller then skipped pre-cool altogether. The night that banks for the coming day is the
     # NEXT one, so move one day ahead.
     if trigger <= now:
-        trigger = _night_trigger(wake_dt + timedelta(days=1))
+        _next_wake = wake_dt + timedelta(days=1)
+        _next_wake = learned_next(preference_view, config, wake_dt, KIND_WAKE, _next_wake)
+        trigger = _night_trigger(_next_wake)
     pre_cool_target = _eligible_target(trigger)
     if pre_cool_target is None:
         return None
@@ -21465,9 +21869,13 @@ def _compute_target_band_schedule(
     if thermal_model is not None and classification is not None:
         _hvac_mode = getattr(classification, "hvac_mode", None)
         if _hvac_mode == "heat":
-            sleep_heat = compute_bedtime_setback(config, thermal_model, classification)
+            sleep_heat = compute_bedtime_setback(
+                config_for(config, preference_view, now), thermal_model, classification
+            )
         elif _hvac_mode == "cool":
-            sleep_cool = compute_bedtime_setback(config, thermal_model, classification)
+            sleep_cool = compute_bedtime_setback(
+                config_for(config, preference_view, now), thermal_model, classification
+            )
 
     # Issue #1076: the away/vacation setback edges are the raw config values, exactly what the engine's
     # select_comfort_band() commands -- no trend setback_modifier (see docstring).
@@ -21487,6 +21895,15 @@ def _compute_target_band_schedule(
     now_date = now.date() if hasattr(now, "date") else None
 
     _aggressive = bool(config.get("aggressive_savings", False))
+
+    def _times_at(ts: datetime) -> tuple[float, float, bool]:
+        """``(wake_h, sleep_h, night_owl)`` of the schedule at ``ts`` (the configured ones while nothing is learned)."""
+        if preference_view is None or not preference_view.schedule.active:
+            return wake_h, sleep_h, night_owl
+        learned = config_for(config, preference_view, ts)
+        _wake, _sleep = _parse_time(learned.get("wake_time", "06:30")), _parse_time(learned.get("sleep_time", "22:30"))
+        _wh, _sh = _wake.hour + _wake.minute / 60.0, _sleep.hour + _sleep.minute / 60.0
+        return _wh, (_sh + 24 if _wh > _sh else _sh), _wh > _sh
 
     def _pref_off(ts: datetime, night: bool) -> float:
         if preference_view is None or classification is None:
@@ -21513,29 +21930,30 @@ def _compute_target_band_schedule(
             upper = setback_cool
         else:
             # Home/guest schedule (or future days when away)
+            wake_h_ts, sleep_h_ts, night_owl_ts = _times_at(ts)
             h = ts.hour + ts.minute / 60.0
             # I6: normalise h for night-owl schedules
-            h_n = h + 24 if (night_owl and h < wake_h) else h
+            h_n = h + 24 if (night_owl_ts and h < wake_h_ts) else h
 
-            if h_n < wake_h:
+            if h_n < wake_h_ts:
                 # Pre-wake: sleep band; apply pre-cool ceiling from trigger time onward
                 lower = sleep_heat_ts
                 if pre_cool_trigger_h is not None and pre_cool_target is not None and h_n >= pre_cool_trigger_h:
                     upper = pre_cool_target
                 else:
                     upper = sleep_cool
-            elif h_n < wake_h + wake_ramp_h:
+            elif h_n < wake_h_ts + wake_ramp_h:
                 # Wake ramp: interpolate toward comfort
-                frac = (h_n - wake_h) / wake_ramp_h
+                frac = (h_n - wake_h_ts) / wake_ramp_h
                 lower = sleep_heat_ts + frac * (awake_heat_ts - sleep_heat_ts)
                 upper = sleep_cool + frac * (awake_cool - sleep_cool)
-            elif h_n < sleep_h:
+            elif h_n < sleep_h_ts:
                 # Awake: comfort band (Issue #1087: incl. the aggressive-savings margin)
                 lower = awake_heat_ts
                 upper = awake_cool
-            elif h_n < sleep_h + sleep_ramp_h:
+            elif h_n < sleep_h_ts + sleep_ramp_h:
                 # Sleep ramp: interpolate toward sleep setback
-                frac = (h_n - sleep_h) / sleep_ramp_h
+                frac = (h_n - sleep_h_ts) / sleep_ramp_h
                 lower = awake_heat_ts + frac * (sleep_heat_ts - awake_heat_ts)
                 upper = awake_cool + frac * (sleep_cool - awake_cool)
             else:
@@ -21851,7 +22269,9 @@ def _build_predicted_indoor_future(
         # Issue #1378: eligibility for the coming night (the one ending at the next wake-up), judged on the day it
         # wakes into, as the scheduler judges it.
         _ode_pc_modifier = (
-            resolve_pre_cool_modifier_for_night(classification, config, at=now, now=now)
+            resolve_pre_cool_modifier_for_night(
+                classification, config_for(config, preference_view, now), at=now, now=now
+            )
             if classification is not None
             else None
         )
@@ -21866,6 +22286,9 @@ def _build_predicted_indoor_future(
                 _ode_pc_trigger_h = _wct.hour + _wct.minute / 60.0 + PRE_COOL_POST_NAT_VENT_DELAY_MINUTES / 60.0
             else:
                 _wake_str = config.get("wake_time", "06:30")
+                _learned_wake = learned_next(preference_view, config, now, KIND_WAKE, None)
+                if _learned_wake is not None:
+                    _wake_str = _learned_wake.time().isoformat("minutes")
                 _wake_h_raw = int(_wake_str.split(":")[0]) + int(_wake_str.split(":")[1]) / 60.0
                 _ode_pc_trigger_h = _wake_h_raw - PRE_COOL_WAKE_OFFSET_HOURS
             _ode_pc_target = compute_pre_cool_target(config, _ode_pc_modifier)
@@ -22780,6 +23203,7 @@ def _walk_forward_regime(
     ceiling_threshold: float | None,
     initial_session_active: bool,
     house_stepper: Any = None,
+    preference_view: PreferenceView | None = None,
 ) -> dict[str, dict]:
     """Forward-walk the real, already-validated production nat-vent gate/exit/ceiling-guard
     functions hour by hour (Issue #802), replacing the old standalone temperature-inequality
@@ -22912,7 +23336,7 @@ def _walk_forward_regime(
         upper = entry.get("upper")
         indoor = indoor_by_ts.get(ts_str)
         outdoor = outdoor_by_ts.get(ts_str)
-        in_sleep_window = _in_sleep_window(local_dt, config)
+        in_sleep_window = _in_sleep_window(local_dt, config_for(config, preference_view, local_dt))
 
         # Step 1: resolve nat-vent's session-active state for THIS hour first.
         # Runs identically for "off" (Warm/Mild) and "cool" (Hot) days — the gate/
@@ -23153,6 +23577,7 @@ def _compute_effective_target_forward(
     hysteresis: float,
     config: dict,
     tou_precondition_window: tuple[datetime, datetime, float, str] | None = None,
+    preference_view: PreferenceView | None = None,
 ) -> list[dict]:
     """Forward (future) portion of the unified "effective target" chart line (Phase 3b).
 
@@ -23208,7 +23633,7 @@ def _compute_effective_target_forward(
             and upper is not None
             and ts_dt is not None
         ):
-            in_sleep_window = _in_sleep_window(ts_dt, config)
+            in_sleep_window = _in_sleep_window(ts_dt, config_for(config, preference_view, ts_dt))
             target = compute_nat_vent_target(
                 sleep_heat=lower,
                 in_sleep_window=in_sleep_window,

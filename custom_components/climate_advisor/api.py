@@ -431,7 +431,7 @@ def _preference_status_payload(hass: HomeAssistant, coordinator: Any, unit: str)
         )
     else:
         ref_msg = i18n.Msg("status.preference.reference_thermostat", band=band)
-    return {
+    out = {
         "enabled": True,
         "bucket": bucket,
         "active_offset": display_delta(active_f, unit),
@@ -441,6 +441,21 @@ def _preference_status_payload(hass: HomeAssistant, coordinator: Any, unit: str)
         **_msg_fields(hass, msg, "text"),
         **_msg_fields(hass, ref_msg, "ref_text"),
     }
+    schedule = status.get("schedule") or {}
+    if schedule.get("active"):  # phase 2: only while a learned shift applies
+        wake_min, bed_min = schedule["wake_shift_min"], schedule["bed_shift_min"]
+        schedule_msg = i18n.Msg(
+            "status.schedule.line",
+            wake=schedule["wake"],
+            wake_sign="+" if wake_min >= 0 else "-",
+            wake_min=abs(wake_min),
+            bed=schedule["bed"],
+            bed_sign="+" if bed_min >= 0 else "-",
+            bed_min=abs(bed_min),
+            tomorrow=schedule["tomorrow_class"],
+        )
+        out.update(_msg_fields(hass, schedule_msg, "schedule_text"))
+    return out
 
 
 class ClimateAdvisorStatusView(HomeAssistantView):
@@ -1224,9 +1239,7 @@ class ClimateAdvisorResetPreferencesView(HomeAssistantView):
             return self.json(_error_body(hass, "not_loaded"), status_code=503)
 
         with log_capture.zone_scope(coordinator.zone_label):
-            await hass.async_add_executor_job(
-                log_capture.bind_zone_for_executor(coordinator.learning.reset), "preferences"
-            )
+            await coordinator.async_reset_learning("preferences")
             _LOGGER.info("Learned preferences reset from the dashboard")
             return self.json({"status": "ok", **_msg_fields(hass, i18n.Msg("errors.preferences_reset"))})
 
@@ -1274,7 +1287,8 @@ class ClimateAdvisorBackfillPreferencesView(HomeAssistantView):
 
 
 class ClimateAdvisorPreferenceSeedView(HomeAssistantView):
-    """Accept or discard the history seed; body ``{"action": "accept"|"discard", "buckets": [key, ...]}``."""
+    """Accept or discard the history seed; body ``{"action": "accept"|"discard", "buckets": [key, ...],
+    "schedule_rows": ["<class>|<kind>", ...]}`` (a missing list means every row)."""
 
     url = API_PREFERENCE_SEED
     name = "api:climate_advisor:preference_seed"
@@ -1294,9 +1308,11 @@ class ClimateAdvisorPreferenceSeedView(HomeAssistantView):
             except Exception:
                 return self.json(_error_body(hass, "invalid_json_body"), status_code=400)
             action = body.get("action") if isinstance(body, dict) else None
-            buckets = body.get("buckets") if isinstance(body, dict) else None
-            if action not in ("accept", "discard") or (
-                buckets is not None and not (isinstance(buckets, list) and all(isinstance(b, str) for b in buckets))
+            selections = [body.get(key) if isinstance(body, dict) else None for key in ("buckets", "schedule_rows")]
+            buckets, schedule_rows = selections
+            if action not in ("accept", "discard") or any(
+                keys is not None and not (isinstance(keys, list) and all(isinstance(k, str) for k in keys))
+                for keys in selections
             ):
                 return self.json(_error_body(hass, "preference_seed_action"), status_code=400)
             if coordinator.preference_view() is None:
@@ -1305,7 +1321,7 @@ class ClimateAdvisorPreferenceSeedView(HomeAssistantView):
                 if action == "discard":
                     discarded = await coordinator.async_discard_preference_seed()
                 else:
-                    result = await coordinator.async_accept_preference_seed(buckets)
+                    result = await coordinator.async_accept_preference_seed(buckets, schedule_rows)
             except Exception as err:
                 _LOGGER.error("Preference history seed failed: action=%s", action, exc_info=True)
                 return self.json(_error_body(hass, "preference_seed_failed", error=type(err).__name__), status_code=500)

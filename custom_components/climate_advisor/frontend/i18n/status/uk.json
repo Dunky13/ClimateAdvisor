@@ -240,6 +240,7 @@
   "status.remote_offset.waiting": "{label}: зсув розпочинається — очікування: {band}",
   "status.remote_offset.why_clearing": "завершення",
   "status.remote_offset.why_retrying": "завершення, повторна спроба після відхиленого запису",
+  "status.schedule.line": "Вивчений час: пробудження завтра {wake} ({wake_sign}{wake_min, number} min), сон сьогодні ввечері {bed} ({bed_sign}{bed_min, number} min). Завтра {tomorrow, select, weekday {будній день} weekend {вихідний день} other {{tomorrow}}}.",
   "status.sensor_meta.ca_name": "Показання Climate Advisor",
   "status.sensor_meta.ca_role": "показання, яке використовує Climate Advisor",
   "status.sensor_role.bedroom_sensor": "датчик у спальні",

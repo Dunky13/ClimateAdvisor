@@ -522,8 +522,13 @@ def daily_schedule_fires_at(coordinator: Any, etype: str, now: datetime) -> bool
     from custom_components.climate_advisor import coordinator as coordinator_module  # noqa: PLC0415
 
     key, default = _DAILY_SCHEDULE[etype]
-    at = coordinator_module._parse_time(coordinator.config.get(key, default))
     local = coordinator_module.dt_util.as_local(now)
+    armed = getattr(coordinator, "_schedule_plan_armed", None)
+    if armed is not None and armed.point:
+        # A learned schedule arms point-in-time timers and nothing else: the harness must never stand in for one that
+        # did not fire (the scenario's assertion then fails instead of passing on the harness's own call).
+        return True
+    at = coordinator_module._parse_time(coordinator.config.get(key, default))
     return (local.hour, local.minute) == (at.hour, at.minute)
 
 

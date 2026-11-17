@@ -29,6 +29,8 @@ def _submit(**fields):
     flow, captured = _make_options_flow(dict(FULL_CONFIG))
     user_input = {
         "preference_learning_enabled": True,
+        "schedule_max_shift_min": 90,
+        "schedule_weekly_step_min": 15,
         "room_pin_night": "auto",
         "room_pin_morning": "auto",
         "room_pin_afternoon": "auto",

@@ -100,6 +100,7 @@
   "briefing.tldr.occupancy_vacation_deep": "  Occupancy: Vacation — deep setback active",
   "briefing.tldr.preference": "  Learned preference ({day_type}, {day_class}): {entries}",
   "briefing.tldr.tomorrow": "  Tomorrow: {trend} ({high})",
+  "briefing.tldr.tomorrow_wake": "{tomorrow}\n  Wake Tomorrow: {wake} (learned)",
   "briefing.tldr.windows_close_by": "  Windows: Close by {when}",
   "briefing.tldr.windows_closed": "  Windows: Closed all day",
   "briefing.tldr.windows_hot_both": "  Windows: Close by {when} (<{threshold}) / Open {open}+",

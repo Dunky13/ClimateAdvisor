@@ -461,7 +461,12 @@
           "room_pin_night": "Kamer voor de nacht",
           "room_pin_morning": "Kamer voor de ochtend",
           "room_pin_afternoon": "Kamer voor de middag",
-          "room_pin_evening": "Kamer voor de avond"
+          "room_pin_evening": "Kamer voor de avond",
+          "workday_entity": "Werkdagsensor",
+          "wake_signal_entities": "Wakkersignalen",
+          "bed_signal_entities": "Bedtijdsignalen",
+          "schedule_max_shift_min": "Maximale schemaverschuiving",
+          "schedule_weekly_step_min": "Maximale wekelijkse schemawijziging"
         },
         "data_description": {
           "preference_learning_enabled": "Indien aan, verschuiven herhaalde thermostaatwijzigingen op vergelijkbare momenten de verwarmingstemperatuur die Climate Advisor voor dat soort moment instelt. Standaard uit.",
@@ -471,7 +476,12 @@
           "room_pin_night": "Auto laat Climate Advisor de kamer kiezen waarvan de temperatuur het best bij je wijzigingen past. Thermostaat houdt de meting van de thermostaat zelf. Of kies een van de kamersensoren hierboven.",
           "room_pin_morning": "Auto laat Climate Advisor de kamer kiezen waarvan de temperatuur het best bij je wijzigingen past. Thermostaat houdt de meting van de thermostaat zelf. Of kies een van de kamersensoren hierboven.",
           "room_pin_afternoon": "Auto laat Climate Advisor de kamer kiezen waarvan de temperatuur het best bij je wijzigingen past. Thermostaat houdt de meting van de thermostaat zelf. Of kies een van de kamersensoren hierboven.",
-          "room_pin_evening": "Auto laat Climate Advisor de kamer kiezen waarvan de temperatuur het best bij je wijzigingen past. Thermostaat houdt de meting van de thermostaat zelf. Of kies een van de kamersensoren hierboven."
+          "room_pin_evening": "Auto laat Climate Advisor de kamer kiezen waarvan de temperatuur het best bij je wijzigingen past. Thermostaat houdt de meting van de thermostaat zelf. Of kies een van de kamersensoren hierboven.",
+          "workday_entity": "Optioneel. De sensor van de Workday-integratie. Daarmee tellen feestdagen als vrije dagen voor geleerde voorkeuren en geleerde wek- en bedtijden. Zonder telt alleen zaterdag en zondag als vrij.",
+          "wake_signal_entities": "Optioneel. Lampen, schakelaars, knoppen of helpers die aangaan of afgaan als je opstaat. Climate Advisor leert je wektijd hiervan. Vereist dat voorkeuren leren aan staat.",
+          "bed_signal_entities": "Optioneel. Lampen, schakelaars, knoppen of helpers die je uitzet of indrukt als je naar bed gaat. Climate Advisor leert je bedtijd hiervan. Vereist dat voorkeuren leren aan staat.",
+          "schedule_max_shift_min": "Het meeste dat een geleerde wek- of bedtijd mag verschuiven ten opzichte van de tijd die je hebt ingesteld. 0 houdt je ingestelde tijden vast.",
+          "schedule_weekly_step_min": "Het meeste dat een geleerde wek- of bedtijd per week mag veranderen."
         }
       },
       "ai_settings": {
@@ -548,7 +558,8 @@
       "vacation_heat_above_away_warning": "De vakantieverwarming staat warmer dan de verwarming bij afwezigheid. Een vakantie kost dus meer energie dan een gewone dag van huis. Verstuur opnieuw om dit te behouden.",
       "vacation_cool_below_away_warning": "De vakantiekoeling staat koeler dan de koeling bij afwezigheid. Een vakantie kost dus meer energie dan een gewone dag van huis. Verstuur opnieuw om dit te behouden.",
       "vacation_freeze_warning": "Met deze instelling komt de vakantieverwarming onder 45 °F (7 °C). Tijdens een lange reis kunnen leidingen bevriezen. Verstuur opnieuw om dit te behouden.",
-      "room_pin_not_selected": "Kies auto, thermostaat of een van de hierboven geselecteerde kamersensoren."
+      "room_pin_not_selected": "Kies auto, thermostaat of een van de hierboven geselecteerde kamersensoren.",
+      "signal_entity_not_found": "Een van de signaalentiteiten bestaat niet. Kies entiteiten die in Home Assistant bestaan."
     }
   },
   "issues": {

@@ -44,6 +44,8 @@
   "settings.automation_grace_seconds.description": "Depois de o Climate Advisor retomar o AVAC (todas as portas/janelas fechadas), este período de tolerância evita uma nova pausa imediata se uma porta for aberta brevemente.",
   "settings.automation_grace_seconds.label": "Tolerância da automatização (minutos)",
   "settings.badge_changed": "alterado",
+  "settings.bed_signal_entities.description": "Opcional. Luzes, interruptores, botões ou auxiliares que você desliga ou pressiona ao ir dormir. O Climate Advisor aprende com eles a sua hora de deitar. Requer o aprendizado de preferências ativado.",
+  "settings.bed_signal_entities.label": "Sinais de deitar",
   "settings.briefing_notifications_enabled.description": "Numa instalação com várias zonas, apenas uma zona deve enviar o resumo diário agendado por push/e-mail, caso contrário recebe uma cópia por zona. Ative esta opção em exatamente uma zona. Clicar manualmente em Enviar resumo no separador de depuração envia sempre, mesmo com esta opção desativada.",
   "settings.briefing_notifications_enabled.label": "Enviar notificações do resumo diário (esta zona)",
   "settings.briefing_time.description": "Quando o resumo climático diário é gerado e enviado. Deve ser antes da hora de acordar, para o ver quando se levanta.",
@@ -222,6 +224,10 @@
   "settings.room_pin_night.label": "Divisão para a noite",
   "settings.room_temp_entities.description": "Sensores de temperatura das divisões com que o Climate Advisor pode medir a sua temperatura de conforto aprendida em cada parte do dia (requer a aprendizagem de preferências). Não escolha um sensor integrado noutro aquecedor ou ar condicionado.",
   "settings.room_temp_entities.label": "Sensores de divisão para preferências",
+  "settings.schedule_max_shift_min.description": "O máximo que uma hora de acordar ou de deitar aprendida pode se afastar da hora configurada. 0 mantém fixas as suas horas configuradas.",
+  "settings.schedule_max_shift_min.label": "Deslocamento máximo do horário",
+  "settings.schedule_weekly_step_min.description": "O máximo que uma hora de acordar ou de deitar aprendida pode mudar por semana.",
+  "settings.schedule_weekly_step_min.label": "Alteração semanal máxima do horário",
   "settings.sensor_debounce_seconds.description": "Durante quanto tempo o estado de um sensor de porta/janela tem de se manter estável antes de o Climate Advisor atuar — pausar/retomar o AVAC, ou iniciar/terminar o controlo de ventilação natural (ventoinha de toda a casa ou ventoinha do AVAC). Aplica-se a todos os dispositivos controlados, não só ao AVAC. Valores curtos reagem mais depressa, mas estão mais expostos a passagens rápidas por uma porta ou a oscilações de um sensor defeituoso; valores mais longos são mais estáveis, mas respondem mais lentamente a uma alteração real.",
   "settings.sensor_debounce_seconds.label": "Debounce do sensor (minutos)",
   "settings.sensor_polarity_inverted.description": "Ative se os seus sensores indicarem 'off' quando abertos (alguns contactos reed funcionam assim). Uma polaridade incorreta faz o AVAC entrar em pausa quando as portas estão fechadas.",
@@ -298,6 +304,8 @@
   "settings.value_configured": "configurado",
   "settings.value_n_configured": "{n, plural, one {# configurado} many {# configurados} other {# configurados}}",
   "settings.value_not_set": "não definido",
+  "settings.wake_signal_entities.description": "Opcional. Luzes, interruptores, botões ou auxiliares que ligam ou disparam quando você se levanta. O Climate Advisor aprende com eles a sua hora de acordar. Requer o aprendizado de preferências ativado.",
+  "settings.wake_signal_entities.label": "Sinais de acordar",
   "settings.wake_time.description": "Quando as temperaturas de conforto são repostas de manhã. Horas mais cedo significam que a casa está confortável quando se levanta, mas gastam mais energia durante a noite.",
   "settings.wake_time.label": "Hora de acordar",
   "settings.weather_bias_enabled.description": "Aplica uma correção específica da localização à previsão de amanhã, com base na precisão da previsão observada.",
@@ -305,5 +313,7 @@
   "settings.weather_entity.description": "A integração meteorológica usada para os dados de previsão. Determina a classificação do tipo de dia e todas as decisões de automatização seguintes.",
   "settings.weather_entity.label": "Entidade meteorológica",
   "settings.welcome_home_debounce_seconds.description": "Tempo mínimo entre notificações de boas-vindas a casa. Se alguém sair e regressar dentro desta janela, a notificação é suprimida. Defina 0 para notificar sempre.",
-  "settings.welcome_home_debounce_seconds.label": "Intervalo de silêncio das boas-vindas (minutos)"
+  "settings.welcome_home_debounce_seconds.label": "Intervalo de silêncio das boas-vindas (minutos)",
+  "settings.workday_entity.description": "Opcional. O sensor da integração Workday. Com ele, os feriados contam como dias de folga para as preferências aprendidas e as horas de acordar e de deitar aprendidas. Sem ele, sábado e domingo são os dias de folga.",
+  "settings.workday_entity.label": "Sensor de dia útil"
 }

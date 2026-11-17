@@ -6,7 +6,7 @@ DOMAIN = "climate_advisor"
 
 # Integration version — MUST match manifest.json "version" field.
 # A test in tests/test_version_sync.py enforces this.
-VERSION = "0.9.41.2"
+VERSION = "0.9.41.3"
 
 GITHUB_REPO = "gunkl/ClimateAdvisor"
 GITHUB_REPO_URL = "https://github.com/gunkl/ClimateAdvisor"
@@ -132,6 +132,15 @@ ROOM_PIN_KEYS: dict[str, str] = {
 ROOM_PIN_AUTO = "auto"
 ROOM_PIN_THERMOSTAT = "thermostat"
 DEFAULT_ROOM_PIN = ROOM_PIN_AUTO
+# Fork Dunky13#1 phase 2: learned wake and bed times (the optional Workday sensor, the signal entities, the bounds).
+CONF_WORKDAY_ENTITY = "workday_entity"
+CONF_WAKE_SIGNAL_ENTITIES = "wake_signal_entities"
+CONF_BED_SIGNAL_ENTITIES = "bed_signal_entities"
+CONF_SCHEDULE_MAX_SHIFT_MIN = "schedule_max_shift_min"
+CONF_SCHEDULE_WEEKLY_STEP_MIN = "schedule_weekly_step_min"
+DEFAULT_SCHEDULE_MAX_SHIFT_MIN = 90
+DEFAULT_SCHEDULE_WEEKLY_STEP_MIN = 15
+SIGNAL_ENTITY_DOMAINS: tuple[str, ...] = ("light", "switch", "input_boolean", "binary_sensor", "event")
 BACKFILL_DAYS_DEFAULT = 30
 BACKFILL_DAYS_MIN = 1
 BACKFILL_DAYS_MAX = 400
@@ -1386,6 +1395,47 @@ CONFIG_METADATA = {
         ),
         "category": "advanced",
     },
+    CONF_WORKDAY_ENTITY: {
+        "label": "Workday Sensor",
+        "description": (
+            "Optional. The Workday integration's sensor. With it, holidays count as days off for "
+            "learned preferences and learned wake and bed times. Without it, Saturday and Sunday are "
+            "the days off."
+        ),
+        "category": "advanced",
+        "no_default": True,
+    },
+    CONF_WAKE_SIGNAL_ENTITIES: {
+        "label": "Wake Signal Entities",
+        "description": (
+            "Optional. Lights, switches, buttons or helpers that turn on or fire when you get up. "
+            "Climate Advisor learns your wake time from them. Needs preference learning on."
+        ),
+        "category": "advanced",
+    },
+    CONF_BED_SIGNAL_ENTITIES: {
+        "label": "Bed Signal Entities",
+        "description": (
+            "Optional. Lights, switches, buttons or helpers you switch off or press when you go to "
+            "bed. Climate Advisor learns your bedtime from them. Needs preference learning on."
+        ),
+        "category": "advanced",
+    },
+    CONF_SCHEDULE_MAX_SHIFT_MIN: {
+        "label": "Learned Schedule Maximum Shift",
+        "time_unit": "min",
+        "description": (
+            "The most a learned wake or bed time may move from the time you configured. 0 keeps your "
+            "configured times fixed."
+        ),
+        "category": "advanced",
+    },
+    CONF_SCHEDULE_WEEKLY_STEP_MIN: {
+        "label": "Learned Schedule Weekly Step",
+        "time_unit": "min",
+        "description": "The most a learned wake or bed time may change per week.",
+        "category": "advanced",
+    },
     CONF_ROOM_PIN_NIGHT: {
         "label": "Room For The Night",
         "description": "Which room the comfort target is measured in at night: auto, the thermostat, or a room.",
@@ -2395,6 +2445,10 @@ _METADATA_DEFAULTS: dict[str, Any] = {
     "preference_max_offset_f": DEFAULT_PREFERENCE_MAX_OFFSET_F,
     "preference_weekly_step_f": DEFAULT_PREFERENCE_WEEKLY_STEP_F,
     CONF_ROOM_TEMP_ENTITIES: [],
+    CONF_WAKE_SIGNAL_ENTITIES: [],
+    CONF_BED_SIGNAL_ENTITIES: [],
+    CONF_SCHEDULE_MAX_SHIFT_MIN: DEFAULT_SCHEDULE_MAX_SHIFT_MIN,
+    CONF_SCHEDULE_WEEKLY_STEP_MIN: DEFAULT_SCHEDULE_WEEKLY_STEP_MIN,
     CONF_ROOM_PIN_NIGHT: DEFAULT_ROOM_PIN,
     CONF_ROOM_PIN_MORNING: DEFAULT_ROOM_PIN,
     CONF_ROOM_PIN_AFTERNOON: DEFAULT_ROOM_PIN,

@@ -2293,6 +2293,7 @@ def predict(
     ca_sleep_node: str | None = None,
     ca_sleep_time: str | None = None,
     ca_wake_time: str | None = None,
+    ca_schedule: SchedulePair | None = None,
     display_nodes: bool = False,
     sleep_loop: SleepLoop | None = None,
 ) -> dict[str, list[tuple[datetime, float]]] | None:
@@ -2378,9 +2379,7 @@ def predict(
         else None
     )
     in_window = (
-        [in_sleep_window(i.ts.astimezone(tz), ca_sleep_time, ca_wake_time) for i in inputs]
-        if loop_j is not None
-        else []
+        sleep_flags([i.ts for i in inputs], ca_sleep_time, ca_wake_time, tz, ca_schedule) if loop_j is not None else []
     )
     if loop_j is not None and any(in_window):
         roll = _rollout_with_sleep_loop(
@@ -2440,6 +2439,7 @@ def predict(
             sleep_time=ca_sleep_time,
             wake_time=ca_wake_time,
             tz=tz,
+            schedule=ca_schedule,
         )
     return res
 
@@ -2646,6 +2646,19 @@ def _carried_words(f: Mapping[str, Any]) -> str:
 
 
 # --------------------------------------------------------------------------- the "_ca" line
+# The ``WakeBed`` of the night that matters at an instant: the learned schedule (fork Dunky13#1 phase 2).
+SchedulePair = Callable[[datetime], Any]  # a ``preference_schedule.WakeBed`` (this module imports nothing local)
+
+
+def _pair_at(
+    local: datetime, sleep_time: str | None, wake_time: str | None, schedule: SchedulePair | None
+) -> tuple[str | None, str | None]:
+    if schedule is None:
+        return sleep_time, wake_time
+    night = schedule(local)
+    return night.bed, night.wake
+
+
 def in_sleep_window(local: datetime, sleep_time: str | None, wake_time: str | None) -> bool:
     """True when ``local`` is inside the ``sleep_time`` -> ``wake_time`` ("HH:MM") window.
 
@@ -2669,6 +2682,15 @@ def in_sleep_window(local: datetime, sleep_time: str | None, wake_time: str | No
     return now_m >= s_m or now_m < w_m
 
 
+def sleep_flags(
+    times: Sequence[datetime], sleep_time: str | None, wake_time: str | None, tz: tzinfo, schedule: SchedulePair | None
+) -> list[bool]:
+    """Sleep-window verdict per instant, each from the schedule pair in force then (fork Dunky13#1 phase 2)."""
+    return [
+        in_sleep_window(t.astimezone(tz), *_pair_at(t.astimezone(tz), sleep_time, wake_time, schedule)) for t in times
+    ]
+
+
 def ca_line(
     preds: Mapping[str, Sequence[tuple[datetime, float]]],
     *,
@@ -2677,6 +2699,7 @@ def ca_line(
     sleep_time: str | None,
     wake_time: str | None,
     tz: tzinfo,
+    schedule: SchedulePair | None = None,
 ) -> list[tuple[datetime, float]]:
     """The ``_ca`` line: the reading Climate Advisor itself uses (R1b, M3).
 
@@ -2695,8 +2718,10 @@ def ca_line(
         return list(base)
     by_ts = {t.timestamp(): v for t, v in (sleep or [])}
     out = []
-    for t, v in base:
-        if not in_sleep_window(t.astimezone(tz), sleep_time, wake_time):
+    for (t, v), asleep in zip(
+        base, sleep_flags([t for t, _ in base], sleep_time, wake_time, tz, schedule), strict=True
+    ):
+        if not asleep:
             out.append((t, v))
         elif t.timestamp() in by_ts:
             out.append((t, by_ts[t.timestamp()]))

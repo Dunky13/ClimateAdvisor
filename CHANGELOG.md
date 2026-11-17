@@ -3,13 +3,26 @@
 All notable changes to Climate Advisor are documented here.
 This project follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) conventions.
 
+## [0.9.41.3] — 2026-11-17
+
+### Added (fork feature, off by default)
+- Feat #1: preference learning, phase 2: learned wake and bed times. Needs Learn Setpoint Preferences on and a maximum schedule shift above 0; otherwise Climate Advisor behaves exactly as in 0.9.41.2.
+  - **Signals:** under Settings, Learning & prediction, pick the lights, switches, buttons or helpers that you use when you get up (**Wake Signal Entities**) and when you go to bed (**Bed Signal Entities**). The first activation within three hours of your configured wake time is a wake signal; the last switch-off within three hours of your configured bedtime is a bedtime signal. For a kind without signal entities, a thermostat change you make in the hour before the wake or bed time counts instead. Changes an automation caused are ignored.
+  - **Learning:** the weekly update moves a learned wake or bed time towards the median of your recent signals (at least 4 are needed), per weekday and weekend, by at most **Learned Schedule Weekly Step** (default 15 min) and never more than **Learned Schedule Maximum Shift** (default 90 min) from the time you configured. A **Workday Sensor** makes holidays count as weekend days.
+  - **Where it applies:** the sleep window, the bedtime setback, the morning warm-up, the briefing, the chart and the predictions all use the learned times; your configured times stay the base and are shown next to them. **Analyse history** also reads the signal entities' recorded history and proposes a shift per day class that you can accept row by row.
+  - **Where it shows:** the Status tab says "Learned times: wake tomorrow 07:05 (+35 min), bed tonight 23:50 (+80 min)", the Analysis tab shows the configured time, shift, target and sample count per day class and kind plus the latest signals, and the briefing names tomorrow's learned wake time.
+  - Spec: `docs/preference-learning-spec.md`, Phase 2.
+
+### Fixed (fork feature)
+- Thermostat changes caused by an automation no longer count as your preferences, and a change an automation made right after a service call on the thermostat is recognised even when the thermostat's cloud update lost the context.
+
 ## [0.9.41.2] — 2026-11-16
 
 ### Added (fork feature, off by default)
 - Feat #1: preference learning, phase 3: rooms, humidity and history. Everything below needs Learn Setpoint Preferences on; with no room selected and no humidity reading, Climate Advisor behaves exactly as in 0.9.41.1.
   - **Rooms:** under Settings, Learning & prediction, pick the temperature sensors (or number helpers) of the rooms you care about (**Preference Room Sensors**) and, per part of the day, whether Climate Advisor should measure comfort at the thermostat, in a room you choose, or let it learn which room you react to (**Room For The Night/Morning/Afternoon/Evening**, default "auto"). When a room steers, Climate Advisor nudges the one thermostat setpoint so that room reaches the comfort temperature, exactly as the bedroom sensor already does at night (same step, limit and fall-back to the thermostat when the room's sensor goes quiet). Heating only: a room never changes how cooling works. A configured bedroom sensor still wins during the sleep window.
   - **Humidity:** learned adjustments are kept separately for dry (below 40 %), normal and humid (above 60 %) air, using the humidity reading Climate Advisor already uses for the thermostat's room. A situation with too few samples for its own humidity band uses the general adjustment.
-  - **History:** on the Analysis tab, **Analyse history** reads your thermostat's recorded history (default 30 days, from the Home Assistant recorder), removes the changes your thermostat's own schedule made, and proposes an adjustment per situation. Nothing changes until you choose **Apply these offsets now** (for the rows you keep ticked, within your maximum); **Discard** drops the proposal. The same analysis is available as the `climate_advisor.backfill_preferences` service.
+  - **History:** on the Analysis tab, **Analyse history** reads your thermostat's recorded history (default 30 days, from the Home Assistant recorder), removes the changes your thermostat's own schedule made, and proposes an adjustment per situation. Nothing changes until you choose **Apply these offsets and times now** (for the rows you keep ticked, within your maximum); **Discard** drops the proposal. The same analysis is available as the `climate_advisor.backfill_preferences` service.
   - **Where it shows:** the Status tab says what the thermostat is steered by ("Steering by Bedroom (learned) 19.6 °C, thermostat +0.5 °C") and the humidity band; the Analysis tab shows, per part of the day, the room in use, why, and how well each candidate room tracks your changes, plus a humidity column; the briefing's Learned preference line names the room an adjustment is measured in.
   - **Changing a room** for a part of the day restarts that part's learned adjustments from zero (they were measured somewhere else).
   - Spec: `docs/preference-learning-spec.md`, Phase 3.

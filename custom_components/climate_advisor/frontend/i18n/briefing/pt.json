@@ -100,6 +100,7 @@
   "briefing.tldr.occupancy_vacation_deep": "  Ocupação: férias — redução profunda ativa",
   "briefing.tldr.preference": "  Preferência aprendida ({day_type}, {day_class}): {entries}",
   "briefing.tldr.tomorrow": "  Amanhã: {trend} ({high})",
+  "briefing.tldr.tomorrow_wake": "{tomorrow}\n  Acordar amanhã: {wake} (aprendido)",
   "briefing.tldr.windows_close_by": "  Janelas: fechar até {when}",
   "briefing.tldr.windows_closed": "  Janelas: fechadas o dia todo",
   "briefing.tldr.windows_hot_both": "  Janelas: fechar até {when} (<{threshold}) / abrir a partir de {open}",

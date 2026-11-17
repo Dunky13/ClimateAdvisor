@@ -44,6 +44,8 @@
   "settings.automation_grace_seconds.description": "Après la reprise du CVC par Climate Advisor (portes et fenêtres fermées), ce délai évite une nouvelle mise en pause immédiate si une porte s’ouvre brièvement.",
   "settings.automation_grace_seconds.label": "Délai de grâce de l’automatisation (minutes)",
   "settings.badge_changed": "modifié",
+  "settings.bed_signal_entities.description": "Facultatif. Lumières, interrupteurs, boutons ou assistants que vous éteignez ou pressez en allant vous coucher. Climate Advisor en apprend votre heure de coucher. Nécessite l'apprentissage des préférences activé.",
+  "settings.bed_signal_entities.label": "Signaux de coucher",
   "settings.briefing_notifications_enabled.description": "Sur une installation multizone, une seule zone doit envoyer le bilan quotidien planifié (push/e-mail), sinon vous recevez un exemplaire par zone. Activez ceci pour une seule zone. Le bouton Envoyer le bilan de l’onglet Débogage envoie toujours, même si ceci est désactivé.",
   "settings.briefing_notifications_enabled.label": "Envoyer le bilan quotidien (cette zone)",
   "settings.briefing_time.description": "Heure à laquelle le bilan climatique quotidien est généré et envoyé. À fixer avant l’heure de réveil pour le voir au lever.",
@@ -222,6 +224,10 @@
   "settings.room_pin_night.label": "Pièce pour la nuit",
   "settings.room_temp_entities.description": "Capteurs de température de pièce avec lesquels Climate Advisor peut mesurer votre température de confort apprise selon le moment de la journée (nécessite l’apprentissage des préférences). Ne choisissez pas un capteur intégré à un autre chauffage ou climatiseur.",
   "settings.room_temp_entities.label": "Capteurs de pièce pour les préférences",
+  "settings.schedule_max_shift_min.description": "Le décalage maximal d'une heure de réveil ou de coucher apprise par rapport à l'heure configurée. 0 garde vos heures configurées fixes.",
+  "settings.schedule_max_shift_min.label": "Décalage maximal des horaires",
+  "settings.schedule_weekly_step_min.description": "Le changement maximal d'une heure de réveil ou de coucher apprise par semaine.",
+  "settings.schedule_weekly_step_min.label": "Changement hebdomadaire maximal des horaires",
   "settings.sensor_debounce_seconds.description": "Durée pendant laquelle l’état d’un capteur de porte/fenêtre doit rester stable avant que Climate Advisor n’agisse : mise en pause/reprise du CVC, ou activation/arrêt de la ventilation naturelle (ventilateur de toute la maison ou ventilateur du CVC). Vaut pour tous les appareils pilotés, pas seulement le CVC. Une valeur courte réagit plus vite mais subit davantage un simple passage dans une porte ou un capteur capricieux ; une valeur longue est plus stable mais réagit plus lentement à un vrai changement.",
   "settings.sensor_debounce_seconds.label": "Anti-rebond des capteurs (minutes)",
   "settings.sensor_polarity_inverted.description": "Activez si vos capteurs indiquent « off » à l’ouverture (certains contacts à lame fonctionnent ainsi). Une mauvaise polarité met le CVC en pause quand les portes sont fermées.",
@@ -298,6 +304,8 @@
   "settings.value_configured": "configuré",
   "settings.value_n_configured": "{n, plural, one {# configuré} many {# configurés} other {# configurés}}",
   "settings.value_not_set": "non défini",
+  "settings.wake_signal_entities.description": "Facultatif. Lumières, interrupteurs, boutons ou assistants qui s'allument ou se déclenchent quand vous vous levez. Climate Advisor en apprend votre heure de réveil. Nécessite l'apprentissage des préférences activé.",
+  "settings.wake_signal_entities.label": "Signaux de réveil",
   "settings.wake_time.description": "Heure à laquelle les températures de confort du matin sont rétablies. Plus tôt, la maison est confortable à votre lever mais consomme plus d’énergie la nuit.",
   "settings.wake_time.label": "Heure du réveil",
   "settings.weather_bias_enabled.description": "Applique une correction propre à votre lieu aux prévisions de demain, d’après la précision observée des prévisions.",
@@ -305,5 +313,7 @@
   "settings.weather_entity.description": "L’intégration météo utilisée pour les prévisions. Détermine le type de journée et toutes les décisions d’automatisation qui en découlent.",
   "settings.weather_entity.label": "Entité météo",
   "settings.welcome_home_debounce_seconds.description": "Délai minimal entre deux notifications de bienvenue. Si quelqu’un part et revient dans ce délai, la notification est supprimée. Mettez 0 pour toujours notifier.",
-  "settings.welcome_home_debounce_seconds.label": "Délai de silence de bienvenue (minutes)"
+  "settings.welcome_home_debounce_seconds.label": "Délai de silence de bienvenue (minutes)",
+  "settings.workday_entity.description": "Facultatif. Le capteur de l'intégration Workday. Avec lui, les jours fériés comptent comme des jours de repos pour les préférences apprises et les heures de réveil et de coucher apprises. Sans lui, le samedi et le dimanche sont les jours de repos.",
+  "settings.workday_entity.label": "Capteur de jour ouvré"
 }

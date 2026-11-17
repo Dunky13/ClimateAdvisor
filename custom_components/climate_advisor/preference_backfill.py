@@ -18,6 +18,7 @@ from datetime import datetime, timedelta, tzinfo
 from typing import Any
 
 from .classifier import DayClassification, ForecastSnapshot
+from .const import CONF_BED_SIGNAL_ENTITIES, CONF_WAKE_SIGNAL_ENTITIES
 from .humidity_sources import valid_rh
 from .preference_learning import (
     BACKGROUND_INTERVAL,
@@ -35,6 +36,15 @@ from .preference_learning import (
     near_schedule_edge,
     part_of_day,
     seed_offsets,
+)
+from .preference_schedule import (
+    KIND_BED,
+    KIND_WAKE,
+    ScheduleView,
+    config_at,
+    history_candidates,
+    row_transitions,
+    seed_schedule_rows,
 )
 from .temperature import read_attribute_temp_f, read_sensor_state_f
 
@@ -87,6 +97,35 @@ def climate_rows(states: list[Any], unit: str) -> list[ClimateRow]:
             )
         )
     return rows
+
+
+def signal_rows(states: list[Any]) -> list[tuple[datetime, str]]:
+    """Recorder states of a wake or bed signal entity as ``(last_changed, state)`` (a state change is the signal)."""
+    return [(st.last_changed, st.state) for st in states if isinstance(getattr(st, "state", None), str)]
+
+
+def schedule_section(
+    signals: Mapping[str, list[tuple[datetime, str]]],
+    *,
+    schedule: ScheduleView,
+    config: Mapping[str, Any],
+    tz: tzinfo,
+    days_covered: int,
+) -> dict[str, Any]:
+    """The seed's learned wake and bed times: ``{"candidates", "rows", "counts"}`` from the signal entities' history.
+
+    The coordinator resolved the workday of every date in the window before the executor job (``schedule.workdays``).
+    """
+    by_kind: dict[str, dict[str, list[datetime]]] = {KIND_WAKE: {}, KIND_BED: {}}
+    for kind, key in ((KIND_WAKE, CONF_WAKE_SIGNAL_ENTITIES), (KIND_BED, CONF_BED_SIGNAL_ENTITIES)):
+        for entity in config.get(key, []):
+            domain = entity.partition(".")[0]
+            by_kind[kind][entity] = [at.astimezone(tz) for at in row_transitions(domain, signals.get(entity, []), kind)]
+    candidates, counts = history_candidates(
+        by_kind, config=config, workdays=schedule.workdays, days_covered=days_covered
+    )
+    rows = seed_schedule_rows(candidates, schedule.shifts, max_shift_min=schedule.max_shift_min)
+    return {"candidates": candidates, "rows": rows, "counts": counts}
 
 
 def temperature_series(states: list[Any], unit: str, attribute: str | None = None) -> Series:
@@ -197,19 +236,20 @@ def background_samples(
     tz: tzinfo,
     config: Mapping[str, Any],
     asleep: Callable[[datetime], bool],
+    schedule: ScheduleView | None = None,
 ) -> dict[str, dict[str, list[float]]]:
     """``{part: {entity: [temp_f, ...]}}``: each entity's reading every 30 minutes, newest 200 per part.
 
     The same sampling the live 30-minute refresh does, replayed over the history window. ``asleep(local)`` is the
     sleep-window test (the caller's ``automation._in_sleep_window`` on a config snapshot).
     """
-    wake, sleep = config.get("wake_time"), config.get("sleep_time")
     lookups = {entity: _Lookup(series) for entity, series in rooms.items()}
     out: dict[str, dict[str, list[float]]] = {}
     at = start
     while at <= end:
         loc = at.astimezone(tz)
-        part, _day = part_of_day(loc, wake, sleep, in_sleep_window=asleep(loc))
+        learned = config_at(schedule, config, loc)  # the wake and bed times of that day under the learned schedule
+        part, _day = part_of_day(loc, learned.get("wake_time"), learned.get("sleep_time"), in_sleep_window=asleep(loc))
         for entity, lookup in lookups.items():
             value = lookup.at(at, ROOM_MAX_AGE)
             if value is not None:
@@ -233,6 +273,8 @@ def build_seed(
     asleep: Callable[[datetime], bool],
     max_offset_f: float,
     live_since: datetime | None = None,
+    schedule: ScheduleView | None = None,
+    signals: Mapping[str, list[tuple[datetime, str]]] | None = None,
 ) -> dict[str, Any]:
     """The ``preference_seed`` for a recorder window (see the spec's steps 2 to 6).
 
@@ -244,12 +286,14 @@ def build_seed(
     after 15 minutes before it is live recording's own (it would have joined that episode) and is left out, so no
     raise counts twice.
 
+    ``signals`` is each wake or bed signal entity's ``signal_rows`` (None = none configured): the seed then carries a
+    ``schedule`` section with the candidates and one review row per class and kind.
+
     ``classify`` turns a day's outdoor high/low into its classification (the coordinator's ``classify_day`` thresholds)
     and ``base_floor(local_at, classification, asleep)`` is today's configured heat floor without any learned offset.
     Occupancy is not known historically and is assumed home. ``ref`` is null (the history was steered by the
     thermostat). The thermostat's own reading is kept under ``thermostat`` with the room temperatures.
     """
-    wake, sleep = config.get("wake_time"), config.get("sleep_time")
     rows = sorted(climate, key=lambda r: r.at)
     first = rows[0].at if rows else end
     days_covered = max(1, round((end - first) / timedelta(days=1)))  # round: a DST day is 23 or 25 hours
@@ -313,6 +357,8 @@ def build_seed(
             e: round(v, 2) for e, lk in temp_lookups.items() if (v := lk.at(change.at, ROOM_MAX_AGE)) is not None
         }
         base = base_floor(loc, c, in_sleep)
+        learned = config_at(schedule, config, loc)
+        wake, sleep = learned.get("wake_time"), learned.get("sleep_time")
         previous = episode
         # target_f = old: the CA target of the time is unknown, so an undo is a return to where the occupant started.
         episode, closed = extend_episode(
@@ -320,7 +366,15 @@ def build_seed(
             at=loc,
             old_f=change.old_f,
             new_f=change.new_f,
-            bucket=bucket_key(loc, str(c.day_type), wake, sleep, in_sleep_window=in_sleep, band=band),
+            bucket=bucket_key(
+                loc,
+                str(c.day_type),
+                wake,
+                sleep,
+                in_sleep_window=in_sleep,
+                band=band,
+                workdays=schedule.workdays if schedule is not None else None,
+            ),
             base_f=base,
             target_f=change.old_f,
             excluded=near_schedule_edge(loc, wake, sleep),
@@ -334,7 +388,7 @@ def build_seed(
     if episode is not None:
         keep(episode, close_episode(episode))
 
-    return {
+    seed = {
         "created": end.isoformat(),
         "window": {"start": start.isoformat(), "end": end.isoformat(), "days": days_covered},
         "counts": {
@@ -347,5 +401,10 @@ def build_seed(
         },
         "observations": observations,
         "summary": seed_offsets(observations, max_offset_f=max_offset_f),
-        "background": background_samples(temps, start=first, end=end, tz=tz, config=config, asleep=asleep),
+        "background": background_samples(
+            temps, start=first, end=end, tz=tz, config=config, asleep=asleep, schedule=schedule
+        ),
     }
+    if signals is not None and schedule is not None:  # phase 2: the wake and bed signal entities' history
+        seed["schedule"] = schedule_section(signals, schedule=schedule, config=config, tz=tz, days_covered=days_covered)
+    return seed

@@ -32,16 +32,23 @@ from .const import (
     ROOM_PIN_KEYS,
     ROOM_PIN_THERMOSTAT,
 )
+from .preference_schedule import (
+    DAY_CLASS_WEEKDAY,
+    DAY_CLASS_WEEKEND,
+    DAY_CLASSES,
+    SOURCE_HISTORY,
+    ScheduleView,
+    clock_minutes,
+    config_at,
+    day_class,
+    next_times,
+)
 
 PART_NIGHT = "night"
 PART_MORNING = "morning"
 PART_AFTERNOON = "afternoon"
 PART_EVENING = "evening"
 PARTS_OF_DAY: tuple[str, ...] = (PART_NIGHT, PART_MORNING, PART_AFTERNOON, PART_EVENING)
-DAY_CLASS_WEEKDAY = "weekday"
-DAY_CLASS_WEEKEND = "weekend"
-DAY_CLASSES: tuple[str, ...] = (DAY_CLASS_WEEKDAY, DAY_CLASS_WEEKEND)
-
 EPISODE_GAP = timedelta(minutes=15)
 SCHEDULE_EDGE_MINUTES = 60
 UNDO_TOLERANCE_F = 0.5
@@ -81,7 +88,6 @@ SOURCE_SLEEP_SENSOR = "sleep_sensor"
 SOURCE_PINNED = "pinned"
 SOURCE_LEARNED = "learned"
 SOURCE_THERMOSTAT = "thermostat"
-SOURCE_HISTORY = "history"  # an observation from the recorder backfill
 EPISODE_CONTEXT_KEYS: tuple[str, ...] = ("ref", "rh", "band", "rooms")
 
 _NOON_MIN = 12 * 60
@@ -90,15 +96,6 @@ _AFTERNOON_END_MIN = 17 * 60
 
 def _clamp(value: float, limit: float) -> float:
     return max(-limit, min(limit, value))
-
-
-def _minutes(value: Any) -> int | None:
-    """``"HH:MM"`` / ``"HH:MM:SS"`` as minutes after midnight, else None (unset or malformed)."""
-    try:
-        parts = str(value).split(":")
-        return int(parts[0]) * 60 + int(parts[1])
-    except ValueError, IndexError, TypeError:
-        return None
 
 
 def part_of_day(at: datetime, wake_time: Any, sleep_time: Any, *, in_sleep_window: bool) -> tuple[str, date]:
@@ -114,8 +111,8 @@ def part_of_day(at: datetime, wake_time: Any, sleep_time: Any, *, in_sleep_windo
     previous day's ``evening``.
     """
     minute = at.hour * 60 + at.minute
-    wake = _minutes(wake_time)
-    sleep = _minutes(sleep_time)
+    wake = clock_minutes(wake_time)
+    sleep = clock_minutes(sleep_time)
     day = at.date()
     if in_sleep_window:
         part = PART_NIGHT
@@ -141,15 +138,16 @@ def bucket_key(
     *,
     in_sleep_window: bool,
     band: str | None = None,
+    workdays: Mapping[date, bool] | None = None,
 ) -> str:
     """``"<day_type>|<part_of_day>|<day_class>"`` for a local instant: the single source for every caller.
 
     With ``band`` (phase 3) the key gains the humidity band as a fourth part: ``"<...>|<band>"``. See
-    ``part_of_day`` for the part and day-class rules.
+    ``part_of_day`` for the part and ``preference_schedule.day_class`` for the day class (``workdays``: the resolved
+    Workday mapping, phase 2). ``wake_time`` and ``sleep_time`` are the schedule at ``at`` (the caller's seam).
     """
     part, day = part_of_day(at, wake_time, sleep_time, in_sleep_window=in_sleep_window)
-    day_class = DAY_CLASS_WEEKEND if day.weekday() >= 5 else DAY_CLASS_WEEKDAY
-    key = f"{day_type}|{part}|{day_class}"
+    key = f"{day_type}|{part}|{day_class(day, workdays)}"
     return key if band is None else f"{key}|{band}"
 
 
@@ -160,7 +158,7 @@ def near_schedule_edge(at: datetime, wake_time: Any, sleep_time: Any) -> bool:
     (spec: "Schedule-edge exclusion"), so an episode that starts here is never learned from.
     """
     minute = at.hour * 60 + at.minute
-    for edge in (_minutes(wake_time), _minutes(sleep_time)):
+    for edge in (clock_minutes(wake_time), clock_minutes(sleep_time)):
         if edge is not None and (edge - minute) % (24 * 60) <= SCHEDULE_EDGE_MINUTES:
             return True
     return False
@@ -278,6 +276,7 @@ class PreferenceView:
     band: str = BAND_NONE
     learned_rooms: Mapping[str, str | None] = field(default_factory=dict)
     room_names: Mapping[str, str] = field(default_factory=dict)  # selected room -> friendly name (briefing text)
+    schedule: ScheduleView = field(default_factory=ScheduleView)  # phase 2: learned wake and bed shifts, workdays
 
     def offset_for(self, bucket: str) -> float:
         """The offset for a bucket, clamped to the CURRENT cap (lowering the cap applies at once).
@@ -289,16 +288,35 @@ class PreferenceView:
     def offset_at(
         self, at: datetime, day_type: str, config: Mapping[str, Any], *, in_sleep_window: bool
     ) -> tuple[float, str]:
-        """``(offset_f, bucket)`` for an instant under ``config``'s wake and sleep times (four-part bucket)."""
+        """``(offset_f, bucket)`` for an instant under the schedule at that instant (four-part bucket)."""
+        schedule = config_at(self.schedule, config, at)
         bucket = bucket_key(
             at,
             day_type,
-            config.get("wake_time"),
-            config.get("sleep_time"),
+            schedule.get("wake_time"),
+            schedule.get("sleep_time"),
             in_sleep_window=in_sleep_window,
             band=self.band,
+            workdays=self.schedule.workdays,
         )
         return self.offset_for(bucket), bucket
+
+
+def config_for(config: dict, view: PreferenceView | None, at: datetime) -> dict:
+    """``config`` with the wake and sleep times of the schedule at ``at``: the seam for callers without a coordinator.
+
+    ``isinstance``: a stubbed engine or coordinator hands back a mock, which must read as "nothing learned".
+    """
+    return config_at(view.schedule, config, at) if isinstance(view, PreferenceView) else config
+
+
+def learned_next(
+    view: PreferenceView | None, config: dict, after: datetime, kind: str, default: datetime | None
+) -> datetime | None:
+    """The next learned wake or bedtime (``KIND_WAKE`` / ``KIND_BED``) after ``after``, else ``default``."""
+    if not isinstance(view, PreferenceView) or not view.schedule.active:
+        return default
+    return next_times(view.schedule, config, after)[kind] or default
 
 
 # --------------------------------------------------------------------------------------------------
@@ -383,7 +401,9 @@ def steering_room(
     sensor is the reference (the resolver handles the sleep sensor itself) or the feature is off (``view`` None)."""
     if view is None:
         return None
-    ref = steering_reference(at, config, in_sleep_window=in_sleep_window, learned_rooms=view.learned_rooms)
+    ref = steering_reference(
+        at, config_for(config, view, at), in_sleep_window=in_sleep_window, learned_rooms=view.learned_rooms
+    )
     return ref.entity if ref.context == REMOTE_CONTEXT_ROOM else None
 
 

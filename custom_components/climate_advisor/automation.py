@@ -289,7 +289,7 @@ from .override_grace_lifecycle import (
     OverrideConfirmState,
     OverrideGraceLifecycleState,
 )
-from .preference_learning import PreferenceView, selected_rooms, steering_room
+from .preference_learning import PreferenceView, config_for, selected_rooms, steering_room
 from .record_text import MsgText, msg_of, msg_text
 from .remote_offset import (
     ClampLimit,
@@ -1290,7 +1290,7 @@ def resolve_active_band(
         classification,
         config,
         occupancy_mode=occupancy_mode,
-        in_sleep_window=_in_sleep_window(now, config),
+        in_sleep_window=_in_sleep_window(now, config_for(config, preferences, now)),
         aggressive_savings=bool(config.get("aggressive_savings", False)),
         tou_expansion_f=tou_expansion_f,
         at=now,
@@ -1313,7 +1313,7 @@ def band_resolver_for(
             classification,
             config,
             occupancy_mode=occupancy_mode,
-            in_sleep_window=_in_sleep_window(at, config),
+            in_sleep_window=_in_sleep_window(at, config_for(config, preferences, at)),
             aggressive_savings=bool(config.get("aggressive_savings", False)),
             at=at,
             preferences=preferences,
@@ -1322,7 +1322,9 @@ def band_resolver_for(
     return _band
 
 
-def fallback_edges_without_classification(now: datetime, config: dict) -> tuple[float | None, float | None]:
+def fallback_edges_without_classification(
+    now: datetime, config: dict, preferences: PreferenceView | None = None
+) -> tuple[float | None, float | None]:
     """Display-only (heat, cool) edges before the first classification exists (Issue #1080).
 
     Right after an HA restart/unit change there is no classification, so ``select_comfort_band()``
@@ -1331,7 +1333,7 @@ def fallback_edges_without_classification(now: datetime, config: dict) -> tuple[
     each keeping a private copy. It ignores occupancy and savings on purpose: it is a placeholder,
     not a band anything is armed with.
     """
-    if _in_sleep_window(now, config):
+    if _in_sleep_window(now, config_for(config, preferences, now)):
         return config.get("sleep_heat", config.get("comfort_heat")), config.get(
             "sleep_cool", config.get("comfort_cool")
         )
@@ -1355,6 +1357,7 @@ def active_thresholds_for(coordinator: Any, now: datetime | None = None) -> dict
         now = dt_util.now()
     config = coordinator.config
     classification = coordinator.current_classification
+    preferences = _pref_fn() if callable(_pref_fn := getattr(coordinator, "preference_view", None)) else None
     if classification is not None:
         # Issue #1404: while a time-of-use bank owns the setpoint the thermostat is told the bank target, so the
         # thresholds quote it (the shared display resolver, coordinator.current_hold()). No bank: unchanged below.
@@ -1370,7 +1373,7 @@ def active_thresholds_for(coordinator: Any, now: datetime | None = None) -> dict
             occupancy_mode=coordinator._occupancy_mode,
             now=now,
             tou_expansion_f=(ae._active_tou_av_window().expansion_f if ae is not None else 0.0),
-            preferences=_pref_fn() if callable(_pref_fn := getattr(coordinator, "preference_view", None)) else None,
+            preferences=preferences,
         )
         # Issue #1371: a held overnight pre-cool is what the thermostat is armed with, so the status API and the
         # threshold sensors quote it (the same substitution apply_classification() makes).
@@ -1380,11 +1383,13 @@ def active_thresholds_for(coordinator: Any, now: datetime | None = None) -> dict
             if isinstance(_held, ComfortBand):
                 band = _held
         return {"heat": band.floor, "cool": band.ceiling, "context": band.context, "provisional": False}
-    heat, cool = fallback_edges_without_classification(now, config)
+    heat, cool = fallback_edges_without_classification(now, config, preferences)
     return {
         "heat": heat,
         "cool": cool,
-        "context": BAND_CONTEXT_SLEEP if _in_sleep_window(now, config) else BAND_CONTEXT_COMFORT,
+        "context": BAND_CONTEXT_SLEEP
+        if _in_sleep_window(now, config_for(config, preferences, now))
+        else BAND_CONTEXT_COMFORT,
         "provisional": True,
     }
 
@@ -5714,7 +5719,7 @@ class AutomationEngine:
                 classification,
                 self.config,
                 occupancy_mode=self._occupancy_mode,
-                in_sleep_window=_in_sleep_window(dt_util.now(), self.config),
+                in_sleep_window=self._asleep_at(dt_util.now()),
                 aggressive_savings=bool(self.config.get("aggressive_savings", False)),
                 at=dt_util.now(),
                 preferences=self._preferences(),
@@ -6251,7 +6256,7 @@ class AutomationEngine:
         if band is None or since is None:
             return None
         try:
-            _wp = str(self.config.get("wake_time")).split(":")
+            _wp = str(self._config_at(since).get("wake_time")).split(":")
             wake = since.replace(hour=int(_wp[0]), minute=int(_wp[1]), second=0, microsecond=0)
             if wake <= since:
                 wake += timedelta(days=1)
@@ -9396,7 +9401,7 @@ class AutomationEngine:
                         outdoor=outdoor,
                         comfort_heat_raw=comfort_heat,
                         sleep_heat=_sleep_heat_floor,
-                        in_sleep_window=_in_sleep_window(dt_util.now(), self.config),
+                        in_sleep_window=self._asleep_at(dt_util.now()),
                         hysteresis=float(self.config.get(CONF_NAT_VENT_HYSTERESIS_F, NAT_VENT_HYSTERESIS_F)),
                         comfort_cool=comfort_cool,
                         nat_vent_delta=nat_vent_delta,
@@ -9931,7 +9936,7 @@ class AutomationEngine:
             comfort_heat, sleep_heat = self._learned_heat_floors()
             comfort_cool = float(self.config.get("comfort_cool", DEFAULT_COMFORT_COOL))
             hysteresis = float(self.config.get(CONF_NAT_VENT_HYSTERESIS_F, NAT_VENT_HYSTERESIS_F))
-            in_sleep_window = _in_sleep_window(dt_util.now(), self.config)
+            in_sleep_window = self._asleep_at(dt_util.now())
             nat_vent_target = compute_nat_vent_target(
                 sleep_heat=sleep_heat,
                 in_sleep_window=in_sleep_window,
@@ -10303,7 +10308,7 @@ class AutomationEngine:
 
         comfort_heat, sleep_heat_ftc = self._learned_heat_floors()
         hysteresis_ftc = float(self.config.get(CONF_NAT_VENT_HYSTERESIS_F, NAT_VENT_HYSTERESIS_F))
-        in_sleep_window = _in_sleep_window(dt_util.now(), self.config)
+        in_sleep_window = self._asleep_at(dt_util.now())
 
         # Issue #435 follow-up (architecture-reset Step 2): Check 1 + Check 2's decision
         # logic lives in one pure, independently-tested function
@@ -12592,11 +12597,12 @@ class AutomationEngine:
 
         # Determine if we're in a bedtime window (after sleep_time OR before wake_time).
         # Issue #249: extracted to the shared module-level _in_sleep_window() helper.
-        if _in_sleep_window(now, self.config):
+        if self._asleep_at(now):
+            _schedule = self._config_at(now)
             _LOGGER.info(
                 "Grace expired: in bedtime window (%s–%s) — applying bedtime setback",
-                self.config.get("sleep_time"),
-                self.config.get("wake_time"),
+                _schedule.get("sleep_time"),
+                _schedule.get("wake_time"),
             )
             await self.handle_bedtime()
             return
@@ -12685,7 +12691,7 @@ class AutomationEngine:
         # _in_sleep_window() cannot answer (returns False), so keep the prior behavior there.
         if self._temp_command_time is not None and (dt_util.now() - self._temp_command_time).total_seconds() < 30:
             _sleep_cfg_known = bool(self.config.get("sleep_time") and self.config.get("wake_time"))
-            if not _sleep_cfg_known or _in_sleep_window(self._temp_command_time, self.config):
+            if not _sleep_cfg_known or self._asleep_at(self._temp_command_time):
                 _LOGGER.info(
                     "handle_bedtime: skipping — setpoint write within last 30s "
                     "(startup dedup guard) write_at=%s sleep_window_known=%s",
@@ -12920,7 +12926,7 @@ class AutomationEngine:
 
         # Issue #1371 (defence in depth): pre-cool banks cold thermal mass overnight. A late timer, a restart
         # or an old schedule must never arm the sleep band's lowered ceiling while people are awake.
-        if not _in_sleep_window(dt_util.now(), pre_cool_sleep_window_config(self.config)):
+        if not _in_sleep_window(dt_util.now(), pre_cool_sleep_window_config(self._config_at(dt_util.now()))):
             _LOGGER.info("Pre-cool trigger fired: skipped — awake hours (pre-cool runs only in the sleep window)")
             return CodedText("skipped_awake", i18n.Msg("status.pre_cool.skipped_awake"))
 
@@ -15124,7 +15130,7 @@ class AutomationEngine:
         which is why this gap only showed up during the day.
         """
         comfort_heat, sleep_heat_floor = self._learned_heat_floors()
-        if _in_sleep_window(dt_util.now(), self.config):
+        if self._asleep_at(dt_util.now()):
             return sleep_heat_floor
         comfort_cool = float(self.config.get("comfort_cool", DEFAULT_COMFORT_COOL))
         hysteresis = float(self.config.get(CONF_NAT_VENT_HYSTERESIS_F, NAT_VENT_HYSTERESIS_F))
@@ -15289,7 +15295,7 @@ class AutomationEngine:
         if override_cleared:
             _override_active = bool(self._fan_override_active)
             _grace_active = False
-        _in_sleep_window_val = _in_sleep_window(now, self.config)
+        _in_sleep_window_val = self._asleep_at(now)
         if apply_reactivation_floor:
             # Issue #775: pre-resolve through the same daytime cycling-off-threshold
             # formula _nat_vent_reactivation_floor() already applies for every other
@@ -15481,6 +15487,17 @@ class AutomationEngine:
         """The learned setpoint preferences to hand ``select_comfort_band()``; None = feature off (fork Dunky13#1)."""
         provider = getattr(self, "_preference_view_provider", None)  # getattr: tests build engines via __new__
         return provider() if provider is not None else None
+
+    def _config_at(self, at: datetime) -> dict:
+        """``self.config`` with the wake and sleep times of the schedule at ``at`` (fork Dunky13#1 phase 2).
+
+        The one seam for "the schedule at this moment": itself when nothing is learned (feature off, cap 0, no shift).
+        """
+        return config_for(self.config, self._preferences(), at)
+
+    def _asleep_at(self, at: datetime) -> bool:
+        """``_in_sleep_window`` under the schedule at ``at``."""
+        return _in_sleep_window(at, self._config_at(at))
 
     def _control_stepper(self) -> Any:
         """The primary engine's house model for lead times (Issue #1517), or None (no provider / still learning)."""
@@ -18352,7 +18369,7 @@ class AutomationEngine:
             outdoor=outdoor,
             comfort_heat_raw=comfort_heat_raw,
             sleep_heat=float(self.config.get(CONF_SLEEP_HEAT, comfort_heat_raw)),
-            in_sleep_window=(in_sleep_window if in_sleep_window is not None else _in_sleep_window(now, self.config)),
+            in_sleep_window=(in_sleep_window if in_sleep_window is not None else self._asleep_at(now)),
             hysteresis=(
                 hysteresis
                 if hysteresis is not None
@@ -21324,7 +21341,7 @@ class AutomationEngine:
         the remote-sensor outer loop can never be reading a different sensor than the decisions are.
         """
         now = dt_util.now()
-        asleep = _in_sleep_window(now, self.config)
+        asleep = self._asleep_at(now)
         return {
             "hass": self.hass,
             "source": self.config.get("indoor_temp_source", TEMP_SOURCE_CLIMATE_FALLBACK),

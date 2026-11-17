@@ -57,7 +57,8 @@ from .nat_vent_plan import (
     resolve_window_pair,
     resolve_with_fallback,
 )
-from .preference_learning import PreferenceView, bucket_parts, steering_room
+from .preference_learning import PreferenceView, bucket_parts, config_for, steering_room
+from .preference_schedule import next_times
 from .temperature import FAHRENHEIT, format_temp, free_cooling_direction_ok, from_fahrenheit
 from .timeline_surfaces import TimelineWindows, operations_msgs, timeline_windows
 
@@ -296,14 +297,17 @@ def _briefing_preference(
     sleep = _wall_clock(config.get("sleep_time"))
     if wake is None or sleep is None:
         return None
-    asleep = _in_sleep_window(now, config)
+    asleep = _in_sleep_window(now, config_for(config, preferences, now))
     wake_at = now.replace(hour=wake.hour, minute=wake.minute, second=0, microsecond=0)
     if wake_at <= now:
         wake_at += timedelta(days=1)
-    awake_at = wake_at if asleep else now
     bedtime_at = now.replace(hour=sleep.hour, minute=sleep.minute, second=0, microsecond=0)
     if bedtime_at <= now:
         bedtime_at += timedelta(days=1)
+    if preferences.schedule.active:  # the learned wake and bedtime ahead, not the configured ones
+        learned = next_times(preferences.schedule, config, now)
+        wake_at, bedtime_at = learned["wake"] or wake_at, learned["bed"] or bedtime_at
+    awake_at = wake_at if asleep else now
     day_type = str(c.day_type)
     remaining: list[tuple[str, float, str | None]] = []
     at = now
@@ -311,7 +315,7 @@ def _briefing_preference(
         bedtime_at if asleep else wake_at
     )  # asleep: the rest of the night and the day ahead; awake: to tomorrow's wake
     while at < end:
-        at_asleep = _in_sleep_window(at, config)
+        at_asleep = _in_sleep_window(at, config_for(config, preferences, at))
         offset, bucket = preferences.offset_at(at, day_type, config, in_sleep_window=at_asleep)
         if all(b != bucket for b, _o, _r in remaining):
             room = (
@@ -656,7 +660,7 @@ def generate_briefing_msg(
     _comfort_heat_raw = float(runtime_config.get("comfort_heat", comfort_heat)) if runtime_config else None
     _sleep_heat = float(runtime_config.get("sleep_heat", comfort_heat)) if runtime_config else None
     _in_sleep_window_fn: Callable[[datetime], bool] | None = (
-        (lambda ts: _in_sleep_window(ts, runtime_config)) if runtime_config else None
+        (lambda ts: _in_sleep_window(ts, config_for(runtime_config, preferences, ts))) if runtime_config else None
     )
 
     # Single source of truth for warm/mild-day window/AC timing (Issue #518, extended
@@ -938,6 +942,8 @@ def _tldr_msg(
             preferences=preferences,
         )
     sleep_time = config["sleep_time"]
+    if preferences is not None:  # the bedtime of today's evening under the learned schedule (itself when unshifted)
+        sleep_time = preferences.schedule.effective_times(config, (now or dt_util.now()).date())[1]
     occupancy_mode = facts.occupancy_mode
 
     # --- Day Type row ---
@@ -1032,7 +1038,9 @@ def _tldr_msg(
         bedtime_row = i18n.Msg("briefing.tldr.bedtime_away")
     elif facts.bedtime_target is not None:
         bedtime_row = i18n.Msg(
-            "briefing.tldr.bedtime_target", target=i18n.Temp(facts.bedtime_target, temp_unit), time=_clock(sleep_time)
+            "briefing.tldr.bedtime_target",
+            target=i18n.Temp(facts.bedtime_target, temp_unit),
+            time=_clock(_wall_clock(sleep_time) or sleep_time),
         )
     else:
         bedtime_row = i18n.Msg("briefing.tldr.bedtime_none")
@@ -1043,6 +1051,12 @@ def _tldr_msg(
         trend=_trend_msg(c, temp_unit=temp_unit),
         high=i18n.Temp(c.tomorrow_high, temp_unit),
     )
+    if preferences is not None:  # a learned wake time that differs from the configured one
+        learned_wake = preferences.schedule.effective_times(config, (now or dt_util.now()).date() + timedelta(days=1))[
+            0
+        ]
+        if learned_wake != config.get("wake_time") and (wake_clock := _wall_clock(learned_wake)) is not None:
+            tomorrow_row = i18n.Msg("briefing.tldr.tomorrow_wake", tomorrow=tomorrow_row, wake=_clock(wake_clock))
 
     # Issue #85: show occupancy status when not home
     occupancy_row: i18n.Msg | None = None

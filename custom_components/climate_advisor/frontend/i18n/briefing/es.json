@@ -100,6 +100,7 @@
   "briefing.tldr.occupancy_vacation_deep": "  Ocupación: vacaciones — ahorro profundo activo",
   "briefing.tldr.preference": "  Preferencia aprendida ({day_type}, {day_class}): {entries}",
   "briefing.tldr.tomorrow": "  Mañana: {trend} ({high})",
+  "briefing.tldr.tomorrow_wake": "{tomorrow}\n  Despertar mañana: {wake} (aprendido)",
   "briefing.tldr.windows_close_by": "  Ventanas: cerrar antes de {when}",
   "briefing.tldr.windows_closed": "  Ventanas: cerradas todo el día",
   "briefing.tldr.windows_hot_both": "  Ventanas: cerrar antes de {when} (<{threshold}) / abrir desde {open}",

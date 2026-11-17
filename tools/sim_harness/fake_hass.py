@@ -59,6 +59,8 @@ class FakeState:
     # staleness guard reads them). None means "not tracked" — the guard fails open (treats as fresh).
     last_updated: datetime | None = None
     last_reported: datetime | None = None
+    # Mirrors State.context. None means no parent context: the change is not automation-caused (fork Dunky13#1).
+    context: Any = None
 
 
 @dataclass

@@ -240,6 +240,7 @@
   "status.remote_offset.waiting": "{label}: Versatz startet, wartet auf {band}",
   "status.remote_offset.why_clearing": "wird beendet",
   "status.remote_offset.why_retrying": "wird beendet, neuer Versuch nach abgelehntem Schreibvorgang",
+  "status.schedule.line": "Gelernte Zeiten: Aufstehen morgen {wake} ({wake_sign}{wake_min, number} min), Schlafen heute Abend {bed} ({bed_sign}{bed_min, number} min). Morgen ist ein {tomorrow, select, weekday {Werktag} weekend {Tag am Wochenende} other {{tomorrow}}}.",
   "status.sensor_meta.ca_name": "Messwert von Climate Advisor",
   "status.sensor_meta.ca_role": "der Messwert, den Climate Advisor verwendet",
   "status.sensor_role.bedroom_sensor": "Schlafzimmersensor",

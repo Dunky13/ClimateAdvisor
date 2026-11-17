@@ -240,6 +240,7 @@
   "status.remote_offset.waiting": "{label}: scostamento in avvio, in attesa di {band}",
   "status.remote_offset.why_clearing": "chiusura in corso",
   "status.remote_offset.why_retrying": "chiusura in corso, nuovo tentativo dopo una scrittura rifiutata",
+  "status.schedule.line": "Orari appresi: sveglia domani {wake} ({wake_sign}{wake_min, number} min), a letto stasera {bed} ({bed_sign}{bed_min, number} min). Domani è un giorno {tomorrow, select, weekday {feriale} weekend {di fine settimana} other {{tomorrow}}}.",
   "status.sensor_meta.ca_name": "Lettura di Climate Advisor",
   "status.sensor_meta.ca_role": "la lettura usata da Climate Advisor",
   "status.sensor_role.bedroom_sensor": "sensore della camera da letto",

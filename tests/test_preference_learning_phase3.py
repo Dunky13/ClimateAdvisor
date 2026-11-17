@@ -784,7 +784,7 @@ def test_accepting_the_seed_applies_offsets_now_within_the_cap(tmp_path):
     engine.sample_room_background("morning", {BED: 65.0})
     _seed_state(engine)
     result = engine.accept_preference_seed(None, today=TODAY, refs={}, max_offset_f=3.6, rooms=(BED,))
-    assert result == {"applied": [EVENING, B4], "skipped": [], "observations": 3}
+    assert result == {"applied": [EVENING, B4], "skipped": [], "observations": 3, "schedule": []}
     assert engine.preference_offsets() == {B4: 3.0, "cold|evening|weekday|-": 3.6}  # no 0.9 step; capped
     assert engine._state.room_background["morning"][BED] == [63.0, 64.0, 65.0]  # history before live
     assert engine._state.preference_seed is None
@@ -796,7 +796,7 @@ def test_accepting_skips_unselected_rows_and_parts_steered_by_a_room(tmp_path):
     engine.sample_room_background("morning", {BED: 65.0})
     _seed_state(engine)
     result = engine.accept_preference_seed([B4], today=TODAY, refs={"morning": BED}, max_offset_f=3.6, rooms=(BED,))
-    assert result == {"applied": [], "skipped": [B4], "observations": 2}
+    assert result == {"applied": [], "skipped": [B4], "observations": 2, "schedule": []}
     assert engine.preference_offsets() == {}
     obs = {o["time"]: o for o in engine._state.preference_observations}
     # The disabled row's observation is kept with its frame (ref null): it counts again if the morning returns to the

@@ -461,7 +461,12 @@
           "room_pin_night": "Pièce pour la nuit",
           "room_pin_morning": "Pièce pour le matin",
           "room_pin_afternoon": "Pièce pour l’après-midi",
-          "room_pin_evening": "Pièce pour le soir"
+          "room_pin_evening": "Pièce pour le soir",
+          "workday_entity": "Capteur de jour ouvré",
+          "wake_signal_entities": "Signaux de réveil",
+          "bed_signal_entities": "Signaux de coucher",
+          "schedule_max_shift_min": "Décalage maximal des horaires",
+          "schedule_weekly_step_min": "Changement hebdomadaire maximal des horaires"
         },
         "data_description": {
           "preference_learning_enabled": "Si activé, vos modifications répétées du thermostat à des moments similaires décalent la température de chauffage définie par Climate Advisor pour ce type de moment. Désactivé par défaut.",
@@ -471,7 +476,12 @@
           "room_pin_night": "Auto laisse Climate Advisor choisir la pièce dont la température correspond le mieux à vos changements. Thermostat garde la mesure du thermostat. Ou choisissez l’un des capteurs de pièce ci-dessus.",
           "room_pin_morning": "Auto laisse Climate Advisor choisir la pièce dont la température correspond le mieux à vos changements. Thermostat garde la mesure du thermostat. Ou choisissez l’un des capteurs de pièce ci-dessus.",
           "room_pin_afternoon": "Auto laisse Climate Advisor choisir la pièce dont la température correspond le mieux à vos changements. Thermostat garde la mesure du thermostat. Ou choisissez l’un des capteurs de pièce ci-dessus.",
-          "room_pin_evening": "Auto laisse Climate Advisor choisir la pièce dont la température correspond le mieux à vos changements. Thermostat garde la mesure du thermostat. Ou choisissez l’un des capteurs de pièce ci-dessus."
+          "room_pin_evening": "Auto laisse Climate Advisor choisir la pièce dont la température correspond le mieux à vos changements. Thermostat garde la mesure du thermostat. Ou choisissez l’un des capteurs de pièce ci-dessus.",
+          "workday_entity": "Facultatif. Le capteur de l'intégration Workday. Avec lui, les jours fériés comptent comme des jours de repos pour les préférences apprises et les heures de réveil et de coucher apprises. Sans lui, le samedi et le dimanche sont les jours de repos.",
+          "wake_signal_entities": "Facultatif. Lumières, interrupteurs, boutons ou assistants qui s'allument ou se déclenchent quand vous vous levez. Climate Advisor en apprend votre heure de réveil. Nécessite l'apprentissage des préférences activé.",
+          "bed_signal_entities": "Facultatif. Lumières, interrupteurs, boutons ou assistants que vous éteignez ou pressez en allant vous coucher. Climate Advisor en apprend votre heure de coucher. Nécessite l'apprentissage des préférences activé.",
+          "schedule_max_shift_min": "Le décalage maximal d'une heure de réveil ou de coucher apprise par rapport à l'heure configurée. 0 garde vos heures configurées fixes.",
+          "schedule_weekly_step_min": "Le changement maximal d'une heure de réveil ou de coucher apprise par semaine."
         }
       },
       "ai_settings": {
@@ -548,7 +558,8 @@
       "vacation_heat_above_away_warning": "Le chauffage en mode vacances est plus élevé que le chauffage en absence : des vacances consomment donc plus d’énergie qu’une journée d’absence ordinaire. Validez à nouveau pour conserver ce choix.",
       "vacation_cool_below_away_warning": "La climatisation en mode vacances est plus fraîche que la climatisation en absence : des vacances consomment donc plus d’énergie qu’une journée d’absence ordinaire. Validez à nouveau pour conserver ce choix.",
       "vacation_freeze_warning": "Avec ce réglage, le chauffage en mode vacances descend sous 45 °F (7 °C). Les canalisations peuvent geler pendant un long voyage. Validez à nouveau pour conserver ce choix.",
-      "room_pin_not_selected": "Choisissez auto, thermostat ou l’un des capteurs de pièce sélectionnés ci-dessus."
+      "room_pin_not_selected": "Choisissez auto, thermostat ou l’un des capteurs de pièce sélectionnés ci-dessus.",
+      "signal_entity_not_found": "Une des entités de signal n'existe pas. Choisissez des entités qui existent dans Home Assistant."
     }
   },
   "issues": {

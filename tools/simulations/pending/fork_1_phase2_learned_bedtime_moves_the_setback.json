@@ -1,0 +1,82 @@
+{
+  "name": "fork_1_phase2_learned_bedtime_moves_the_setback",
+  "description": "Fork Dunky13#1 phase 2 (docs/preference-learning-spec.md). The household's learned weekday bedtime is 80 minutes after the configured 22:30. Preference learning is on, so the bedtime setback is applied at the learned 23:50 and the thermostat is left at the comfort heat setpoint at 22:30, exactly as a household with a 23:50 bedtime wants.",
+  "source": "docs/preference-learning-spec.md, Phase 2, Seam: effective_times and schedule_at; timers re-register at the learned instants.",
+  "issue": "Dunky13#1",
+  "notes": [
+    "Occupant impact: someone who goes to bed at 23:50 stays at the comfort temperature until then instead of the house cooling down at the configured 22:30.",
+    "The learned shift is seeded with the harness hook learned_schedule; the 23:50 bedtime event is the point-in-time timer the coordinator arms for the learned instant (the 22:30 clock timer is not armed).",
+    "Effectiveness: with the seam ignored the setback is written at 22:30 and the first assertion (no write before 23:50) fails."
+  ],
+  "use_coordinator": true,
+  "skip_startup_coalesce": true,
+  "config": {
+    "comfort_heat": 68,
+    "comfort_cool": 75,
+    "setback_heat": 62,
+    "setback_cool": 80,
+    "sleep_time": "22:30",
+    "wake_time": "06:30",
+    "initial_thermostat_mode": "heat",
+    "preference_learning_enabled": true
+  },
+  "learned_schedule": {
+    "weekday": {
+      "wake": 0,
+      "bed": 80
+    },
+    "weekend": {
+      "wake": 0,
+      "bed": 0
+    }
+  },
+  "events": [
+    {
+      "time": "2026-11-17T20:00:00",
+      "type": "classification",
+      "day_type": "cold",
+      "hvac_mode": "heat",
+      "windows_recommended": false,
+      "today_high": 45.0,
+      "today_low": 35.0,
+      "tomorrow_high": 45.0,
+      "tomorrow_low": 35.0
+    },
+    {
+      "time": "2026-11-17T22:30:30",
+      "type": "temp_update",
+      "indoor_f": 68.0,
+      "outdoor_f": 38.0
+    },
+    {
+      "time": "2026-11-17T23:50:00",
+      "type": "bedtime"
+    }
+  ],
+  "assertions": [
+    {
+      "at": "2026-11-17T23:49:30",
+      "expect": "setpoint_writes",
+      "track": "integration",
+      "reason": "The configured 22:30 passes without a setback write: the learned bedtime is 23:50.",
+      "values": [],
+      "since": "2026-11-17T20:00:30"
+    },
+    {
+      "at": "2026-11-17T23:59:00",
+      "expect": "setpoint_writes",
+      "track": "integration",
+      "reason": "At the learned bedtime the setback is written.",
+      "values": [
+        64.0
+      ],
+      "since": "2026-11-17T23:49:30"
+    }
+  ],
+  "verdict": {
+    "type": "positive",
+    "summary": "The bedtime setback follows the learned bedtime, not the configured one.",
+    "observed_behavior": "No setpoint write until 23:50, then the 64 F setback.",
+    "expected_behavior": "The setback is applied at the learned bedtime (configured 22:30 + 80 min)."
+  }
+}

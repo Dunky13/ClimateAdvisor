@@ -25,6 +25,7 @@ from homeassistant.util import dt as dt_util
 
 from . import i18n
 from . import preference_learning as pref
+from . import preference_schedule as sched
 from .const import (
     COMPLIANCE_THRESHOLD_LOW,
     CONF_PREFERENCE_LEARNING_ENABLED,
@@ -1275,6 +1276,9 @@ class LearningState:
     # {part: {"entity", "ratios", "counts", "n", "updated", "ref"}}; "ref" = the reference the part's offsets belong to.
     learned_rooms: dict = field(default_factory=dict)
     preference_seed: dict | None = None  # the unaccepted history backfill result
+    # Phase 2 (learned wake and bed times): {"weekday": {"wake": min, "bed": min}, "weekend": {...}} and the evidence.
+    learned_schedule: dict = field(default_factory=dict)
+    schedule_candidates: list = field(default_factory=list)  # {"date", "class", "kind", "delta_min", "source"}
 
 
 class LearningEngine:
@@ -1468,6 +1472,7 @@ class LearningEngine:
             drop("last update", st.preference_last_update)
             st.preference_last_update = None
         self._validate_room_state(drop)
+        self._validate_schedule_state(drop)
         episode = st.preference_open_episode
         if episode is None:
             return
@@ -1596,7 +1601,7 @@ class LearningEngine:
             drop("history seed observations", len(seed["observations"]) - len(kept))
         seed["observations"] = kept
         seed["background"] = self._valid_background(seed.get("background") or {}, "history seed background", drop)
-        return seed
+        return self._valid_seed_schedule(seed, drop)
 
     def _validate_room_state(self, drop: Any) -> None:
         """Validate ``room_background``, ``learned_rooms`` and ``preference_seed`` (phase 3)."""
@@ -1614,6 +1619,85 @@ class LearningEngine:
         st.learned_rooms = learned
         if st.preference_seed is not None:
             st.preference_seed = self._valid_seed(st.preference_seed, drop)
+
+    @staticmethod
+    def _valid_schedule_candidate(c: Any) -> bool:
+        """True for a well-formed schedule candidate (see the spec's Candidates section)."""
+        return (
+            isinstance(c, dict)
+            and pref.is_iso_date(c.get("date"))
+            and c.get("class") in sched.DAY_CLASSES
+            and c.get("kind") in sched.KINDS
+            and sched.is_minutes(c.get("delta_min"))
+            and abs(c["delta_min"]) <= sched.SIGNAL_WINDOW_MIN
+            and c.get("source") in sched.CANDIDATE_SOURCES
+        )
+
+    def _validate_schedule_state(self, drop: Any) -> None:
+        """Validate ``learned_schedule`` and ``schedule_candidates`` (phase 2): a bad entry is dropped, not the file."""
+        st = self._state
+        raw = st.learned_schedule if isinstance(st.learned_schedule, dict) else {}
+        if raw is not st.learned_schedule:
+            drop("learned schedule", "not a mapping")
+        valid: dict = {}
+        for cls, kinds in raw.items():
+            if cls not in sched.DAY_CLASSES or not isinstance(kinds, dict):
+                drop("learned schedule class", cls)
+                continue
+            valid[cls] = {}
+            for kind, shift in kinds.items():
+                if kind in sched.KINDS and sched.is_minutes(shift):
+                    valid[cls][kind] = shift
+                else:
+                    drop("learned schedule shift", f"{cls}.{kind}")
+        st.learned_schedule = valid
+        candidates = st.schedule_candidates if isinstance(st.schedule_candidates, list) else []
+        if candidates is not st.schedule_candidates:
+            drop("schedule candidates", "not a list")
+        kept = [c for c in candidates if self._valid_schedule_candidate(c)]
+        if len(kept) != len(candidates):
+            drop("schedule candidates", f"{len(candidates) - len(kept)} malformed")
+        st.schedule_candidates = kept[-sched.MAX_CANDIDATES :]
+
+    def _valid_seed_schedule(self, seed: dict, drop: Any) -> dict:
+        """The seed with its ``schedule`` section validated: bad candidates and rows dropped, a bad section removed."""
+        section = seed.get("schedule")
+        if section is None:
+            return seed
+        if not (
+            isinstance(section, dict)
+            and isinstance(section.get("candidates"), list)
+            and isinstance(section.get("rows"), dict)
+        ):
+            drop("history seed schedule", "malformed")
+            seed.pop("schedule")
+            return seed
+        kept = [c for c in section["candidates"] if self._valid_schedule_candidate(c)]
+        if len(kept) != len(section["candidates"]):
+            drop("history seed schedule candidates", len(section["candidates"]) - len(kept))
+        section["candidates"] = kept
+        rows = {}
+        for key, row in section["rows"].items():
+            if (
+                sched.parse_schedule_row_key(key) is None
+                or not isinstance(row, dict)
+                or not sched.is_minutes(row.get("n"))
+                or not sched.is_minutes(row.get("median_min"))
+                or not sched.is_minutes(row.get("current_min"))
+                or not (row.get("new_min") is None or sched.is_minutes(row.get("new_min")))
+                or not isinstance(row.get("enabled"), bool)
+            ):
+                drop("history seed schedule row", key)
+                continue
+            rows[key] = row
+        section["rows"] = rows
+        counts = section.get("counts")
+        if isinstance(counts, dict) and all(sched.is_minutes(v) for v in counts.values()):
+            section["counts"] = counts
+        else:
+            drop("history seed schedule counts", "malformed")
+            section["counts"] = {}
+        return seed
 
     # ------------------------------------------------------------------ preference learning (fork Dunky13#1)
 
@@ -1826,8 +1910,13 @@ class LearningEngine:
         unit: str,
         rooms: tuple[str, ...] = (),
         references: Callable[[Mapping[str, str | None] | None], Mapping[str, str | None]] | None = None,
+        max_shift_min: int = 0,
+        step_min: int = 0,
     ) -> list[dict] | None:
         """The weekly update when due (7+ days since the last): the changes made (maybe none), None when not due.
+
+        Phase 2: the learned wake and bed shifts update in the same pass (``max_shift_min`` 0 leaves them alone); their
+        change records carry ``kind: "schedule"``.
 
         Phase 3: first the learned room per part of day is recomputed; ``references`` maps the learned rooms to each
         part's reference (``preference_learning.references_by_part`` under the current config; called with None for
@@ -1861,13 +1950,99 @@ class LearningEngine:
                 change["new_f"],
             )
         self._add_preference_history(*changes)
+        schedule_changes = self._run_schedule_update(today, max_shift_min, step_min)
         _LOGGER.info(
-            "Preference weekly update complete: buckets=%d changed=%d observations=%d",
+            "Preference weekly update complete: buckets=%d changed=%d observations=%d schedule_changed=%d",
             len(offsets),
             len(changes),
             len(self._state.preference_observations),
+            len(schedule_changes),
         )
+        return [*changes, *schedule_changes]
+
+    def _run_schedule_update(self, today: Any, max_shift_min: int, step_min: int) -> list[dict]:
+        """The weekly wake and bed shift update (phase 2); ``[]`` with a cap of 0 or too little evidence."""
+        if max_shift_min <= 0:
+            return []
+        shifts, changes = sched.weekly_schedule_update(
+            self._state.learned_schedule,
+            self._state.schedule_candidates,
+            max_shift_min=max_shift_min,
+            step_min=step_min,
+            today=today,
+        )
+        self._state.learned_schedule = shifts
+        for change in changes:
+            _LOGGER.info(
+                "Learned schedule changed: class=%s signal=%s n=%d target=%dmin old=%dmin new=%dmin",
+                change["class"],
+                change["signal"],
+                change["n"],
+                change["target_min"],
+                change["old_min"],
+                change["new_min"],
+            )
+        self._add_preference_history(*changes)
         return changes
+
+    def schedule_shifts(self) -> dict[str, dict[str, int]]:
+        """``{class: {kind: minutes}}`` as stored (the cap is applied on read by ``ScheduleView``)."""
+        return {
+            c: {k: int(self._state.learned_schedule.get(c, {}).get(k, 0)) for k in sched.KINDS}
+            for c in sched.DAY_CLASSES
+        }
+
+    def schedule_candidates(self) -> list[dict]:
+        return [dict(c) for c in self._state.schedule_candidates]
+
+    def add_schedule_candidate(self, candidate: dict, source: str, *, today: Any) -> bool:
+        """Store one live candidate (one per waking date and kind; a bedtime keeps the later signal); True = changed."""
+        stored = {**candidate, "source": source}
+        replace = candidate["kind"] == sched.KIND_BED and source == sched.SOURCE_SENSOR
+        changed = sched.merge_candidate(self._state.schedule_candidates, stored, replace=replace)
+        if changed:
+            self._state.schedule_candidates = sched.trim_candidates(self._state.schedule_candidates, today)
+            _LOGGER.info(
+                "Schedule candidate recorded: kind=%s date=%s class=%s delta=%dmin source=%s",
+                stored["kind"],
+                stored["date"],
+                stored["class"],
+                stored["delta_min"],
+                source,
+            )
+        return changed
+
+    def schedule_summary(self, max_shift_min: int) -> dict[str, Any]:
+        """Dashboard/status view of the learned schedule: the shifts, per pair evidence and the newest candidates."""
+        shifts = self.schedule_shifts()
+        rows = []
+        for cls in sched.DAY_CLASSES:
+            for kind in sched.KINDS:
+                deltas = sched.recent_deltas(self._state.schedule_candidates, cls, kind)
+                rows.append(
+                    {
+                        "class": cls,
+                        "kind": kind,
+                        "shift_min": int(sched.clamp_minutes(shifts[cls][kind], max_shift_min)),
+                        "stored_shift_min": shifts[cls][kind],
+                        "n": len(deltas),
+                        "target_min": sched.target_shift(deltas, max_shift_min)
+                        if len(deltas) >= sched.MIN_CANDIDATES
+                        else None,
+                        "sources": sorted(
+                            {
+                                c["source"]
+                                for c in self._state.schedule_candidates
+                                if c["class"] == cls and c["kind"] == kind
+                            }
+                        ),
+                    }
+                )
+        return {
+            "rows": rows,
+            "recent": self.schedule_candidates()[-10:],
+            "candidate_count": len(self._state.schedule_candidates),
+        }
 
     # ------------------------------------------------------------------ history seed (phase 3)
 
@@ -1941,6 +2116,8 @@ class LearningEngine:
         refs: Mapping[str, str | None],
         max_offset_f: float,
         rooms: Iterable[str],
+        schedule_rows: list[str] | None = None,
+        max_shift_min: int = 0,
     ) -> dict | None:
         """Apply the seed: the selected buckets' offsets now (cap only, no weekly step) and their observations join.
 
@@ -1981,17 +2158,59 @@ class LearningEngine:
             ),
             rooms,
         )
+        schedule_applied = self._accept_seed_schedule(seed, schedule_rows, today, max_shift_min)
         self._state.preference_seed = None
         self._add_preference_history(
-            {"date": today.isoformat(), "kind": "seed_accepted", "buckets": applied, "skipped": skipped}
+            {
+                "date": today.isoformat(),
+                "kind": "seed_accepted",
+                "buckets": applied,
+                "skipped": skipped,
+                "schedule": schedule_applied,
+            }
         )
         _LOGGER.info(
-            "Preference history seed accepted: applied=%s skipped_room_reference=%s observations_joined=%d",
+            "Preference history seed accepted: applied=%s skipped_room_reference=%s observations_joined=%d "
+            "schedule_applied=%s",
             applied,
             skipped,
             joined,
+            schedule_applied,
         )
-        return {"applied": applied, "skipped": skipped, "observations": joined}
+        return {"applied": applied, "skipped": skipped, "observations": joined, "schedule": schedule_applied}
+
+    def _accept_seed_schedule(
+        self, seed: dict, selected: list[str] | None, today: Any, max_shift_min: int
+    ) -> list[str]:
+        """Apply the selected enabled schedule rows now (clamped to the cap, no weekly step) and keep their candidates.
+
+        ``selected`` None selects every row. A row with fewer than 4 candidates is shown disabled and never applied;
+        a candidate for a date and kind already stored (whatever its source) is not added twice. Returns the row keys.
+        """
+        section = seed.get("schedule")
+        if not section:
+            return []
+        rows: dict = section["rows"]
+        wanted = set(rows) if selected is None else {k for k in selected if k in rows}
+        applied: list[str] = []
+        for key in sorted(wanted):
+            cls, kind = sched.parse_schedule_row_key(key)  # type-checked when stored and when loaded
+            row = rows[key]
+            if not row["enabled"] or row["new_min"] is None:
+                continue
+            self._state.learned_schedule.setdefault(cls, {})[kind] = int(
+                sched.clamp_minutes(row["new_min"], max_shift_min)
+            )
+            applied.append(key)
+        chosen = {sched.parse_schedule_row_key(k) for k in applied}
+        known = {(c["date"], c["kind"]) for c in self._state.schedule_candidates}
+        joined = [
+            c
+            for c in section["candidates"]
+            if (c["class"], c["kind"]) in chosen and (c["date"], c["kind"]) not in known
+        ]
+        self._state.schedule_candidates = sched.trim_candidates(self._state.schedule_candidates + joined, today)
+        return applied
 
     def discard_preference_seed(self, today: Any, *, rooms: Iterable[str]) -> bool:
         """Delete the seed's offsets; True when there was one. Its room history (of ``rooms``) is kept as context."""
@@ -2025,7 +2244,14 @@ class LearningEngine:
             "seed": (
                 None
                 if (seed := self._state.preference_seed) is None
-                else copy.deepcopy({k: seed.get(k) for k in ("created", "window", "counts", "summary")})
+                else copy.deepcopy(
+                    {
+                        **{k: seed.get(k) for k in ("created", "window", "counts", "summary")},
+                        "schedule": {k: seed["schedule"][k] for k in ("rows", "counts")}
+                        if seed.get("schedule")
+                        else None,
+                    }
+                )
             ),
         }
 
@@ -3522,6 +3748,8 @@ class LearningEngine:
             self._state.room_background = {}
             self._state.learned_rooms = {}
             self._state.preference_seed = None
+            self._state.learned_schedule = {}
+            self._state.schedule_candidates = []
             self.save_state()
         else:
             _LOGGER.warning("reset() called with unknown scope %r — no action taken", scope)

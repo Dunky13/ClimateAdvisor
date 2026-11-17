@@ -21,7 +21,7 @@ import custom_components.climate_advisor as pkg
 PKG_DIR = Path(pkg.__file__).parent
 
 # Domains that are plainly not equipment commands may be called from anywhere.
-HARMLESS_LITERAL_DOMAINS = frozenset({"notify", "weather", "persistent_notification", "logbook"})
+HARMLESS_LITERAL_DOMAINS = frozenset({"notify", "weather", "persistent_notification", "logbook", "workday"})
 
 # (file name, enclosing function) -> why this site may call a climate/fan/switch service directly.
 ALLOWED_SITES: dict[tuple[str, str], str] = {

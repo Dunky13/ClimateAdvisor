@@ -44,6 +44,8 @@
   "settings.automation_grace_seconds.description": "After Climate Advisor resumes HVAC (all doors/windows closed), this grace window prevents immediate re-pausing if a door opens briefly.",
   "settings.automation_grace_seconds.label": "Automation Grace Period (minutes)",
   "settings.badge_changed": "changed",
+  "settings.bed_signal_entities.description": "Optional. Lights, switches, buttons or helpers you switch off or press when you go to bed. Climate Advisor learns your bedtime from them. Needs preference learning on.",
+  "settings.bed_signal_entities.label": "Bed Signal Entities",
   "settings.briefing_notifications_enabled.description": "On a multi-zone install, only one zone should send the scheduled daily briefing push/email — otherwise you get one copy per zone. Turn this ON for exactly one zone. Manually clicking Send Briefing on the debug tab always sends, even when this is off.",
   "settings.briefing_notifications_enabled.label": "Send Daily Briefing Notifications (This Zone)",
   "settings.briefing_time.description": "When the daily climate briefing is generated and sent. Should be before wake_time so you see it when you get up.",
@@ -222,6 +224,10 @@
   "settings.room_pin_night.label": "Room For The Night",
   "settings.room_temp_entities.description": "Room temperature sensors Climate Advisor may measure your learned comfort temperature against, per part of the day (needs preference learning on). Do not pick a sensor built into another heater or AC unit.",
   "settings.room_temp_entities.label": "Preference Room Sensors",
+  "settings.schedule_max_shift_min.description": "The most a learned wake or bed time may move from the time you configured. 0 keeps your configured times fixed.",
+  "settings.schedule_max_shift_min.label": "Learned Schedule Maximum Shift",
+  "settings.schedule_weekly_step_min.description": "The most a learned wake or bed time may change per week.",
+  "settings.schedule_weekly_step_min.label": "Learned Schedule Weekly Step",
   "settings.sensor_debounce_seconds.description": "How long a door/window sensor's state must hold steady before Climate Advisor acts on it — pausing/resuming HVAC, or engaging/exiting natural-ventilation fan control (whole-house fan or HVAC fan). Applies to every controlled device, not just HVAC. Short values react faster but are more exposed to quick trips through a door or a flaky sensor bounce; longer values are steadier but slower to respond to a genuine change.",
   "settings.sensor_debounce_seconds.label": "Sensor Debounce (minutes)",
   "settings.sensor_polarity_inverted.description": "Enable if your sensors report 'off' when open (some reed switches work this way). Incorrect polarity means HVAC pauses when doors are closed.",
@@ -298,6 +304,8 @@
   "settings.value_configured": "configured",
   "settings.value_n_configured": "{n, plural, one {# configured} other {# configured}}",
   "settings.value_not_set": "not set",
+  "settings.wake_signal_entities.description": "Optional. Lights, switches, buttons or helpers that turn on or fire when you get up. Climate Advisor learns your wake time from them. Needs preference learning on.",
+  "settings.wake_signal_entities.label": "Wake Signal Entities",
   "settings.wake_time.description": "When morning comfort temperatures are restored. Earlier times mean the house is comfortable when you get up but use more energy overnight.",
   "settings.wake_time.label": "Wake Time",
   "settings.weather_bias_enabled.description": "Apply a location-specific correction to tomorrow's forecast based on observed forecast accuracy.",
@@ -305,5 +313,7 @@
   "settings.weather_entity.description": "The weather integration used for forecast data. Determines day type classification and all downstream automation decisions.",
   "settings.weather_entity.label": "Weather Entity",
   "settings.welcome_home_debounce_seconds.description": "Minimum time between welcome home notifications. If someone leaves and returns within this window, the notification is suppressed. Set to 0 to always notify.",
-  "settings.welcome_home_debounce_seconds.label": "Welcome Home Quiet Period (minutes)"
+  "settings.welcome_home_debounce_seconds.label": "Welcome Home Quiet Period (minutes)",
+  "settings.workday_entity.description": "Optional. The Workday integration's sensor. With it, holidays count as days off for learned preferences and learned wake and bed times. Without it, Saturday and Sunday are the days off.",
+  "settings.workday_entity.label": "Workday Sensor"
 }

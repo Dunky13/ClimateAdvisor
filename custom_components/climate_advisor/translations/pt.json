@@ -461,7 +461,12 @@
           "room_pin_night": "Divisão para a noite",
           "room_pin_morning": "Divisão para a manhã",
           "room_pin_afternoon": "Divisão para a tarde",
-          "room_pin_evening": "Divisão para o serão"
+          "room_pin_evening": "Divisão para o serão",
+          "workday_entity": "Sensor de dia útil",
+          "wake_signal_entities": "Sinais de acordar",
+          "bed_signal_entities": "Sinais de deitar",
+          "schedule_max_shift_min": "Deslocamento máximo do horário",
+          "schedule_weekly_step_min": "Alteração semanal máxima do horário"
         },
         "data_description": {
           "preference_learning_enabled": "Quando ativo, as alterações repetidas que faz no termóstato em momentos semelhantes deslocam a temperatura de aquecimento definida pelo Climate Advisor para esse tipo de momento. Desativado por predefinição.",
@@ -471,7 +476,12 @@
           "room_pin_night": "Automático deixa o Climate Advisor escolher a divisão cuja temperatura melhor corresponde às suas alterações. Termóstato mantém a leitura do próprio termóstato. Ou escolha um dos sensores de divisão acima.",
           "room_pin_morning": "Automático deixa o Climate Advisor escolher a divisão cuja temperatura melhor corresponde às suas alterações. Termóstato mantém a leitura do próprio termóstato. Ou escolha um dos sensores de divisão acima.",
           "room_pin_afternoon": "Automático deixa o Climate Advisor escolher a divisão cuja temperatura melhor corresponde às suas alterações. Termóstato mantém a leitura do próprio termóstato. Ou escolha um dos sensores de divisão acima.",
-          "room_pin_evening": "Automático deixa o Climate Advisor escolher a divisão cuja temperatura melhor corresponde às suas alterações. Termóstato mantém a leitura do próprio termóstato. Ou escolha um dos sensores de divisão acima."
+          "room_pin_evening": "Automático deixa o Climate Advisor escolher a divisão cuja temperatura melhor corresponde às suas alterações. Termóstato mantém a leitura do próprio termóstato. Ou escolha um dos sensores de divisão acima.",
+          "workday_entity": "Opcional. O sensor da integração Workday. Com ele, os feriados contam como dias de folga para as preferências aprendidas e as horas de acordar e de deitar aprendidas. Sem ele, sábado e domingo são os dias de folga.",
+          "wake_signal_entities": "Opcional. Luzes, interruptores, botões ou auxiliares que ligam ou disparam quando você se levanta. O Climate Advisor aprende com eles a sua hora de acordar. Requer o aprendizado de preferências ativado.",
+          "bed_signal_entities": "Opcional. Luzes, interruptores, botões ou auxiliares que você desliga ou pressiona ao ir dormir. O Climate Advisor aprende com eles a sua hora de deitar. Requer o aprendizado de preferências ativado.",
+          "schedule_max_shift_min": "O máximo que uma hora de acordar ou de deitar aprendida pode se afastar da hora configurada. 0 mantém fixas as suas horas configuradas.",
+          "schedule_weekly_step_min": "O máximo que uma hora de acordar ou de deitar aprendida pode mudar por semana."
         }
       },
       "ai_settings": {
@@ -548,7 +558,8 @@
       "vacation_heat_above_away_warning": "O aquecimento de férias é mais quente do que o aquecimento em ausência, pelo que umas férias gastam mais energia do que um dia normal fora. Envie novamente para manter.",
       "vacation_cool_below_away_warning": "O arrefecimento de férias é mais frio do que o arrefecimento em ausência, pelo que umas férias gastam mais energia do que um dia normal fora. Envie novamente para manter.",
       "vacation_freeze_warning": "Com esta definição, o aquecimento de férias fica abaixo de 45 °F (7 °C). Os canos podem congelar durante uma viagem longa. Envie novamente para manter.",
-      "room_pin_not_selected": "Escolha automático, termóstato ou um dos sensores de divisão selecionados acima."
+      "room_pin_not_selected": "Escolha automático, termóstato ou um dos sensores de divisão selecionados acima.",
+      "signal_entity_not_found": "Uma das entidades de sinal não existe. Escolha entidades que existam no Home Assistant."
     }
   },
   "issues": {

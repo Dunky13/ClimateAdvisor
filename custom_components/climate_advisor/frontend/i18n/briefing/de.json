@@ -100,6 +100,7 @@
   "briefing.tldr.occupancy_vacation_deep": "  Anwesenheit: Urlaub – tiefe Absenkung aktiv",
   "briefing.tldr.preference": "  Gelernte Präferenz ({day_type}, {day_class}): {entries}",
   "briefing.tldr.tomorrow": "  Morgen: {trend} ({high})",
+  "briefing.tldr.tomorrow_wake": "{tomorrow}\n  Aufstehzeit morgen: {wake} (gelernt)",
   "briefing.tldr.windows_close_by": "  Fenster: bis {when} schließen",
   "briefing.tldr.windows_closed": "  Fenster: den ganzen Tag geschlossen",
   "briefing.tldr.windows_hot_both": "  Fenster: bis {when} schließen (<{threshold}) / ab {open} öffnen",

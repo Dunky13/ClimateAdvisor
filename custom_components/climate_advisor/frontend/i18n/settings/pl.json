@@ -44,6 +44,8 @@
   "settings.automation_grace_seconds.description": "Po wznowieniu HVAC przez Climate Advisor (wszystkie drzwi i okna zamknięte) ten okres karencji zapobiega natychmiastowemu ponownemu wstrzymaniu, jeśli drzwi otworzą się na chwilę.",
   "settings.automation_grace_seconds.label": "Okres karencji automatyzacji (minuty)",
   "settings.badge_changed": "zmieniono",
+  "settings.bed_signal_entities.description": "Opcjonalne. Światła, przełączniki, przyciski lub pomocnicy, które wyłączasz lub naciskasz, idąc spać. Climate Advisor uczy się z nich Twojej godziny snu. Wymaga włączonego uczenia preferencji.",
+  "settings.bed_signal_entities.label": "Sygnały pójścia spać",
   "settings.briefing_notifications_enabled.description": "W instalacji wielostrefowej tylko jedna strefa powinna wysyłać zaplanowane dzienne podsumowanie (push/e-mail) — inaczej dostaniesz po jednej kopii z każdej strefy. Włącz to dla dokładnie jednej strefy. Ręczne kliknięcie Wyślij podsumowanie na karcie debugowania zawsze wysyła, nawet gdy ta opcja jest wyłączona.",
   "settings.briefing_notifications_enabled.label": "Wysyłaj dzienne podsumowania (ta strefa)",
   "settings.briefing_time.description": "Kiedy dzienne podsumowanie klimatu jest tworzone i wysyłane. Powinno być przed wake_time, aby zobaczyć je po wstaniu.",
@@ -222,6 +224,10 @@
   "settings.room_pin_night.label": "Pokój na noc",
   "settings.room_temp_entities.description": "Czujniki temperatury w pokojach, którymi Climate Advisor może mierzyć wyuczoną temperaturę komfortu w każdej porze dnia (wymaga uczenia preferencji). Nie wybieraj czujnika wbudowanego w inny grzejnik lub klimatyzator.",
   "settings.room_temp_entities.label": "Czujniki pokojowe dla preferencji",
+  "settings.schedule_max_shift_min.description": "Maksymalne przesunięcie wyuczonej godziny pobudki lub snu względem skonfigurowanej godziny. 0 utrzymuje skonfigurowane godziny bez zmian.",
+  "settings.schedule_max_shift_min.label": "Maksymalne przesunięcie godzin",
+  "settings.schedule_weekly_step_min.description": "Maksymalna zmiana wyuczonej godziny pobudki lub snu w ciągu tygodnia.",
+  "settings.schedule_weekly_step_min.label": "Maksymalna tygodniowa zmiana godzin",
   "settings.sensor_debounce_seconds.description": "Jak długo stan czujnika drzwi/okna musi być stabilny, zanim Climate Advisor zareaguje — wstrzymując/wznawiając HVAC albo włączając/kończąc sterowanie wentylatorem w trybie wentylacji naturalnej (wentylator całego domu lub wentylator HVAC). Dotyczy każdego sterowanego urządzenia, nie tylko HVAC. Krótkie wartości reagują szybciej, ale są bardziej podatne na szybkie przejścia przez drzwi lub drgania wadliwego czujnika; dłuższe są stabilniejsze, ale wolniej reagują na prawdziwą zmianę.",
   "settings.sensor_debounce_seconds.label": "Opóźnienie czujnika (minuty)",
   "settings.sensor_polarity_inverted.description": "Włącz, jeśli czujniki zgłaszają „off”, gdy są otwarte (tak działają niektóre kontaktrony). Nieprawidłowa polaryzacja oznacza wstrzymanie HVAC przy zamkniętych drzwiach.",
@@ -298,6 +304,8 @@
   "settings.value_configured": "skonfigurowano",
   "settings.value_n_configured": "{n, plural, one {# skonfigurowany} few {# skonfigurowane} many {# skonfigurowanych} other {# skonfigurowanego}}",
   "settings.value_not_set": "nie ustawiono",
+  "settings.wake_signal_entities.description": "Opcjonalne. Światła, przełączniki, przyciski lub pomocnicy, które włączają się lub uruchamiają, gdy wstajesz. Climate Advisor uczy się z nich Twojej godziny pobudki. Wymaga włączonego uczenia preferencji.",
+  "settings.wake_signal_entities.label": "Sygnały pobudki",
   "settings.wake_time.description": "Kiedy przywracane są poranne temperatury komfortu. Wcześniejsze godziny oznaczają komfort po wstaniu, ale większe zużycie energii w nocy.",
   "settings.wake_time.label": "Godzina pobudki",
   "settings.weather_bias_enabled.description": "Zastosuj lokalną korektę jutrzejszej prognozy na podstawie zaobserwowanej dokładności prognoz.",
@@ -305,5 +313,7 @@
   "settings.weather_entity.description": "Integracja pogodowa używana do danych prognozy. Określa typ dnia i wszystkie późniejsze decyzje automatyzacji.",
   "settings.weather_entity.label": "Encja pogody",
   "settings.welcome_home_debounce_seconds.description": "Minimalny czas między powiadomieniami „witaj w domu”. Jeśli ktoś wyjdzie i wróci w tym oknie, powiadomienie jest pomijane. Ustaw 0, aby zawsze powiadamiać.",
-  "settings.welcome_home_debounce_seconds.label": "Cisza po powitaniu (minuty)"
+  "settings.welcome_home_debounce_seconds.label": "Cisza po powitaniu (minuty)",
+  "settings.workday_entity.description": "Opcjonalne. Czujnik integracji Workday. Dzięki niemu święta liczą się jako dni wolne dla wyuczonych preferencji i wyuczonych godzin pobudki i snu. Bez niego dniami wolnymi są sobota i niedziela.",
+  "settings.workday_entity.label": "Czujnik dnia roboczego"
 }

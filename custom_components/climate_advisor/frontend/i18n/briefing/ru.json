@@ -100,6 +100,7 @@
   "briefing.tldr.occupancy_vacation_deep": "  Присутствие: отпуск — глубокое понижение",
   "briefing.tldr.preference": "  Выученное предпочтение ({day_type}, {day_class}): {entries}",
   "briefing.tldr.tomorrow": "  Завтра: {trend} ({high})",
+  "briefing.tldr.tomorrow_wake": "{tomorrow}\n  Подъём завтра: {wake} (выучено)",
   "briefing.tldr.windows_close_by": "  Окна: закрыть до {when}",
   "briefing.tldr.windows_closed": "  Окна: закрыты весь день",
   "briefing.tldr.windows_hot_both": "  Окна: закрыть до {when} (<{threshold}) / открыть с {open}",

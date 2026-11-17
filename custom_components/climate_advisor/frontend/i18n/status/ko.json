@@ -240,6 +240,7 @@
   "status.remote_offset.waiting": "{label} 보정 시작 중: {band}을(를) 기다리는 중",
   "status.remote_offset.why_clearing": "종료 중",
   "status.remote_offset.why_retrying": "종료 중, 쓰기가 거부되어 재시도 중",
+  "status.schedule.line": "학습한 시간: 내일 기상 {wake} ({wake_sign}{wake_min, number} min), 오늘 밤 취침 {bed} ({bed_sign}{bed_min, number} min). 내일은 {tomorrow, select, weekday {평일} weekend {주말} other {{tomorrow}}}입니다.",
   "status.sensor_meta.ca_name": "Climate Advisor 측정값",
   "status.sensor_meta.ca_role": "Climate Advisor가 사용하는 측정값",
   "status.sensor_role.bedroom_sensor": "침실 센서",

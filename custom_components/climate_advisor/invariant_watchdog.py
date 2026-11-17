@@ -284,6 +284,8 @@ class PromiseConfig:
     # from the same view (None while preference learning is off). The heat floors below shift by it so P1 and P7 judge
     # against the floor the thermostat was really armed with, not the configured one.
     heat_offset_at: Callable[[datetime, bool], float] | None = field(default=None, compare=False, repr=False)
+    # Phase 2: the config with the wake and sleep times of the schedule at an instant (None = the configured times).
+    config_at: Callable[[datetime], dict[str, Any]] | None = field(default=None, compare=False, repr=False)
 
     @classmethod
     def from_config(
@@ -293,6 +295,7 @@ class PromiseConfig:
         p2_min_overlap_s: float = 0.0,
         p2_excuse_observe_only: bool = True,
         heat_offset_at: Callable[[datetime, bool], float] | None = None,
+        config_at: Callable[[datetime], dict[str, Any]] | None = None,
     ) -> PromiseConfig:
         """Build the promise view of ``config``. ``p2_min_overlap_s`` is the AC/fan overlap P2 ignores.
 
@@ -317,6 +320,7 @@ class PromiseConfig:
             sleep_heat=_num(config, CONF_SLEEP_HEAT, DEFAULT_SLEEP_HEAT),
             sleep_cool=_num(config, CONF_SLEEP_COOL, DEFAULT_SLEEP_COOL),
             heat_offset_at=heat_offset_at,
+            config_at=config_at,
             sleep_minute=_parse_minute(config.get("sleep_time")),
             wake_minute=_parse_minute(config.get("wake_time")),
             aggressive_savings=bool(config.get("aggressive_savings", False)),
@@ -330,20 +334,28 @@ class PromiseConfig:
         )
 
     # ── promise-owned sleep window (midnight wrap; malformed -> never asleep) ──
+    def _boundaries(self, t: datetime) -> tuple[int | None, int | None]:
+        """``(sleep, wake)`` minutes of the schedule at ``t``."""
+        if self.config_at is None:
+            return self.sleep_minute, self.wake_minute
+        learned = self.config_at(t)
+        return _parse_minute(learned.get("sleep_time")), _parse_minute(learned.get("wake_time"))
+
     def in_sleep(self, t: datetime) -> bool:
-        if self.sleep_minute is None or self.wake_minute is None:
+        s, w = self._boundaries(t)
+        if s is None or w is None:
             return False
         m = t.hour * 60 + t.minute
-        s, w = self.sleep_minute, self.wake_minute
         if s == w:
             return False
         return (s <= m < w) if s < w else (m >= s or m < w)
 
     def in_transition(self, t: datetime, minutes: float = NUMBERS.TRANSITION_MIN) -> bool:
-        if self.sleep_minute is None or self.wake_minute is None:
+        s, w = self._boundaries(t)
+        if s is None or w is None:
             return False
         m = t.hour * 60 + t.minute
-        for b in (self.sleep_minute, self.wake_minute):
+        for b in (s, w):
             d = abs(m - b)
             if min(d, 1440 - d) <= minutes:
                 return True

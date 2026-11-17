@@ -4317,6 +4317,15 @@ sleep sensor is configured, for that sensor's context. Installs without one run 
 > watchdog readings are the sleep context's, unchanged. Learned offsets carry the reference they were measured against;
 > a part whose reference changes restarts its offsets from 0.
 
+> **Fork (0.9.41.3), learned wake and bed times:** `ScheduleView.effective_times(config, day)` returns the wake time of
+> the morning of `day` and the bedtime of the evening of `day`, each the configured time plus the clamped learned shift
+> of the class of the day the night wakes into (`day + 1` for the bedtime). `schedule_at(config, at)` returns the
+> `(sleep_time, wake_time)` pair of the night that matters at `at`: before 12:00 yesterday's bedtime and today's wake,
+> from 12:00 today's bedtime and tomorrow's wake, so `_in_sleep_window` applies unchanged to the pair. With no shift, or
+> `schedule_max_shift_min` at 0, both return the configured values verbatim. The weekly update takes the median of the
+> last 20 signal deltas of a class and kind (at least 4), clamps it to the maximum, moves the stored shift by at most the
+> weekly step and rounds to 5 minutes. Readers that mean "the configured setting" keep the raw config.
+
 **The single setpoint path.** `AutomationEngine._set_temperature_impl()` is the ONE place the offset is applied.
 Every CA setpoint writer reaches it (`_apply_comfort_band`, `_set_temperature_for_mode`, wake-up, bedtime, pre-cool,
 TOU pre-conditioning, restores, the post-fan verify repair, the setpoint retry, and the outer loop itself), so no

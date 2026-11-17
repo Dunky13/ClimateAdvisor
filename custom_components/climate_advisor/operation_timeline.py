@@ -30,7 +30,7 @@ import math
 import string
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, tzinfo
 from enum import StrEnum
 from typing import Any
 
@@ -46,6 +46,7 @@ from .const import (
     THERMAL_SWING_DEFAULT_F,
 )
 from .nat_vent_gate import NatVentGateInputs, decide_nat_vent_gate
+from .preference_schedule import KIND_BED, KIND_WAKE, WakeBed
 from .remote_offset import cap_f, max_magnitude_f
 from .temperature import outdoor_direction_ok_for_thermostat
 from .thermal_confidence import grade_hvac_confidence, grade_solar_confidence
@@ -773,6 +774,47 @@ class TimelineSnapshot:
     grace_end: datetime | None = None
     paused_by_door: bool = False
     nat_vent_active: bool = False
+    # Learned wake and bed times (fork Dunky13#1 phase 2); None = the configured times hold on every day.
+    # ``schedule_at(at)`` is the ``WakeBed`` of the night that matters at ``at``; ``instants_on(day, tz)`` the
+    # ``WakeBed`` instants of that morning and evening.
+    schedule_at: Callable[[datetime], WakeBed] | None = None
+    instants_on: Callable[[date, tzinfo | None], WakeBed] | None = None
+
+    def schedule(self, at: datetime) -> WakeBed:
+        """The wake and bed times (``time`` or None) of the night that matters at ``at``."""
+        return self.schedule_at(at) if self.schedule_at is not None else WakeBed(self.wake_time, self.sleep_time)
+
+    def asleep(self, at: datetime) -> bool:
+        night = self.schedule(at)
+        return asleep_at(at, night.wake, night.bed)
+
+    def instants(self, day: date, tz: tzinfo | None) -> WakeBed:
+        """The wake and bed instants of ``day``'s morning and evening."""
+        if self.instants_on is not None:
+            return self.instants_on(day, tz)
+        wake, bed = (
+            None if t is None else datetime.combine(day, t, tzinfo=tz) for t in (self.wake_time, self.sleep_time)
+        )
+        return WakeBed(wake, bed)
+
+    def next_instant(self, kind: str, after: datetime) -> datetime | None:
+        """The next wake or bedtime (``KIND_WAKE`` / ``KIND_BED``) strictly after ``after``."""
+        found = [
+            at
+            for n in range(-1, 3)
+            if (at := getattr(self.instants(after.date() + timedelta(days=n), after.tzinfo), kind)) is not None
+            and at > after
+        ]
+        return min(found) if found else None
+
+    def is_instant(self, kind: str, at: datetime) -> bool:
+        """Whether ``at`` is, to the minute, a wake or bedtime (``KIND_WAKE`` / ``KIND_BED``) instant."""
+        minute = at.replace(second=0, microsecond=0)
+        return any(
+            (found := getattr(self.instants(at.date() + timedelta(days=n), at.tzinfo), kind)) is not None
+            and found == minute
+            for n in range(-1, 2)
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -1101,11 +1143,9 @@ def build_segments(snap: TimelineSnapshot, end: datetime) -> list[Segment]:
     cuts: set[datetime] = {start}
     day = start.date() - timedelta(days=1)
     while day <= end.date():
-        for t in (snap.wake_time, snap.sleep_time):
-            if t is not None:
-                cut = datetime.combine(day, t, tzinfo=start.tzinfo)
-                if start < cut < end:
-                    cuts.add(cut)
+        for cut in snap.instants(day, start.tzinfo):
+            if cut is not None and start < cut < end:
+                cuts.add(cut)
         mid = datetime.combine(day, time(0, 0), tzinfo=start.tzinfo)
         if start < mid < end:
             cuts.add(mid)  # day-mode boundary
@@ -1122,7 +1162,7 @@ def build_segments(snap: TimelineSnapshot, end: datetime) -> list[Segment]:
         seg_end = ordered[i + 1] if i + 1 < len(ordered) else end
         occ = _occupancy_for(snap, cut)
         band = snap.band_at(cut, occ)
-        asleep = asleep_at(cut, snap.wake_time, snap.sleep_time)
+        asleep = snap.asleep(cut)
         floor, ceiling = band.floor, band.ceiling
         overlay = None
         if (
@@ -1613,15 +1653,13 @@ def _clip_to_awake(snap: TimelineSnapshot, a: datetime, b: datetime) -> tuple[da
     """A window period never runs into the sleep window (nobody is awake to close it): end it at bedtime."""
     if snap.sleep_time is None:
         return a, b, "planned_end"
-    if asleep_at(a, snap.wake_time, snap.sleep_time):
+    if snap.asleep(a):
         wake = _next_wake(snap, a)  # a span that starts before the occupant is up starts when they are
         if wake is None or wake >= b:
             return None
         a = wake
-    bed = datetime.combine(a.date(), snap.sleep_time, tzinfo=a.tzinfo)
-    if bed <= a:
-        bed += timedelta(days=1)
-    if b > bed:
+    bed = snap.next_instant(KIND_BED, a)
+    if bed is not None and b > bed:
         return (a, bed, "bedtime") if bed - a >= timedelta(minutes=WINDOW_MIN_SPAN_MIN) else None
     return a, b, "planned_end"
 
@@ -1966,7 +2004,7 @@ def build_timeline(
                 "context": seg.context,
                 "mode": seg.mode,
             }
-            if snap.wake_time is not None and minute == snap.wake_time and not seg.asleep:
+            if snap.wake_time is not None and snap.is_instant(KIND_WAKE, seg.start) and not seg.asleep:
                 if snap.sleep_sensor_label:
                     facts["sensor"] = snap.primary_sensor_label
                     add(
@@ -1988,7 +2026,7 @@ def build_timeline(
                         target_f=facts["setpoint"],
                         mode=seg.mode,
                     )
-            elif snap.sleep_time is not None and minute == snap.sleep_time and seg.asleep:
+            elif snap.sleep_time is not None and snap.is_instant(KIND_BED, seg.start) and seg.asleep:
                 if snap.sleep_sensor_label:
                     facts.update({"sensor": snap.sleep_sensor_label, "wake": _next_wake(snap, seg.start)})
                     add(
@@ -2014,7 +2052,7 @@ def build_timeline(
             # The day plan changes with the new calendar day; CA applies it when that day's schedule starts.
             at = seg.start
             if minute == time(0, 0) and snap.wake_time is not None:
-                at = datetime.combine(seg.start.date(), snap.wake_time, tzinfo=seg.start.tzinfo)
+                at = snap.instants(seg.start.date(), seg.start.tzinfo).wake or at
             if at > now:
                 add(
                     at,
@@ -2272,10 +2310,7 @@ def _regen_text(reasons: Sequence[str]) -> str | None:
 
 
 def _next_wake(snap: TimelineSnapshot, after: datetime) -> datetime | None:
-    if snap.wake_time is None:
-        return None
-    cand = datetime.combine(after.date(), snap.wake_time, tzinfo=after.tzinfo)
-    return cand if cand > after else cand + timedelta(days=1)
+    return snap.next_instant(KIND_WAKE, after) if snap.wake_time is not None else None
 
 
 def _edge_toward(final: Sim | None, cand: WindowCandidate) -> float | None:

@@ -128,6 +128,7 @@ _HA_MODULES = [
     "homeassistant.helpers.event",
     # Issue #1102 (F6): __init__.py imports async_at_started from here.
     "homeassistant.helpers.start",
+    "homeassistant.helpers.target",
     "homeassistant.helpers.selector",
     "homeassistant.components",
     "homeassistant.components.sensor",

@@ -240,6 +240,7 @@
   "status.remote_offset.waiting": "Offset {label} start: wachten op {band}",
   "status.remote_offset.why_clearing": "wordt beëindigd",
   "status.remote_offset.why_retrying": "wordt beëindigd, opnieuw proberen na geweigerde schrijfactie",
+  "status.schedule.line": "Geleerde tijden: morgen wekken {wake} ({wake_sign}{wake_min, number} min), vanavond naar bed {bed} ({bed_sign}{bed_min, number} min). Morgen is een {tomorrow, select, weekday {doordeweekse dag} weekend {weekenddag} other {{tomorrow}}}.",
   "status.sensor_meta.ca_name": "Climate Advisor-meting",
   "status.sensor_meta.ca_role": "de meting die Climate Advisor gebruikt",
   "status.sensor_role.bedroom_sensor": "slaapkamersensor",

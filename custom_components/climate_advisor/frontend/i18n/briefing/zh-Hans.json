@@ -100,6 +100,7 @@
   "briefing.tldr.occupancy_vacation_deep": "  在家状态：度假——深度节能已启用",
   "briefing.tldr.preference": "  已学习的偏好 ({day_type}, {day_class}): {entries}",
   "briefing.tldr.tomorrow": "  明天：{trend}（{high}）",
+  "briefing.tldr.tomorrow_wake": "{tomorrow}\n  明天起床：{wake}（已学习）",
   "briefing.tldr.windows_close_by": "  窗户：{when}前关闭",
   "briefing.tldr.windows_closed": "  窗户：全天关闭",
   "briefing.tldr.windows_hot_both": "  窗户：{when}前关闭（<{threshold}）/ {open}起开启",

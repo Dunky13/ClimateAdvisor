@@ -240,6 +240,7 @@
   "status.remote_offset.waiting": "{label}: compensación iniciándose, esperando {band}",
   "status.remote_offset.why_clearing": "terminando",
   "status.remote_offset.why_retrying": "terminando, reintentando tras una escritura rechazada",
+  "status.schedule.line": "Horas aprendidas: despertar mañana {wake} ({wake_sign}{wake_min, number} min), acostarse esta noche {bed} ({bed_sign}{bed_min, number} min). Mañana es {tomorrow, select, weekday {un día entre semana} weekend {un día de fin de semana} other {{tomorrow}}}.",
   "status.sensor_meta.ca_name": "Lectura de Climate Advisor",
   "status.sensor_meta.ca_role": "la lectura que usa Climate Advisor",
   "status.sensor_role.bedroom_sensor": "sensor del dormitorio",
