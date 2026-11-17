@@ -44,6 +44,8 @@
   "settings.automation_grace_seconds.description": "Nachdem Climate Advisor die Heizung/Klimaanlage wieder startet (alle Türen/Fenster geschlossen), verhindert diese Schonfrist ein sofortiges erneutes Pausieren, wenn eine Tür kurz geöffnet wird.",
   "settings.automation_grace_seconds.label": "Automatik-Schonfrist (Minuten)",
   "settings.badge_changed": "geändert",
+  "settings.bed_signal_entities.description": "Optional. Lichter, Schalter, Tasten oder Helfer, die du ausschaltest oder drückst, wenn du ins Bett gehst. Climate Advisor lernt daraus deine Schlafenszeit. Erfordert eingeschaltetes Lernen der Vorlieben.",
+  "settings.bed_signal_entities.label": "Schlafens-Signale",
   "settings.briefing_notifications_enabled.description": "Bei Installationen mit mehreren Zonen sollte nur eine Zone die geplante tägliche Briefing-Push/E-Mail senden, sonst bekommst du pro Zone eine Kopie. Aktiviere dies für genau eine Zone. Ein manueller Klick auf „Briefing senden“ im Debug-Tab sendet immer, auch wenn dies aus ist.",
   "settings.briefing_notifications_enabled.label": "Tägliche Briefing-Benachrichtigungen senden (diese Zone)",
   "settings.briefing_time.description": "Wann das tägliche Klima-Briefing erstellt und gesendet wird. Sollte vor der Aufstehzeit liegen, damit du es beim Aufstehen siehst.",
@@ -222,6 +224,10 @@
   "settings.room_pin_night.label": "Raum für die Nacht",
   "settings.room_temp_entities.description": "Raumtemperatursensoren, an denen Climate Advisor deine gelernte Wohlfühltemperatur je Tagesabschnitt messen darf (erfordert Präferenzlernen). Wähle keinen Sensor, der in ein anderes Heiz- oder Klimagerät eingebaut ist.",
   "settings.room_temp_entities.label": "Raumsensoren für Präferenzen",
+  "settings.schedule_max_shift_min.description": "Das Maximum, um das sich eine gelernte Aufsteh- oder Schlafenszeit von der eingestellten Zeit entfernen darf. 0 hält deine eingestellten Zeiten fest.",
+  "settings.schedule_max_shift_min.label": "Maximale Zeitverschiebung",
+  "settings.schedule_weekly_step_min.description": "Das Maximum, um das sich eine gelernte Aufsteh- oder Schlafenszeit pro Woche ändern darf.",
+  "settings.schedule_weekly_step_min.label": "Maximale wöchentliche Zeitänderung",
   "settings.sensor_debounce_seconds.description": "Wie lange der Zustand eines Tür-/Fenstersensors stabil bleiben muss, bevor Climate Advisor reagiert – Heizung/Klima pausieren oder fortsetzen bzw. die Steuerung der natürlichen Lüftung (Hausventilator oder Gebläse) starten oder beenden. Gilt für jedes gesteuerte Gerät, nicht nur für die Heizung/Klimaanlage. Kurze Werte reagieren schneller, sind aber anfälliger für kurzes Durchgehen durch eine Tür oder einen flatternden Sensor; längere sind ruhiger, reagieren aber langsamer auf eine echte Änderung.",
   "settings.sensor_debounce_seconds.label": "Sensor-Entprellung (Minuten)",
   "settings.sensor_polarity_inverted.description": "Aktiviere dies, wenn deine Sensoren „aus“ melden, wenn offen ist (manche Reedkontakte arbeiten so). Falsche Polarität bedeutet, dass die Heizung/Klimaanlage bei geschlossenen Türen pausiert.",
@@ -298,6 +304,8 @@
   "settings.value_configured": "konfiguriert",
   "settings.value_n_configured": "{n, plural, one {# konfiguriert} other {# konfiguriert}}",
   "settings.value_not_set": "nicht gesetzt",
+  "settings.wake_signal_entities.description": "Optional. Lichter, Schalter, Tasten oder Helfer, die sich einschalten oder auslösen, wenn du aufstehst. Climate Advisor lernt daraus deine Aufstehzeit. Erfordert eingeschaltetes Lernen der Vorlieben.",
+  "settings.wake_signal_entities.label": "Aufwach-Signale",
   "settings.wake_time.description": "Wann morgens die Komforttemperaturen wiederhergestellt werden. Frühere Zeiten bedeuten, dass das Haus beim Aufstehen komfortabel ist, aber nachts mehr Energie verbraucht wird.",
   "settings.wake_time.label": "Aufstehzeit",
   "settings.weather_bias_enabled.description": "Wendet eine standortspezifische Korrektur auf die Vorhersage für morgen an, basierend auf der beobachteten Vorhersagegenauigkeit.",
@@ -305,5 +313,7 @@
   "settings.weather_entity.description": "Die Wetter-Integration für die Vorhersagedaten. Bestimmt die Tagestyp-Einstufung und alle nachfolgenden Automatikentscheidungen.",
   "settings.weather_entity.label": "Wetter-Entität",
   "settings.welcome_home_debounce_seconds.description": "Mindestzeit zwischen „Willkommen zuhause“-Benachrichtigungen. Geht jemand und kommt innerhalb dieser Zeit zurück, wird die Benachrichtigung unterdrückt. 0 benachrichtigt immer.",
-  "settings.welcome_home_debounce_seconds.label": "Ruhezeit „Willkommen zuhause“ (Minuten)"
+  "settings.welcome_home_debounce_seconds.label": "Ruhezeit „Willkommen zuhause“ (Minuten)",
+  "settings.workday_entity.description": "Optional. Der Sensor der Workday-Integration. Damit zählen Feiertage als freie Tage für gelernte Vorlieben und gelernte Aufsteh- und Schlafenszeiten. Ohne ihn sind Samstag und Sonntag die freien Tage.",
+  "settings.workday_entity.label": "Arbeitstag-Sensor"
 }

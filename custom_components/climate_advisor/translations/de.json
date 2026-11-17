@@ -461,7 +461,12 @@
           "room_pin_night": "Raum für die Nacht",
           "room_pin_morning": "Raum für den Morgen",
           "room_pin_afternoon": "Raum für den Nachmittag",
-          "room_pin_evening": "Raum für den Abend"
+          "room_pin_evening": "Raum für den Abend",
+          "workday_entity": "Arbeitstag-Sensor",
+          "wake_signal_entities": "Aufwach-Signale",
+          "bed_signal_entities": "Schlafens-Signale",
+          "schedule_max_shift_min": "Maximale Zeitverschiebung",
+          "schedule_weekly_step_min": "Maximale wöchentliche Zeitänderung"
         },
         "data_description": {
           "preference_learning_enabled": "Wenn aktiv, verschieben wiederholte Thermostat-Änderungen zu ähnlichen Zeiten die Heiztemperatur, die Climate Advisor für diese Zeit setzt. Standardmäßig aus.",
@@ -471,7 +476,12 @@
           "room_pin_night": "Automatisch lässt Climate Advisor den Raum wählen, dessen Temperatur am besten zu deinen Änderungen passt. Thermostat behält die Messung des Thermostats. Oder wähle einen der Raumsensoren oben.",
           "room_pin_morning": "Automatisch lässt Climate Advisor den Raum wählen, dessen Temperatur am besten zu deinen Änderungen passt. Thermostat behält die Messung des Thermostats. Oder wähle einen der Raumsensoren oben.",
           "room_pin_afternoon": "Automatisch lässt Climate Advisor den Raum wählen, dessen Temperatur am besten zu deinen Änderungen passt. Thermostat behält die Messung des Thermostats. Oder wähle einen der Raumsensoren oben.",
-          "room_pin_evening": "Automatisch lässt Climate Advisor den Raum wählen, dessen Temperatur am besten zu deinen Änderungen passt. Thermostat behält die Messung des Thermostats. Oder wähle einen der Raumsensoren oben."
+          "room_pin_evening": "Automatisch lässt Climate Advisor den Raum wählen, dessen Temperatur am besten zu deinen Änderungen passt. Thermostat behält die Messung des Thermostats. Oder wähle einen der Raumsensoren oben.",
+          "workday_entity": "Optional. Der Sensor der Workday-Integration. Damit zählen Feiertage als freie Tage für gelernte Vorlieben und gelernte Aufsteh- und Schlafenszeiten. Ohne ihn sind Samstag und Sonntag die freien Tage.",
+          "wake_signal_entities": "Optional. Lichter, Schalter, Tasten oder Helfer, die sich einschalten oder auslösen, wenn du aufstehst. Climate Advisor lernt daraus deine Aufstehzeit. Erfordert eingeschaltetes Lernen der Vorlieben.",
+          "bed_signal_entities": "Optional. Lichter, Schalter, Tasten oder Helfer, die du ausschaltest oder drückst, wenn du ins Bett gehst. Climate Advisor lernt daraus deine Schlafenszeit. Erfordert eingeschaltetes Lernen der Vorlieben.",
+          "schedule_max_shift_min": "Das Maximum, um das sich eine gelernte Aufsteh- oder Schlafenszeit von der eingestellten Zeit entfernen darf. 0 hält deine eingestellten Zeiten fest.",
+          "schedule_weekly_step_min": "Das Maximum, um das sich eine gelernte Aufsteh- oder Schlafenszeit pro Woche ändern darf."
         }
       },
       "ai_settings": {
@@ -548,7 +558,8 @@
       "vacation_heat_above_away_warning": "Die Urlaubsheizung ist wärmer als die Abwesenheitsheizung. Ein Urlaub verbraucht also mehr Energie als ein normaler Tag außer Haus. Sende erneut ab, um das beizubehalten.",
       "vacation_cool_below_away_warning": "Die Urlaubskühlung ist kühler als die Abwesenheitskühlung. Ein Urlaub verbraucht also mehr Energie als ein normaler Tag außer Haus. Sende erneut ab, um das beizubehalten.",
       "vacation_freeze_warning": "Mit dieser Einstellung liegt die Urlaubsheizung unter 45 °F (7 °C). Bei einer langen Reise können Leitungen einfrieren. Sende erneut ab, um das beizubehalten.",
-      "room_pin_not_selected": "Wähle automatisch, Thermostat oder einen der oben ausgewählten Raumsensoren."
+      "room_pin_not_selected": "Wähle automatisch, Thermostat oder einen der oben ausgewählten Raumsensoren.",
+      "signal_entity_not_found": "Eine der Signal-Entitäten existiert nicht. Wähle Entitäten, die in Home Assistant existieren."
     }
   },
   "issues": {

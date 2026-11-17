@@ -240,6 +240,7 @@
   "status.remote_offset.waiting": "{label}: смещение начинается — ожидание: {band}",
   "status.remote_offset.why_clearing": "завершение",
   "status.remote_offset.why_retrying": "завершение, повторная попытка после отклонённой записи",
+  "status.schedule.line": "Выученное время: подъём завтра {wake} ({wake_sign}{wake_min, number} min), сон сегодня вечером {bed} ({bed_sign}{bed_min, number} min). Завтра {tomorrow, select, weekday {будний день} weekend {выходной день} other {{tomorrow}}}.",
   "status.sensor_meta.ca_name": "Показание Climate Advisor",
   "status.sensor_meta.ca_role": "показание, которое использует Climate Advisor",
   "status.sensor_role.bedroom_sensor": "датчик в спальне",

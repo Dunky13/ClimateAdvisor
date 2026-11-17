@@ -44,6 +44,8 @@
   "settings.automation_grace_seconds.description": "Climate Advisor iklimlendirmeyi yeniden başlattıktan (tüm kapı/pencereler kapalı) sonra, bir kapı kısa süreliğine açılırsa hemen yeniden duraklatılmasını önleyen bekleme süresi.",
   "settings.automation_grace_seconds.label": "Otomasyon Bekleme Süresi (dakika)",
   "settings.badge_changed": "değişti",
+  "settings.bed_signal_entities.description": "İsteğe bağlı. Yatarken kapattığınız veya bastığınız ışıklar, anahtarlar, düğmeler ya da yardımcılar. Climate Advisor yatma saatinizi bunlardan öğrenir. Tercih öğrenmenin açık olmasını gerektirir.",
+  "settings.bed_signal_entities.label": "Yatma sinyalleri",
   "settings.briefing_notifications_enabled.description": "Çok bölgeli kurulumda yalnızca bir bölge zamanlanmış günlük özet bildirimini/e-postasını göndermelidir; aksi halde her bölge için bir kopya alırsınız. Bunu yalnızca bir bölge için AÇIN. Hata ayıklama sekmesindeki Özeti Gönder düğmesi, bu kapalı olsa bile her zaman gönderir.",
   "settings.briefing_notifications_enabled.label": "Günlük Özet Bildirimlerini Gönder (Bu Bölge)",
   "settings.briefing_time.description": "Günlük iklim özetinin oluşturulup gönderileceği saat. Kalktığınızda görebilmeniz için uyanma saatinden önce olmalıdır.",
@@ -222,6 +224,10 @@
   "settings.room_pin_night.label": "Gece için oda",
   "settings.room_temp_entities.description": "Climate Advisor'ın öğrenilen konfor sıcaklığınızı günün her bölümünde ölçebileceği oda sıcaklık sensörleri (tercih öğrenmenin açık olması gerekir). Başka bir ısıtıcıya veya klimaya yerleşik bir sensör seçmeyin.",
   "settings.room_temp_entities.label": "Tercih oda sensörleri",
+  "settings.schedule_max_shift_min.description": "Öğrenilen bir uyanma veya yatma saatinin ayarladığınız saatten en fazla ne kadar kayabileceği. 0, ayarladığınız saatleri sabit tutar.",
+  "settings.schedule_max_shift_min.label": "Azami program kayması",
+  "settings.schedule_weekly_step_min.description": "Öğrenilen bir uyanma veya yatma saatinin haftada en fazla ne kadar değişebileceği.",
+  "settings.schedule_weekly_step_min.label": "Azami haftalık program değişimi",
   "settings.sensor_debounce_seconds.description": "Climate Advisor’ın bir kapı/pencere sensörünün durumuna göre harekete geçmesi (iklimlendirmeyi duraklatma/sürdürme veya doğal havalandırma fan kontrolüne girme/çıkma: tüm ev fanı ya da iklimlendirme fanı) için durumun ne kadar süre sabit kalması gerektiği. Yalnızca iklimlendirmeye değil, kontrol edilen her cihaza uygulanır. Kısa değerler daha hızlı tepki verir ancak kapıdan kısa geçişlere veya hatalı sensör sıçramalarına daha açıktır; uzun değerler daha kararlıdır ancak gerçek bir değişikliğe daha yavaş yanıt verir.",
   "settings.sensor_debounce_seconds.label": "Sensör Gecikmesi (dakika)",
   "settings.sensor_polarity_inverted.description": "Sensörleriniz açıkken “off” bildiriyorsa etkinleştirin (bazı reed anahtarlar böyledir). Yanlış kutupluluk, kapılar kapalıyken iklimlendirmenin duraklatılmasına yol açar.",
@@ -298,6 +304,8 @@
   "settings.value_configured": "yapılandırıldı",
   "settings.value_n_configured": "{n, plural, one {# yapılandırıldı} other {# yapılandırıldı}}",
   "settings.value_not_set": "ayarlanmadı",
+  "settings.wake_signal_entities.description": "İsteğe bağlı. Kalktığınızda açılan veya tetiklenen ışıklar, anahtarlar, düğmeler ya da yardımcılar. Climate Advisor uyanma saatinizi bunlardan öğrenir. Tercih öğrenmenin açık olmasını gerektirir.",
+  "settings.wake_signal_entities.label": "Uyanma sinyalleri",
   "settings.wake_time.description": "Sabah konfor sıcaklıklarının geri yüklendiği saat. Erken saatler, kalktığınızda evin konforlu olması anlamına gelir ancak gece daha çok enerji harcar.",
   "settings.wake_time.label": "Uyanma Saati",
   "settings.weather_bias_enabled.description": "Gözlemlenen tahmin doğruluğuna göre yarının hava durumu tahminine konuma özgü bir düzeltme uygular.",
@@ -305,5 +313,7 @@
   "settings.weather_entity.description": "Tahmin verileri için kullanılan hava durumu entegrasyonu. Gün tipi sınıflandırmasını ve sonraki tüm otomasyon kararlarını belirler.",
   "settings.weather_entity.label": "Hava Durumu Varlığı",
   "settings.welcome_home_debounce_seconds.description": "Eve hoş geldiniz bildirimleri arasındaki en kısa süre. Biri çıkıp bu süre içinde dönerse bildirim bastırılır. Her zaman bildirmek için 0 yapın.",
-  "settings.welcome_home_debounce_seconds.label": "Eve Hoş Geldiniz Sessiz Süre (dakika)"
+  "settings.welcome_home_debounce_seconds.label": "Eve Hoş Geldiniz Sessiz Süre (dakika)",
+  "settings.workday_entity.description": "İsteğe bağlı. Workday entegrasyonunun sensörü. Bununla tatiller, öğrenilen tercihler ile öğrenilen uyanma ve yatma saatleri için izin günü sayılır. Olmazsa cumartesi ve pazar izin günüdür.",
+  "settings.workday_entity.label": "İş günü sensörü"
 }

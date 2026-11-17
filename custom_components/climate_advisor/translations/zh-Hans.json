@@ -461,7 +461,12 @@
           "room_pin_night": "夜间房间",
           "room_pin_morning": "早晨房间",
           "room_pin_afternoon": "下午房间",
-          "room_pin_evening": "傍晚房间"
+          "room_pin_evening": "傍晚房间",
+          "workday_entity": "工作日传感器",
+          "wake_signal_entities": "起床信号",
+          "bed_signal_entities": "就寝信号",
+          "schedule_max_shift_min": "最大时间偏移",
+          "schedule_weekly_step_min": "每周最大时间调整"
         },
         "data_description": {
           "preference_learning_enabled": "开启后，您在相似时段反复进行的温控器调整会改变 Climate Advisor 为该类时段设定的供暖温度。默认关闭。",
@@ -471,7 +476,12 @@
           "room_pin_night": "自动让 Climate Advisor 选择温度最符合您更改的房间。恒温器保留恒温器自身的读数。或从上方的房间传感器中选择一个。",
           "room_pin_morning": "自动让 Climate Advisor 选择温度最符合您更改的房间。恒温器保留恒温器自身的读数。或从上方的房间传感器中选择一个。",
           "room_pin_afternoon": "自动让 Climate Advisor 选择温度最符合您更改的房间。恒温器保留恒温器自身的读数。或从上方的房间传感器中选择一个。",
-          "room_pin_evening": "自动让 Climate Advisor 选择温度最符合您更改的房间。恒温器保留恒温器自身的读数。或从上方的房间传感器中选择一个。"
+          "room_pin_evening": "自动让 Climate Advisor 选择温度最符合您更改的房间。恒温器保留恒温器自身的读数。或从上方的房间传感器中选择一个。",
+          "workday_entity": "可选。Workday 集成的传感器。启用后，假日会被视为休息日，用于学习到的偏好以及学习到的起床和就寝时间。未启用时，周六和周日为休息日。",
+          "wake_signal_entities": "可选。你起床时会打开或触发的灯、开关、按钮或辅助实体。Climate Advisor 会据此学习你的起床时间。需要开启偏好学习。",
+          "bed_signal_entities": "可选。你就寝时会关闭或按下的灯、开关、按钮或辅助实体。Climate Advisor 会据此学习你的就寝时间。需要开启偏好学习。",
+          "schedule_max_shift_min": "学习到的起床或就寝时间相对于所设时间最多可偏移的幅度。0 表示固定使用所设时间。",
+          "schedule_weekly_step_min": "学习到的起床或就寝时间每周最多可调整的幅度。"
         }
       },
       "ai_settings": {
@@ -548,7 +558,8 @@
       "vacation_heat_above_away_warning": "度假制热温度高于离家制热温度，因此度假比平常外出的一天更耗能。再次提交可保留此设置。",
       "vacation_cool_below_away_warning": "度假制冷温度低于离家制冷温度，因此度假比平常外出的一天更耗能。再次提交可保留此设置。",
       "vacation_freeze_warning": "按此设置，度假制热温度最终会低于 45 °F (7 °C)。长途旅行期间水管可能会冻结。再次提交可保留此设置。",
-      "room_pin_not_selected": "请选择自动、恒温器或上方已选的某个房间传感器。"
+      "room_pin_not_selected": "请选择自动、恒温器或上方已选的某个房间传感器。",
+      "signal_entity_not_found": "其中一个信号实体不存在。请选择 Home Assistant 中存在的实体。"
     }
   },
   "issues": {

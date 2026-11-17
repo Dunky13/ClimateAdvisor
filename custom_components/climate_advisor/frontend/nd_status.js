@@ -160,7 +160,8 @@
     var hvacNote = '<div class="n" id="status-hvac-line">' + hvacSentence(d, u, true) + '</div>' +
       (d.remote_offset && d.remote_offset.text ? '<div class="n remote-offset-line">' + esc(ND.text(d.remote_offset, 'text')) + '</div>' : '') +
       (d.preference_learning && d.preference_learning.enabled && d.preference_learning.text ? '<div class="n preference-line">' + esc(ND.text(d.preference_learning, 'text')) + '</div>' : '') +
-      (d.preference_learning && d.preference_learning.enabled && d.preference_learning.ref_text ? '<div class="n preference-ref-line">' + esc(ND.text(d.preference_learning, 'ref_text')) + '</div>' : '');
+      (d.preference_learning && d.preference_learning.enabled && d.preference_learning.ref_text ? '<div class="n preference-ref-line">' + esc(ND.text(d.preference_learning, 'ref_text')) + '</div>' : '') +
+      (d.preference_learning && d.preference_learning.enabled && d.preference_learning.schedule_text ? '<div class="n preference-schedule-line">' + esc(ND.text(d.preference_learning, 'schedule_text')) + '</div>' : '');
     // What is happening now, and why: the Status sentence rides on the hallway (thermostat) card. The header health
     // line only says whether automation is on; this says what it is doing (nat-vent, a grace period, a pause).
     var statusLine = '<div class="n" id="status-automation-line">' + ND.iso(t('automation_line', { phrase: automationPhrase(d) })) + '</div>';

@@ -100,6 +100,7 @@
   "briefing.tldr.occupancy_vacation_deep": "  在宅状況：バケーション（深い省エネ設定が有効）",
   "briefing.tldr.preference": "  学習した好み ({day_type}, {day_class}): {entries}",
   "briefing.tldr.tomorrow": "  明日：{trend}（{high}）",
+  "briefing.tldr.tomorrow_wake": "{tomorrow}\n  明日の起床: {wake} (学習済み)",
   "briefing.tldr.windows_close_by": "  窓：{when}までに閉める",
   "briefing.tldr.windows_closed": "  窓：一日中閉める",
   "briefing.tldr.windows_hot_both": "  窓：{when}までに閉める（<{threshold}）／{open}以降は開ける",

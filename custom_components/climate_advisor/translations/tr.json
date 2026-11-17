@@ -461,7 +461,12 @@
           "room_pin_night": "Gece için oda",
           "room_pin_morning": "Sabah için oda",
           "room_pin_afternoon": "Öğleden sonra için oda",
-          "room_pin_evening": "Akşam için oda"
+          "room_pin_evening": "Akşam için oda",
+          "workday_entity": "İş günü sensörü",
+          "wake_signal_entities": "Uyanma sinyalleri",
+          "bed_signal_entities": "Yatma sinyalleri",
+          "schedule_max_shift_min": "Azami program kayması",
+          "schedule_weekly_step_min": "Azami haftalık program değişimi"
         },
         "data_description": {
           "preference_learning_enabled": "Açıkken, benzer zamanlarda yaptığınız tekrarlı termostat değişiklikleri, Climate Advisor'ın o zaman türü için belirlediği ısıtma sıcaklığını kaydırır. Varsayılan olarak kapalıdır.",
@@ -471,7 +476,12 @@
           "room_pin_night": "Otomatik, Climate Advisor'ın sıcaklığı değişikliklerinize en iyi uyan odayı seçmesini sağlar. Termostat, termostatın kendi ölçümünü korur. Ya da yukarıdaki oda sensörlerinden birini seçin.",
           "room_pin_morning": "Otomatik, Climate Advisor'ın sıcaklığı değişikliklerinize en iyi uyan odayı seçmesini sağlar. Termostat, termostatın kendi ölçümünü korur. Ya da yukarıdaki oda sensörlerinden birini seçin.",
           "room_pin_afternoon": "Otomatik, Climate Advisor'ın sıcaklığı değişikliklerinize en iyi uyan odayı seçmesini sağlar. Termostat, termostatın kendi ölçümünü korur. Ya da yukarıdaki oda sensörlerinden birini seçin.",
-          "room_pin_evening": "Otomatik, Climate Advisor'ın sıcaklığı değişikliklerinize en iyi uyan odayı seçmesini sağlar. Termostat, termostatın kendi ölçümünü korur. Ya da yukarıdaki oda sensörlerinden birini seçin."
+          "room_pin_evening": "Otomatik, Climate Advisor'ın sıcaklığı değişikliklerinize en iyi uyan odayı seçmesini sağlar. Termostat, termostatın kendi ölçümünü korur. Ya da yukarıdaki oda sensörlerinden birini seçin.",
+          "workday_entity": "İsteğe bağlı. Workday entegrasyonunun sensörü. Bununla tatiller, öğrenilen tercihler ile öğrenilen uyanma ve yatma saatleri için izin günü sayılır. Olmazsa cumartesi ve pazar izin günüdür.",
+          "wake_signal_entities": "İsteğe bağlı. Kalktığınızda açılan veya tetiklenen ışıklar, anahtarlar, düğmeler ya da yardımcılar. Climate Advisor uyanma saatinizi bunlardan öğrenir. Tercih öğrenmenin açık olmasını gerektirir.",
+          "bed_signal_entities": "İsteğe bağlı. Yatarken kapattığınız veya bastığınız ışıklar, anahtarlar, düğmeler ya da yardımcılar. Climate Advisor yatma saatinizi bunlardan öğrenir. Tercih öğrenmenin açık olmasını gerektirir.",
+          "schedule_max_shift_min": "Öğrenilen bir uyanma veya yatma saatinin ayarladığınız saatten en fazla ne kadar kayabileceği. 0, ayarladığınız saatleri sabit tutar.",
+          "schedule_weekly_step_min": "Öğrenilen bir uyanma veya yatma saatinin haftada en fazla ne kadar değişebileceği."
         }
       },
       "ai_settings": {
@@ -548,7 +558,8 @@
       "vacation_heat_above_away_warning": "Tatil ısıtması evde yokken ısıtmadan daha sıcak; bu yüzden tatil, normal bir dışarıda gününden daha fazla enerji harcar. Korumak için yeniden gönderin.",
       "vacation_cool_below_away_warning": "Tatil soğutması evde yokken soğutmadan daha serin; bu yüzden tatil, normal bir dışarıda gününden daha fazla enerji harcar. Korumak için yeniden gönderin.",
       "vacation_freeze_warning": "Bu ayarla tatil ısıtması 45 °F (7 °C) altına düşer. Uzun bir yolculukta borular donabilir. Korumak için yeniden gönderin.",
-      "room_pin_not_selected": "Otomatik, termostat veya yukarıda seçilen oda sensörlerinden birini seçin."
+      "room_pin_not_selected": "Otomatik, termostat veya yukarıda seçilen oda sensörlerinden birini seçin.",
+      "signal_entity_not_found": "Sinyal varlıklarından biri mevcut değil. Home Assistant'ta bulunan varlıkları seçin."
     }
   },
   "issues": {

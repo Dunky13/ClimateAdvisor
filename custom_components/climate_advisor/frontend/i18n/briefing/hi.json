@@ -100,6 +100,7 @@
   "briefing.tldr.occupancy_vacation_deep": "  उपस्थिति: छुट्टी — गहरी बचत लागू",
   "briefing.tldr.preference": "  सीखी हुई प्राथमिकता ({day_type}, {day_class}): {entries}",
   "briefing.tldr.tomorrow": "  कल: {trend} ({high})",
+  "briefing.tldr.tomorrow_wake": "{tomorrow}\n  कल जागने का समय: {wake} (सीखा गया)",
   "briefing.tldr.windows_close_by": "  खिड़कियाँ: {when} तक बंद करें",
   "briefing.tldr.windows_closed": "  खिड़कियाँ: पूरे दिन बंद",
   "briefing.tldr.windows_hot_both": "  खिड़कियाँ: {when} तक बंद करें (<{threshold}) / {open} से खोलें",

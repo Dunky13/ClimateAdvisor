@@ -240,6 +240,7 @@
   "status.remote_offset.waiting": "{label} : décalage en préparation, en attente de {band}",
   "status.remote_offset.why_clearing": "arrêt en cours",
   "status.remote_offset.why_retrying": "arrêt en cours, nouvel essai après une écriture refusée",
+  "status.schedule.line": "Heures apprises : réveil demain {wake} ({wake_sign}{wake_min, number} min), coucher ce soir {bed} ({bed_sign}{bed_min, number} min). Demain est un jour de {tomorrow, select, weekday {semaine} weekend {week-end} other {{tomorrow}}}.",
   "status.sensor_meta.ca_name": "Mesure de Climate Advisor",
   "status.sensor_meta.ca_role": "la mesure utilisée par Climate Advisor",
   "status.sensor_role.bedroom_sensor": "capteur de la chambre",

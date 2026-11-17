@@ -36,6 +36,7 @@ from .const import (
     CONF_AI_TEMPERATURE,
     CONF_AUTOMATION_GRACE_NOTIFY,
     CONF_AUTOMATION_GRACE_PERIOD,
+    CONF_BED_SIGNAL_ENTITIES,
     CONF_BRIEFING_NOTIFICATIONS_ENABLED,
     CONF_COOL_POWER_KW,
     CONF_EMAIL_BRIEFING,
@@ -74,6 +75,8 @@ from .const import (
     CONF_PUSH_ENTITY_HEALTH,
     CONF_PUSH_OCCUPANCY_HOME,
     CONF_ROOM_TEMP_ENTITIES,
+    CONF_SCHEDULE_MAX_SHIFT_MIN,
+    CONF_SCHEDULE_WEEKLY_STEP_MIN,
     CONF_SENSOR_DEBOUNCE,
     CONF_SENSOR_POLARITY_INVERTED,
     CONF_SHADOW_ENGINE,
@@ -88,7 +91,9 @@ from .const import (
     CONF_VACATION_HEAT,
     CONF_VACATION_TOGGLE,
     CONF_VACATION_TOGGLE_INVERT,
+    CONF_WAKE_SIGNAL_ENTITIES,
     CONF_WELCOME_HOME_DEBOUNCE,
+    CONF_WORKDAY_ENTITY,
     DEFAULT_AI_AUTO_REQUESTS_PER_DAY,
     DEFAULT_AI_ENABLED,
     DEFAULT_AI_INVESTIGATOR_ENABLED,
@@ -112,6 +117,8 @@ from .const import (
     DEFAULT_PREFERENCE_WEEKLY_STEP_F,
     DEFAULT_PRIMARY_ENGINE,
     DEFAULT_ROOM_PIN,
+    DEFAULT_SCHEDULE_MAX_SHIFT_MIN,
+    DEFAULT_SCHEDULE_WEEKLY_STEP_MIN,
     DEFAULT_SENSOR_DEBOUNCE_SECONDS,
     DEFAULT_SETBACK_COOL,
     DEFAULT_SETBACK_HEAT,
@@ -137,6 +144,7 @@ from .const import (
     ROOM_PIN_AUTO,
     ROOM_PIN_KEYS,
     ROOM_PIN_THERMOSTAT,
+    SIGNAL_ENTITY_DOMAINS,
     TEMP_SOURCE_CLIMATE_FALLBACK,
     TEMP_SOURCE_INPUT_NUMBER,
     TEMP_SOURCE_SENSOR,
@@ -2196,14 +2204,41 @@ class ClimateAdvisorOptionsFlow(config_entries.OptionsFlow):
                 pin = user_input.get(key, DEFAULT_ROOM_PIN)
                 if pin not in (ROOM_PIN_AUTO, ROOM_PIN_THERMOSTAT, *rooms):
                     errors[key] = "room_pin_not_selected"
+            # Phase 2: the wake and bed signal entities must exist (the same entity may be in both lists).
+            for key in (CONF_WAKE_SIGNAL_ENTITIES, CONF_BED_SIGNAL_ENTITIES):
+                if any(self.hass.states.get(entity) is None for entity in user_input.get(key) or []):
+                    errors[key] = "signal_entity_not_found"
             if not errors:
                 await self._commit_section(
-                    {**delta_fields_to_fahrenheit(user_input, current, unit), CONF_ROOM_TEMP_ENTITIES: rooms}
+                    {
+                        **delta_fields_to_fahrenheit(user_input, current, unit),
+                        CONF_ROOM_TEMP_ENTITIES: rooms,
+                        CONF_WAKE_SIGNAL_ENTITIES: list(user_input.get(CONF_WAKE_SIGNAL_ENTITIES) or []),
+                        CONF_BED_SIGNAL_ENTITIES: list(user_input.get(CONF_BED_SIGNAL_ENTITIES) or []),
+                        CONF_SCHEDULE_MAX_SHIFT_MIN: int(user_input[CONF_SCHEDULE_MAX_SHIFT_MIN]),
+                        CONF_SCHEDULE_WEEKLY_STEP_MIN: int(user_input[CONF_SCHEDULE_WEEKLY_STEP_MIN]),
+                    },
+                    clearable_keys=(CONF_WORKDAY_ENTITY,),
                 )
                 return await self.async_step_init()
             current = {**current, **user_input}
 
         unit_label = _unit_symbol(unit == CELSIUS)
+        signal_selector = selector.EntitySelector(
+            selector.EntitySelectorConfig(domain=list(SIGNAL_ENTITY_DOMAINS), multiple=True)
+        )
+
+        def _minutes_selector(lowest: int, highest: int) -> selector.NumberSelector:
+            return selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=lowest,
+                    max=highest,
+                    step=5,
+                    unit_of_measurement="min",
+                    mode=selector.NumberSelectorMode.BOX,
+                )
+            )
+
         pin_options = [
             ROOM_PIN_AUTO,
             ROOM_PIN_THERMOSTAT,
@@ -2259,6 +2294,26 @@ class ClimateAdvisorOptionsFlow(config_entries.OptionsFlow):
                         vol.Required(key, default=current.get(key, DEFAULT_ROOM_PIN)): pin_selector
                         for key in ROOM_PIN_KEYS.values()
                     },
+                    # Phase 2: learned wake and bed times.
+                    vol.Optional(
+                        CONF_WORKDAY_ENTITY, description={"suggested_value": current.get(CONF_WORKDAY_ENTITY)}
+                    ): selector.EntitySelector(
+                        selector.EntitySelectorConfig(domain="binary_sensor", integration="workday")
+                    ),
+                    vol.Optional(
+                        CONF_WAKE_SIGNAL_ENTITIES, default=list(current.get(CONF_WAKE_SIGNAL_ENTITIES) or [])
+                    ): signal_selector,
+                    vol.Optional(
+                        CONF_BED_SIGNAL_ENTITIES, default=list(current.get(CONF_BED_SIGNAL_ENTITIES) or [])
+                    ): signal_selector,
+                    vol.Required(
+                        CONF_SCHEDULE_MAX_SHIFT_MIN,
+                        default=current.get(CONF_SCHEDULE_MAX_SHIFT_MIN, DEFAULT_SCHEDULE_MAX_SHIFT_MIN),
+                    ): _minutes_selector(0, 180),
+                    vol.Required(
+                        CONF_SCHEDULE_WEEKLY_STEP_MIN,
+                        default=current.get(CONF_SCHEDULE_WEEKLY_STEP_MIN, DEFAULT_SCHEDULE_WEEKLY_STEP_MIN),
+                    ): _minutes_selector(5, 60),
                 }
             ),
             errors=errors,

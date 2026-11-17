@@ -100,6 +100,7 @@
   "briefing.tldr.occupancy_vacation_deep": "  Presenza: vacanza — riduzione profonda attiva",
   "briefing.tldr.preference": "  Preferenza appresa ({day_type}, {day_class}): {entries}",
   "briefing.tldr.tomorrow": "  Domani: {trend} ({high})",
+  "briefing.tldr.tomorrow_wake": "{tomorrow}\n  Sveglia domani: {wake} (appreso)",
   "briefing.tldr.windows_close_by": "  Finestre: chiudere entro {when}",
   "briefing.tldr.windows_closed": "  Finestre: chiuse tutto il giorno",
   "briefing.tldr.windows_hot_both": "  Finestre: chiudere entro {when} (<{threshold}) / aprire da {open}",

@@ -240,6 +240,7 @@
   "status.remote_offset.waiting": "بدء إزاحة {label}: بانتظار {band}",
   "status.remote_offset.why_clearing": "جارٍ الإنهاء",
   "status.remote_offset.why_retrying": "جارٍ الإنهاء، وإعادة المحاولة بعد رفض الكتابة",
+  "status.schedule.line": "الأوقات المكتسبة: الاستيقاظ غدًا {wake} ({wake_sign}{wake_min, number} min)، النوم الليلة {bed} ({bed_sign}{bed_min, number} min). غدًا هو {tomorrow, select, weekday {يوم من أيام الأسبوع} weekend {يوم عطلة} other {{tomorrow}}}.",
   "status.sensor_meta.ca_name": "قراءة Climate Advisor",
   "status.sensor_meta.ca_role": "القراءة التي يستخدمها Climate Advisor",
   "status.sensor_role.bedroom_sensor": "مستشعر غرفة النوم",

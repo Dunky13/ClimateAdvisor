@@ -240,6 +240,7 @@
   "status.remote_offset.waiting": "{label}: ofset başlıyor — bekleniyor: {band}",
   "status.remote_offset.why_clearing": "sonlandırılıyor",
   "status.remote_offset.why_retrying": "sonlandırılıyor, reddedilen yazmadan sonra yeniden deneniyor",
+  "status.schedule.line": "Öğrenilen saatler: yarın uyanma {wake} ({wake_sign}{wake_min, number} min), bu gece yatma {bed} ({bed_sign}{bed_min, number} min). Yarın {tomorrow, select, weekday {hafta içi bir gün} weekend {hafta sonu bir gün} other {{tomorrow}}}.",
   "status.sensor_meta.ca_name": "Climate Advisor okuması",
   "status.sensor_meta.ca_role": "Climate Advisor’ın kullandığı okuma",
   "status.sensor_role.bedroom_sensor": "yatak odası sensörü",

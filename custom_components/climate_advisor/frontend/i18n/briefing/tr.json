@@ -100,6 +100,7 @@
   "briefing.tldr.occupancy_vacation_deep": "  Doluluk: tatil — derin düşürme etkin",
   "briefing.tldr.preference": "  Öğrenilmiş tercih ({day_type}, {day_class}): {entries}",
   "briefing.tldr.tomorrow": "  Yarın: {trend} ({high})",
+  "briefing.tldr.tomorrow_wake": "{tomorrow}\n  Yarınki uyanma: {wake} (öğrenildi)",
   "briefing.tldr.windows_close_by": "  Pencereler: {when} öncesinde kapat",
   "briefing.tldr.windows_closed": "  Pencereler: gün boyu kapalı",
   "briefing.tldr.windows_hot_both": "  Pencereler: {when} öncesinde kapat (<{threshold}) / {open} sonrası aç",

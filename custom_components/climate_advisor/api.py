@@ -431,7 +431,7 @@ def _preference_status_payload(hass: HomeAssistant, coordinator: Any, unit: str)
         )
     else:
         ref_msg = i18n.Msg("status.preference.reference_thermostat", band=band)
-    return {
+    out = {
         "enabled": True,
         "bucket": bucket,
         "active_offset": display_delta(active_f, unit),
@@ -441,6 +441,21 @@ def _preference_status_payload(hass: HomeAssistant, coordinator: Any, unit: str)
         **_msg_fields(hass, msg, "text"),
         **_msg_fields(hass, ref_msg, "ref_text"),
     }
+    schedule = status.get("schedule") or {}
+    if schedule.get("active"):  # phase 2: only while a learned shift applies
+        wake_min, bed_min = schedule["wake_shift_min"], schedule["bed_shift_min"]
+        schedule_msg = i18n.Msg(
+            "status.schedule.line",
+            wake=schedule["wake"],
+            wake_sign="+" if wake_min >= 0 else "-",
+            wake_min=abs(wake_min),
+            bed=schedule["bed"],
+            bed_sign="+" if bed_min >= 0 else "-",
+            bed_min=abs(bed_min),
+            tomorrow=schedule["tomorrow_class"],
+        )
+        out.update(_msg_fields(hass, schedule_msg, "schedule_text"))
+    return out
 
 
 class ClimateAdvisorStatusView(HomeAssistantView):

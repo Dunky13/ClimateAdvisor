@@ -461,7 +461,12 @@
           "room_pin_night": "夜の部屋",
           "room_pin_morning": "朝の部屋",
           "room_pin_afternoon": "午後の部屋",
-          "room_pin_evening": "夕方の部屋"
+          "room_pin_evening": "夕方の部屋",
+          "workday_entity": "勤務日センサー",
+          "wake_signal_entities": "起床シグナル",
+          "bed_signal_entities": "就寝シグナル",
+          "schedule_max_shift_min": "スケジュールの最大シフト",
+          "schedule_weekly_step_min": "週ごとの最大スケジュール変更"
         },
         "data_description": {
           "preference_learning_enabled": "オンにすると、似た時間帯に繰り返したサーモスタット操作に応じて、その時間帯に Climate Advisor が設定する暖房温度がずれます。初期設定はオフです。",
@@ -471,7 +476,12 @@
           "room_pin_night": "自動では、あなたの変更に最も合う温度の部屋を Climate Advisor が選びます。サーモスタットはサーモスタット自身の測定値を使います。または上の部屋のセンサーから選びます。",
           "room_pin_morning": "自動では、あなたの変更に最も合う温度の部屋を Climate Advisor が選びます。サーモスタットはサーモスタット自身の測定値を使います。または上の部屋のセンサーから選びます。",
           "room_pin_afternoon": "自動では、あなたの変更に最も合う温度の部屋を Climate Advisor が選びます。サーモスタットはサーモスタット自身の測定値を使います。または上の部屋のセンサーから選びます。",
-          "room_pin_evening": "自動では、あなたの変更に最も合う温度の部屋を Climate Advisor が選びます。サーモスタットはサーモスタット自身の測定値を使います。または上の部屋のセンサーから選びます。"
+          "room_pin_evening": "自動では、あなたの変更に最も合う温度の部屋を Climate Advisor が選びます。サーモスタットはサーモスタット自身の測定値を使います。または上の部屋のセンサーから選びます。",
+          "workday_entity": "任意。Workday 連携のセンサー。設定すると、学習した好みと学習した起床・就寝時刻で祝日が休日として扱われます。未設定の場合は土曜日と日曜日が休日です。",
+          "wake_signal_entities": "任意。起きたときにオンになる、または作動するライト、スイッチ、ボタン、ヘルパー。Climate Advisor はこれらから起床時刻を学習します。好みの学習をオンにする必要があります。",
+          "bed_signal_entities": "任意。寝るときにオフにする、または押すライト、スイッチ、ボタン、ヘルパー。Climate Advisor はこれらから就寝時刻を学習します。好みの学習をオンにする必要があります。",
+          "schedule_max_shift_min": "学習した起床・就寝時刻が、設定した時刻から動ける最大幅。0 にすると設定した時刻を固定します。",
+          "schedule_weekly_step_min": "学習した起床・就寝時刻が 1 週間に変更できる最大幅。"
         }
       },
       "ai_settings": {
@@ -548,7 +558,8 @@
       "vacation_heat_above_away_warning": "バケーション時の暖房が外出時の暖房より高いため、バケーション中の方が通常の外出日よりエネルギーを使います。このまま使う場合はもう一度送信してください。",
       "vacation_cool_below_away_warning": "バケーション時の冷房が外出時の冷房より低いため、バケーション中の方が通常の外出日よりエネルギーを使います。このまま使う場合はもう一度送信してください。",
       "vacation_freeze_warning": "この設定では、バケーション時の暖房が 45 °F (7 °C) を下回ります。長期の旅行中に水道管が凍結するおそれがあります。このまま使う場合はもう一度送信してください。",
-      "room_pin_not_selected": "自動、サーモスタット、または上で選んだ部屋のセンサーのいずれかを選んでください。"
+      "room_pin_not_selected": "自動、サーモスタット、または上で選んだ部屋のセンサーのいずれかを選んでください。",
+      "signal_entity_not_found": "シグナルのエンティティの 1 つが存在しません。Home Assistant に存在するエンティティを選んでください。"
     }
   },
   "issues": {

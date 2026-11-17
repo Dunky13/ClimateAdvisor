@@ -44,6 +44,8 @@
   "settings.automation_grace_seconds.description": "Climate Advisor が空調を再開した後(すべてのドアと窓が閉まった状態)、ドアが一瞬開いても再び一時停止しないようにする猶予時間です。",
   "settings.automation_grace_seconds.label": "自動制御の一時停止期間(分)",
   "settings.badge_changed": "変更あり",
+  "settings.bed_signal_entities.description": "任意。寝るときにオフにする、または押すライト、スイッチ、ボタン、ヘルパー。Climate Advisor はこれらから就寝時刻を学習します。好みの学習をオンにする必要があります。",
+  "settings.bed_signal_entities.label": "就寝シグナル",
   "settings.briefing_notifications_enabled.description": "複数ゾーンの環境では、毎日のブリーフィングのプッシュ/メールを送るゾーンは 1 つだけにしてください。そうしないとゾーンごとに同じ通知が届きます。オンにするのは 1 ゾーンだけにしてください。デバッグタブの「ブリーフィング送信」は、オフでも常に送信されます。",
   "settings.briefing_notifications_enabled.label": "毎日のブリーフィング通知を送信(このゾーン)",
   "settings.briefing_time.description": "毎日の気候ブリーフィングを作成して送信する時刻です。起きたときに見られるよう、wake_time より前にしてください。",
@@ -222,6 +224,10 @@
   "settings.room_pin_night.label": "夜の部屋",
   "settings.room_temp_entities.description": "Climate Advisor が時間帯ごとに学習した快適温度を測定できる部屋の温度センサー（好みの学習がオンの場合）。別の暖房機やエアコンに内蔵されたセンサーは選ばないでください。",
   "settings.room_temp_entities.label": "好みの学習に使う部屋のセンサー",
+  "settings.schedule_max_shift_min.description": "学習した起床・就寝時刻が、設定した時刻から動ける最大幅。0 にすると設定した時刻を固定します。",
+  "settings.schedule_max_shift_min.label": "スケジュールの最大シフト",
+  "settings.schedule_weekly_step_min.description": "学習した起床・就寝時刻が 1 週間に変更できる最大幅。",
+  "settings.schedule_weekly_step_min.label": "週ごとの最大スケジュール変更",
   "settings.sensor_debounce_seconds.description": "ドア/窓センサーの状態が安定して続いてから Climate Advisor が動作するまでの時間です。動作とは、空調の一時停止/再開、または自然換気ファン制御(全館換気ファンまたは空調ファン)の開始/終了のことです。空調だけでなく、制御するすべての機器に適用されます。短くすると反応は速くなりますが、ドアの出入りや不安定なセンサーのばたつきに反応しやすくなります。長くすると安定しますが、本当の変化への反応は遅くなります。",
   "settings.sensor_debounce_seconds.label": "センサーのデバウンス(分)",
   "settings.sensor_polarity_inverted.description": "センサーが開いているときに「off」を報告する場合は有効にしてください(一部のリードスイッチはこの動作です)。極性が正しくないと、ドアが閉まっているときに空調が一時停止します。",
@@ -298,6 +304,8 @@
   "settings.value_configured": "設定済み",
   "settings.value_n_configured": "{n, plural, other {#件設定済み}}",
   "settings.value_not_set": "未設定",
+  "settings.wake_signal_entities.description": "任意。起きたときにオンになる、または作動するライト、スイッチ、ボタン、ヘルパー。Climate Advisor はこれらから起床時刻を学習します。好みの学習をオンにする必要があります。",
+  "settings.wake_signal_entities.label": "起床シグナル",
   "settings.wake_time.description": "朝の快適温度に戻る時刻です。早くすると起床時に快適ですが、夜間の消費エネルギーが増えます。",
   "settings.wake_time.label": "起床時刻",
   "settings.weather_bias_enabled.description": "観測した予報の精度に基づき、明日の予報に地域ごとの補正をかけます。",
@@ -305,5 +313,7 @@
   "settings.weather_entity.description": "予報データに使う天気連携です。日のタイプの分類と、それに続くすべての自動制御の判断に影響します。",
   "settings.weather_entity.label": "天気エンティティ",
   "settings.welcome_home_debounce_seconds.description": "おかえりなさい通知の最小間隔です。この間に誰かが外出して戻った場合、通知は抑制されます。0 にすると常に通知します。",
-  "settings.welcome_home_debounce_seconds.label": "おかえりなさい通知の間隔(分)"
+  "settings.welcome_home_debounce_seconds.label": "おかえりなさい通知の間隔(分)",
+  "settings.workday_entity.description": "任意。Workday 連携のセンサー。設定すると、学習した好みと学習した起床・就寝時刻で祝日が休日として扱われます。未設定の場合は土曜日と日曜日が休日です。",
+  "settings.workday_entity.label": "勤務日センサー"
 }

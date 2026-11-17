@@ -461,7 +461,12 @@
           "room_pin_night": "Habitación por la noche",
           "room_pin_morning": "Habitación por la mañana",
           "room_pin_afternoon": "Habitación por la tarde",
-          "room_pin_evening": "Habitación al anochecer"
+          "room_pin_evening": "Habitación al anochecer",
+          "workday_entity": "Sensor de día laborable",
+          "wake_signal_entities": "Señales de despertar",
+          "bed_signal_entities": "Señales de acostarse",
+          "schedule_max_shift_min": "Desplazamiento máximo del horario",
+          "schedule_weekly_step_min": "Cambio semanal máximo del horario"
         },
         "data_description": {
           "preference_learning_enabled": "Si está activado, los cambios repetidos que haces en el termostato en momentos similares desplazan la temperatura de calefacción que Climate Advisor fija para ese tipo de momento. Desactivado por defecto.",
@@ -471,7 +476,12 @@
           "room_pin_night": "Automático deja que Climate Advisor elija la habitación cuya temperatura mejor se ajusta a tus cambios. Termostato mantiene la lectura del propio termostato. O elige uno de los sensores de habitación de arriba.",
           "room_pin_morning": "Automático deja que Climate Advisor elija la habitación cuya temperatura mejor se ajusta a tus cambios. Termostato mantiene la lectura del propio termostato. O elige uno de los sensores de habitación de arriba.",
           "room_pin_afternoon": "Automático deja que Climate Advisor elija la habitación cuya temperatura mejor se ajusta a tus cambios. Termostato mantiene la lectura del propio termostato. O elige uno de los sensores de habitación de arriba.",
-          "room_pin_evening": "Automático deja que Climate Advisor elija la habitación cuya temperatura mejor se ajusta a tus cambios. Termostato mantiene la lectura del propio termostato. O elige uno de los sensores de habitación de arriba."
+          "room_pin_evening": "Automático deja que Climate Advisor elija la habitación cuya temperatura mejor se ajusta a tus cambios. Termostato mantiene la lectura del propio termostato. O elige uno de los sensores de habitación de arriba.",
+          "workday_entity": "Opcional. El sensor de la integración Workday. Con él, los festivos cuentan como días libres para las preferencias aprendidas y las horas de despertar y de acostarse aprendidas. Sin él, sábado y domingo son los días libres.",
+          "wake_signal_entities": "Opcional. Luces, interruptores, botones o ayudantes que se encienden o se activan cuando te levantas. Climate Advisor aprende de ellos tu hora de despertar. Requiere el aprendizaje de preferencias activado.",
+          "bed_signal_entities": "Opcional. Luces, interruptores, botones o ayudantes que apagas o pulsas al acostarte. Climate Advisor aprende de ellos tu hora de acostarte. Requiere el aprendizaje de preferencias activado.",
+          "schedule_max_shift_min": "Lo máximo que una hora de despertar o de acostarse aprendida puede alejarse de la hora configurada. 0 mantiene fijas tus horas configuradas.",
+          "schedule_weekly_step_min": "Lo máximo que una hora de despertar o de acostarse aprendida puede cambiar por semana."
         }
       },
       "ai_settings": {
@@ -548,7 +558,8 @@
       "vacation_heat_above_away_warning": "La calefacción de vacaciones es más alta que la calefacción en ausencia, así que unas vacaciones consumen más energía que un día normal fuera. Envía de nuevo para conservarla.",
       "vacation_cool_below_away_warning": "La refrigeración de vacaciones es más fría que la refrigeración en ausencia, así que unas vacaciones consumen más energía que un día normal fuera. Envía de nuevo para conservarla.",
       "vacation_freeze_warning": "Con este ajuste, la calefacción de vacaciones queda por debajo de 45 °F (7 °C). Las tuberías pueden congelarse durante un viaje largo. Envía de nuevo para conservarla.",
-      "room_pin_not_selected": "Elige automático, termostato o uno de los sensores de habitación seleccionados arriba."
+      "room_pin_not_selected": "Elige automático, termostato o uno de los sensores de habitación seleccionados arriba.",
+      "signal_entity_not_found": "Una de las entidades de señal no existe. Elige entidades que existan en Home Assistant."
     }
   },
   "issues": {

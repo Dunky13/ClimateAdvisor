@@ -44,6 +44,8 @@
   "settings.automation_grace_seconds.description": "Nadat Climate Advisor de verwarming/koeling hervat (alle deuren/ramen dicht), voorkomt deze respijtperiode dat meteen weer wordt gepauzeerd als een deur kort opengaat.",
   "settings.automation_grace_seconds.label": "Respijtperiode automatisering (minuten)",
   "settings.badge_changed": "gewijzigd",
+  "settings.bed_signal_entities.description": "Optioneel. Lampen, schakelaars, knoppen of helpers die je uitzet of indrukt als je naar bed gaat. Climate Advisor leert je bedtijd hiervan. Vereist dat voorkeuren leren aan staat.",
+  "settings.bed_signal_entities.label": "Bedtijdsignalen",
   "settings.briefing_notifications_enabled.description": "Bij een installatie met meerdere zones mag slechts één zone de geplande dagelijkse briefing per push/e-mail versturen, anders krijg je één kopie per zone. Zet dit AAN voor precies één zone. Handmatig op Briefing verzenden klikken op het debugtabblad verstuurt altijd, ook als dit uit staat.",
   "settings.briefing_notifications_enabled.label": "Dagelijkse briefingmeldingen verzenden (deze zone)",
   "settings.briefing_time.description": "Wanneer de dagelijkse klimaatbriefing wordt opgesteld en verzonden. Moet vóór de wektijd liggen, zodat je hem ziet als je opstaat.",
@@ -222,6 +224,10 @@
   "settings.room_pin_night.label": "Kamer voor de nacht",
   "settings.room_temp_entities.description": "Kamertemperatuursensoren waarmee Climate Advisor je geleerde comforttemperatuur per deel van de dag mag meten (vereist voorkeuren leren). Kies geen sensor die in een ander verwarmings- of airco-apparaat zit.",
   "settings.room_temp_entities.label": "Kamersensoren voor voorkeuren",
+  "settings.schedule_max_shift_min.description": "Het meeste dat een geleerde wek- of bedtijd mag verschuiven ten opzichte van de tijd die je hebt ingesteld. 0 houdt je ingestelde tijden vast.",
+  "settings.schedule_max_shift_min.label": "Maximale schemaverschuiving",
+  "settings.schedule_weekly_step_min.description": "Het meeste dat een geleerde wek- of bedtijd per week mag veranderen.",
+  "settings.schedule_weekly_step_min.label": "Maximale wekelijkse schemawijziging",
   "settings.sensor_debounce_seconds.description": "Hoe lang de status van een deur-/raamsensor stabiel moet blijven voordat Climate Advisor reageert – verwarming/koeling pauzeren of hervatten, of de bediening van natuurlijke ventilatie (huisventilator of HVAC-ventilator) starten of beëindigen. Geldt voor elk bestuurd apparaat, niet alleen voor verwarming/koeling. Korte waarden reageren sneller, maar zijn gevoeliger voor even door een deur lopen of een haperende sensor; langere waarden zijn stabieler, maar reageren trager op een echte verandering.",
   "settings.sensor_debounce_seconds.label": "Sensor-debounce (minuten)",
   "settings.sensor_polarity_inverted.description": "Schakel dit in als je sensoren 'uit' melden als iets open is (sommige reedcontacten werken zo). Verkeerde polariteit betekent dat de verwarming/koeling pauzeert als deuren dicht zijn.",
@@ -298,6 +304,8 @@
   "settings.value_configured": "geconfigureerd",
   "settings.value_n_configured": "{n, plural, one {# geconfigureerd} other {# geconfigureerd}}",
   "settings.value_not_set": "niet ingesteld",
+  "settings.wake_signal_entities.description": "Optioneel. Lampen, schakelaars, knoppen of helpers die aangaan of afgaan als je opstaat. Climate Advisor leert je wektijd hiervan. Vereist dat voorkeuren leren aan staat.",
+  "settings.wake_signal_entities.label": "Wakkersignalen",
   "settings.wake_time.description": "Wanneer de comforttemperaturen 's ochtends worden hersteld. Een vroeger tijdstip betekent dat het huis comfortabel is als je opstaat, maar dat er 's nachts meer energie wordt gebruikt.",
   "settings.wake_time.label": "Wektijd",
   "settings.weather_bias_enabled.description": "Past een locatiespecifieke correctie toe op de verwachting van morgen, op basis van de waargenomen voorspellingsnauwkeurigheid.",
@@ -305,5 +313,7 @@
   "settings.weather_entity.description": "De weerintegratie die voor verwachtingsgegevens wordt gebruikt. Bepaalt de indeling van het dagtype en alle daaropvolgende automatiseringsbeslissingen.",
   "settings.weather_entity.label": "Weerentiteit",
   "settings.welcome_home_debounce_seconds.description": "Minimale tijd tussen welkom-thuismeldingen. Als iemand weggaat en binnen dit venster terugkomt, wordt de melding onderdrukt. Stel in op 0 om altijd te melden.",
-  "settings.welcome_home_debounce_seconds.label": "Stilteperiode welkom thuis (minuten)"
+  "settings.welcome_home_debounce_seconds.label": "Stilteperiode welkom thuis (minuten)",
+  "settings.workday_entity.description": "Optioneel. De sensor van de Workday-integratie. Daarmee tellen feestdagen als vrije dagen voor geleerde voorkeuren en geleerde wek- en bedtijden. Zonder telt alleen zaterdag en zondag als vrij.",
+  "settings.workday_entity.label": "Werkdagsensor"
 }

@@ -471,6 +471,7 @@ from .preference_schedule import (
     SOURCE_THERMOSTAT,
     ScheduleView,
     candidate_for,
+    hhmm,
     instants_on,
     next_times,
     transition_active,
@@ -12158,7 +12159,26 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             ],
         )
         out.update(self._preference_room_status(view, summary, now))
+        out["schedule"] = self._preference_schedule_status(view.schedule, now)
         return out
+
+    def _preference_schedule_status(self, schedule: ScheduleView, now: datetime) -> dict[str, Any]:
+        """Phase 2 status: the learned shifts with their evidence, tomorrow's wake and tonight's bed as HH:MM."""
+        tomorrow = now.date() + timedelta(days=1)
+        cls = schedule.day_class(tomorrow)  # tomorrow's class decides both tomorrow's wake and tonight's bedtime
+        summary = self.learning.schedule_summary(schedule.max_shift_min)
+        for row in summary["rows"]:
+            configured = self.config.get("wake_time" if row["kind"] == KIND_WAKE else "sleep_time")
+            row["configured"] = hhmm(configured)
+        return {
+            **summary,
+            "active": schedule.active,
+            "tomorrow_class": cls,
+            "wake": hhmm(schedule.effective_times(self.config, tomorrow)[0]),
+            "bed": hhmm(schedule.effective_times(self.config, now.date())[1]),
+            "wake_shift_min": schedule.shift(cls, KIND_WAKE),
+            "bed_shift_min": schedule.shift(cls, KIND_BED),
+        }
 
     def _preference_room_status(self, view: PreferenceView, summary: dict[str, Any], now: datetime) -> dict[str, Any]:
         """Phase 3 status: the reference now, the humidity band, the per part of day references and the seed."""
@@ -12201,6 +12221,8 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
                 ],
             }
             seed.pop("summary", None)
+            if "schedule" in seed:  # the review rows only; the candidates stay in storage
+                seed["schedule"] = [{"key": key, **row} for key, row in sorted(seed["schedule"]["rows"].items())]
         return {
             "reference": {
                 "entity": ref.entity,

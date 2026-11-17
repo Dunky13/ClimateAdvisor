@@ -240,6 +240,7 @@
   "status.remote_offset.waiting": "{label} ऑफ़सेट शुरू हो रहा है: {band} का इंतज़ार",
   "status.remote_offset.why_clearing": "समाप्त किया जा रहा है",
   "status.remote_offset.why_retrying": "समाप्त किया जा रहा है, लिखना अस्वीकार होने के बाद फिर कोशिश",
+  "status.schedule.line": "सीखे गए समय: कल जागना {wake} ({wake_sign}{wake_min, number} min), आज रात सोना {bed} ({bed_sign}{bed_min, number} min)। कल {tomorrow, select, weekday {कार्यदिवस} weekend {सप्ताहांत का दिन} other {{tomorrow}}} है।",
   "status.sensor_meta.ca_name": "Climate Advisor की रीडिंग",
   "status.sensor_meta.ca_role": "Climate Advisor जिस रीडिंग का उपयोग करता है",
   "status.sensor_role.bedroom_sensor": "बेडरूम सेंसर",

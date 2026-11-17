@@ -240,6 +240,7 @@
   "status.remote_offset.waiting": "{label}: przesunięcie startuje — oczekiwanie na {band}",
   "status.remote_offset.why_clearing": "kończenie",
   "status.remote_offset.why_retrying": "kończenie, ponowna próba po odrzuconym zapisie",
+  "status.schedule.line": "Wyuczone godziny: pobudka jutro {wake} ({wake_sign}{wake_min, number} min), sen dziś wieczorem {bed} ({bed_sign}{bed_min, number} min). Jutro to {tomorrow, select, weekday {dzień roboczy} weekend {dzień weekendowy} other {{tomorrow}}}.",
   "status.sensor_meta.ca_name": "Odczyt Climate Advisor",
   "status.sensor_meta.ca_role": "odczyt używany przez Climate Advisor",
   "status.sensor_role.bedroom_sensor": "czujnik w sypialni",

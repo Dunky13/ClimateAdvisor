@@ -240,6 +240,7 @@
   "status.remote_offset.waiting": "{label}偏移即将开始：等待{band}",
   "status.remote_offset.why_clearing": "正在清除",
   "status.remote_offset.why_retrying": "正在清除，写入被拒绝后重试",
+  "status.schedule.line": "学习到的时间：明天起床 {wake}（{wake_sign}{wake_min, number} min），今晚就寝 {bed}（{bed_sign}{bed_min, number} min）。明天是{tomorrow, select, weekday {工作日} weekend {周末} other {{tomorrow}}}。",
   "status.sensor_meta.ca_name": "Climate Advisor 读数",
   "status.sensor_meta.ca_role": "Climate Advisor 使用的读数",
   "status.sensor_role.bedroom_sensor": "卧室传感器",

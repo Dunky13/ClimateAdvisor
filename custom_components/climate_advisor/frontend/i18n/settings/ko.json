@@ -44,6 +44,8 @@
   "settings.automation_grace_seconds.description": "Climate Advisor가 HVAC를 재개한 뒤(모든 문과 창문이 닫힌 상태), 문이 잠깐 열려도 곧바로 다시 일시 중지되지 않도록 하는 유예 시간입니다.",
   "settings.automation_grace_seconds.label": "자동화 일시 정지 시간(분)",
   "settings.badge_changed": "변경됨",
+  "settings.bed_signal_entities.description": "선택 사항. 잠자리에 들 때 끄거나 누르는 조명, 스위치, 버튼 또는 도우미입니다. Climate Advisor가 이를 통해 취침 시간을 학습합니다. 선호도 학습이 켜져 있어야 합니다.",
+  "settings.bed_signal_entities.label": "취침 신호",
   "settings.briefing_notifications_enabled.description": "멀티 존 환경에서는 예약된 일일 브리핑 푸시/이메일을 보내는 존이 하나여야 합니다. 그렇지 않으면 존마다 사본을 받게 됩니다. 정확히 한 존에서만 켜세요. 디버그 탭에서 브리핑 보내기를 직접 누르면 꺼져 있어도 항상 전송됩니다.",
   "settings.briefing_notifications_enabled.label": "일일 브리핑 알림 보내기(이 존)",
   "settings.briefing_time.description": "일일 기후 브리핑을 생성해 보내는 시각입니다. 일어났을 때 볼 수 있도록 wake_time보다 이전으로 설정하세요.",
@@ -222,6 +224,10 @@
   "settings.room_pin_night.label": "밤의 방",
   "settings.room_temp_entities.description": "Climate Advisor가 시간대별로 학습된 쾌적 온도를 측정할 수 있는 방 온도 센서(선호 학습이 켜져 있어야 함). 다른 난방기나 에어컨에 내장된 센서는 고르지 마세요.",
   "settings.room_temp_entities.label": "선호 학습용 방 센서",
+  "settings.schedule_max_shift_min.description": "학습한 기상 또는 취침 시간이 설정한 시간에서 벗어날 수 있는 최대 폭입니다. 0이면 설정한 시간을 고정합니다.",
+  "settings.schedule_max_shift_min.label": "최대 일정 이동",
+  "settings.schedule_weekly_step_min.description": "학습한 기상 또는 취침 시간이 일주일에 바뀔 수 있는 최대 폭입니다.",
+  "settings.schedule_weekly_step_min.label": "주간 최대 일정 변경",
   "settings.sensor_debounce_seconds.description": "문/창문 센서의 상태가 안정적으로 유지된 뒤 Climate Advisor가 동작하기까지의 시간입니다. 동작이란 HVAC 일시 중지/재개, 또는 자연 환기 송풍기 제어(집 전체 환기 송풍기 또는 HVAC 송풍기)의 시작/종료입니다. HVAC뿐 아니라 제어하는 모든 장치에 적용됩니다. 짧으면 반응이 빠르지만 문을 잠깐 드나들거나 센서가 불안정하게 튈 때 더 쉽게 반응하고, 길면 안정적이지만 실제 변화에 더 느리게 반응합니다.",
   "settings.sensor_debounce_seconds.label": "센서 디바운스(분)",
   "settings.sensor_polarity_inverted.description": "센서가 열려 있을 때 'off'를 보고한다면 사용하세요(일부 리드 스위치가 이렇게 동작합니다). 극성이 잘못되면 문이 닫혀 있을 때 HVAC가 일시 중지됩니다.",
@@ -298,6 +304,8 @@
   "settings.value_configured": "구성됨",
   "settings.value_n_configured": "{n, plural, other {#개 구성됨}}",
   "settings.value_not_set": "설정 안 됨",
+  "settings.wake_signal_entities.description": "선택 사항. 일어날 때 켜지거나 작동하는 조명, 스위치, 버튼 또는 도우미입니다. Climate Advisor가 이를 통해 기상 시간을 학습합니다. 선호도 학습이 켜져 있어야 합니다.",
+  "settings.wake_signal_entities.label": "기상 신호",
   "settings.wake_time.description": "아침 쾌적 온도가 복원되는 시각입니다. 일찍 설정하면 일어날 때 집이 쾌적하지만 밤사이 에너지를 더 사용합니다.",
   "settings.wake_time.label": "기상 시간",
   "settings.weather_bias_enabled.description": "관찰한 예보 정확도를 바탕으로 내일 예보에 지역별 보정을 적용합니다.",
@@ -305,5 +313,7 @@
   "settings.weather_entity.description": "예보 데이터에 사용하는 날씨 통합입니다. 날씨 유형 분류와 이후의 모든 자동화 판단에 영향을 줍니다.",
   "settings.weather_entity.label": "날씨 엔티티",
   "settings.welcome_home_debounce_seconds.description": "귀가 환영 알림 사이의 최소 간격입니다. 이 시간 안에 누군가 나갔다가 돌아오면 알림이 억제됩니다. 0으로 설정하면 항상 알립니다.",
-  "settings.welcome_home_debounce_seconds.label": "귀가 환영 알림 대기 시간(분)"
+  "settings.welcome_home_debounce_seconds.label": "귀가 환영 알림 대기 시간(분)",
+  "settings.workday_entity.description": "선택 사항. Workday 통합의 센서입니다. 사용하면 학습한 선호도와 학습한 기상·취침 시간에서 공휴일을 쉬는 날로 취급합니다. 사용하지 않으면 토요일과 일요일이 쉬는 날입니다.",
+  "settings.workday_entity.label": "근무일 센서"
 }

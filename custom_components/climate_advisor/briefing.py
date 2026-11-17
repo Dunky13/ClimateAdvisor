@@ -1051,6 +1051,12 @@ def _tldr_msg(
         trend=_trend_msg(c, temp_unit=temp_unit),
         high=i18n.Temp(c.tomorrow_high, temp_unit),
     )
+    if preferences is not None:  # a learned wake time that differs from the configured one
+        learned_wake = preferences.schedule.effective_times(config, (now or dt_util.now()).date() + timedelta(days=1))[
+            0
+        ]
+        if learned_wake != config.get("wake_time") and (wake_clock := _wall_clock(learned_wake)) is not None:
+            tomorrow_row = i18n.Msg("briefing.tldr.tomorrow_wake", tomorrow=tomorrow_row, wake=_clock(wake_clock))
 
     # Issue #85: show occupancy status when not home
     occupancy_row: i18n.Msg | None = None

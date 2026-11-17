@@ -240,6 +240,7 @@
   "status.remote_offset.waiting": "{label}のオフセットを開始中：{band}を待っています",
   "status.remote_offset.why_clearing": "解除中",
   "status.remote_offset.why_retrying": "解除中、書き込みが拒否されたため再試行",
+  "status.schedule.line": "学習した時刻: 明日の起床 {wake} ({wake_sign}{wake_min, number} min)、今夜の就寝 {bed} ({bed_sign}{bed_min, number} min)。明日は{tomorrow, select, weekday {平日} weekend {週末} other {{tomorrow}}}です。",
   "status.sensor_meta.ca_name": "Climate Advisor の読み取り値",
   "status.sensor_meta.ca_role": "Climate Advisor が使用する読み取り値",
   "status.sensor_role.bedroom_sensor": "寝室センサー",

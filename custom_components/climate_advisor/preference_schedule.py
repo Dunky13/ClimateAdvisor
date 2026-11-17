@@ -57,6 +57,12 @@ def clock_minutes(value: Any) -> int | None:
         return None
 
 
+def hhmm(value: Any) -> str | None:
+    """A configured or shifted time as ``"HH:MM"``, None when unset or malformed."""
+    minutes = clock_minutes(value)
+    return None if minutes is None else f"{minutes // 60:02d}:{minutes % 60:02d}"
+
+
 def day_class(day: date, workdays: Mapping[date, bool] | None = None) -> str:
     """``weekday`` for a workday, ``weekend`` for a day off.
 

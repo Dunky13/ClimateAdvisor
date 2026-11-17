@@ -461,7 +461,12 @@
           "room_pin_night": "Room For The Night",
           "room_pin_morning": "Room For The Morning",
           "room_pin_afternoon": "Room For The Afternoon",
-          "room_pin_evening": "Room For The Evening"
+          "room_pin_evening": "Room For The Evening",
+          "workday_entity": "Workday sensor",
+          "wake_signal_entities": "Wake signals",
+          "bed_signal_entities": "Bed signals",
+          "schedule_max_shift_min": "Maximum schedule shift",
+          "schedule_weekly_step_min": "Maximum weekly schedule change"
         },
         "data_description": {
           "preference_learning_enabled": "When on, repeated thermostat changes you make at similar times shift the heating temperature Climate Advisor sets for that kind of time. Off by default.",
@@ -471,7 +476,12 @@
           "room_pin_night": "Auto lets Climate Advisor pick the room whose temperature best matches your changes. Thermostat keeps the thermostat's own reading. Or pick one of the room sensors above.",
           "room_pin_morning": "Auto lets Climate Advisor pick the room whose temperature best matches your changes. Thermostat keeps the thermostat's own reading. Or pick one of the room sensors above.",
           "room_pin_afternoon": "Auto lets Climate Advisor pick the room whose temperature best matches your changes. Thermostat keeps the thermostat's own reading. Or pick one of the room sensors above.",
-          "room_pin_evening": "Auto lets Climate Advisor pick the room whose temperature best matches your changes. Thermostat keeps the thermostat's own reading. Or pick one of the room sensors above."
+          "room_pin_evening": "Auto lets Climate Advisor pick the room whose temperature best matches your changes. Thermostat keeps the thermostat's own reading. Or pick one of the room sensors above.",
+          "workday_entity": "Optional. The Workday integration's sensor. With it, holidays count as days off for learned preferences and learned wake and bed times. Without it, Saturday and Sunday are the days off.",
+          "wake_signal_entities": "Optional. Lights, switches, buttons or helpers that turn on or fire when you get up. Climate Advisor learns your wake time from them. Needs preference learning on.",
+          "bed_signal_entities": "Optional. Lights, switches, buttons or helpers you switch off or press when you go to bed. Climate Advisor learns your bedtime from them. Needs preference learning on.",
+          "schedule_max_shift_min": "The most a learned wake or bed time may move from the time you configured. 0 keeps your configured times fixed.",
+          "schedule_weekly_step_min": "The most a learned wake or bed time may change per week."
         }
       },
       "ai_settings": {
@@ -548,7 +558,8 @@
       "vacation_heat_above_away_warning": "Vacation heating is warmer than away heating, so a vacation uses more energy than a normal day out. Submit again to keep this.",
       "vacation_cool_below_away_warning": "Vacation cooling is cooler than away cooling, so a vacation uses more energy than a normal day out. Submit again to keep this.",
       "vacation_freeze_warning": "With this setting, vacation heating ends up below 45 °F (7 °C). Pipes can freeze during a long trip. Submit again to keep this.",
-      "room_pin_not_selected": "Pick auto, thermostat, or one of the room sensors selected above."
+      "room_pin_not_selected": "Pick auto, thermostat, or one of the room sensors selected above.",
+      "signal_entity_not_found": "One of the signal entities does not exist. Pick entities that exist in Home Assistant."
     }
   },
   "issues": {

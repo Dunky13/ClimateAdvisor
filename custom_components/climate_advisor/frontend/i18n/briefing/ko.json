@@ -100,6 +100,7 @@
   "briefing.tldr.occupancy_vacation_deep": "  재실 상태: 휴가 — 깊은 절약 온도 적용 중",
   "briefing.tldr.preference": "  학습된 선호도 ({day_type}, {day_class}): {entries}",
   "briefing.tldr.tomorrow": "  내일: {trend} ({high})",
+  "briefing.tldr.tomorrow_wake": "{tomorrow}\n  내일 기상: {wake} (학습됨)",
   "briefing.tldr.windows_close_by": "  창문: {when}까지 닫기",
   "briefing.tldr.windows_closed": "  창문: 하루 종일 닫기",
   "briefing.tldr.windows_hot_both": "  창문: {when}까지 닫기 (<{threshold}) / {open} 이후 열기",

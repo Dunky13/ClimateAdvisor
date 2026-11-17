@@ -44,6 +44,8 @@
   "settings.automation_grace_seconds.description": "Climate Advisor के HVAC दोबारा चालू करने (सभी दरवाज़े/खिड़कियां बंद) के बाद, यह विराम अवधि दरवाज़ा थोड़ी देर खुलने पर तुरंत फिर रुकने से रोकती है।",
   "settings.automation_grace_seconds.label": "ऑटोमेशन विराम अवधि (मिनट)",
   "settings.badge_changed": "बदला हुआ",
+  "settings.bed_signal_entities.description": "वैकल्पिक। लाइट, स्विच, बटन या हेल्पर जिन्हें आप सोते समय बंद करते हैं या दबाते हैं। Climate Advisor इनसे आपके सोने का समय सीखता है। प्राथमिकता सीखना चालू होना ज़रूरी है।",
+  "settings.bed_signal_entities.label": "सोने के संकेत",
   "settings.briefing_notifications_enabled.description": "एक से अधिक ज़ोन वाले सेटअप में केवल एक ज़ोन को निर्धारित दैनिक ब्रीफ़िंग पुश/ईमेल भेजना चाहिए, वरना हर ज़ोन से एक प्रति मिलेगी। इसे ठीक एक ज़ोन के लिए चालू करें। डीबग टैब में ब्रीफ़िंग भेजें दबाने पर यह बंद होने पर भी हमेशा भेजी जाती है।",
   "settings.briefing_notifications_enabled.label": "दैनिक ब्रीफ़िंग सूचनाएं भेजें (यह ज़ोन)",
   "settings.briefing_time.description": "दैनिक जलवायु ब्रीफ़िंग कब बनाई और भेजी जाती है। यह जागने के समय से पहले होनी चाहिए ताकि उठते ही आप इसे देख सकें।",
@@ -222,6 +224,10 @@
   "settings.room_pin_night.label": "रात का कमरा",
   "settings.room_temp_entities.description": "कमरे के तापमान सेंसर जिनसे Climate Advisor दिन के हर हिस्से में आपका सीखा हुआ आराम तापमान माप सकता है (पसंद सीखना चालू होना चाहिए)। किसी दूसरे हीटर या एसी में लगा सेंसर न चुनें।",
   "settings.room_temp_entities.label": "पसंद के लिए कमरे के सेंसर",
+  "settings.schedule_max_shift_min.description": "सीखा गया जागने या सोने का समय आपके तय किए समय से अधिकतम कितना खिसक सकता है। 0 होने पर आपके तय किए समय स्थिर रहते हैं।",
+  "settings.schedule_max_shift_min.label": "अधिकतम समय-सारणी बदलाव",
+  "settings.schedule_weekly_step_min.description": "सीखा गया जागने या सोने का समय प्रति सप्ताह अधिकतम कितना बदल सकता है।",
+  "settings.schedule_weekly_step_min.label": "साप्ताहिक अधिकतम समय-सारणी बदलाव",
   "settings.sensor_debounce_seconds.description": "दरवाज़ा/खिड़की सेंसर की स्थिति कितनी देर स्थिर रहनी चाहिए, उसके बाद Climate Advisor कार्रवाई करता है — HVAC रोकना/चलाना, या प्राकृतिक-वेंटिलेशन पंखा नियंत्रण (पूरे घर का पंखा या HVAC पंखा) शुरू/बंद करना। यह केवल HVAC पर नहीं, हर नियंत्रित उपकरण पर लागू होता है। छोटे मान जल्दी प्रतिक्रिया देते हैं लेकिन दरवाज़े से झट से गुज़रने या सेंसर के अस्थिर होने के प्रति अधिक संवेदनशील होते हैं; लंबे मान स्थिर होते हैं पर असली बदलाव पर धीमे प्रतिक्रिया देते हैं।",
   "settings.sensor_debounce_seconds.label": "सेंसर डिबाउंस (मिनट)",
   "settings.sensor_polarity_inverted.description": "यदि आपके सेंसर खुले होने पर ‘off’ बताते हैं (कुछ रीड स्विच ऐसे होते हैं) तो चालू करें। गलत पोलैरिटी का मतलब है दरवाज़े बंद होने पर HVAC रुकेगा।",
@@ -298,6 +304,8 @@
   "settings.value_configured": "कॉन्फ़िगर है",
   "settings.value_n_configured": "{n, plural, one {# कॉन्फ़िगर} other {# कॉन्फ़िगर}}",
   "settings.value_not_set": "सेट नहीं",
+  "settings.wake_signal_entities.description": "वैकल्पिक। लाइट, स्विच, बटन या हेल्पर जो आपके उठने पर चालू होते हैं या सक्रिय होते हैं। Climate Advisor इनसे आपके जागने का समय सीखता है। प्राथमिकता सीखना चालू होना ज़रूरी है।",
+  "settings.wake_signal_entities.label": "जागने के संकेत",
   "settings.wake_time.description": "सुबह के आरामदायक तापमान कब बहाल हों। जल्दी का समय मतलब उठते समय घर आरामदायक होता है पर रात भर ज़्यादा ऊर्जा लगती है।",
   "settings.wake_time.label": "जागने का समय",
   "settings.weather_bias_enabled.description": "देखी गई पूर्वानुमान सटीकता के आधार पर कल के पूर्वानुमान में स्थान-विशेष सुधार लागू करें।",
@@ -305,5 +313,7 @@
   "settings.weather_entity.description": "पूर्वानुमान डेटा के लिए उपयोग होने वाला मौसम इंटीग्रेशन। यह दिन के प्रकार का वर्गीकरण और आगे के सभी ऑटोमेशन निर्णय तय करता है।",
   "settings.weather_entity.label": "मौसम एंटिटी",
   "settings.welcome_home_debounce_seconds.description": "घर में स्वागत सूचनाओं के बीच न्यूनतम समय। कोई निकलकर इस अवधि में लौटे तो सूचना दबा दी जाती है। हमेशा सूचित करने के लिए 0 रखें।",
-  "settings.welcome_home_debounce_seconds.label": "घर में स्वागत शांत अवधि (मिनट)"
+  "settings.welcome_home_debounce_seconds.label": "घर में स्वागत शांत अवधि (मिनट)",
+  "settings.workday_entity.description": "वैकल्पिक। Workday इंटीग्रेशन का सेंसर। इसके साथ, सीखी गई प्राथमिकताओं और सीखे गए जागने व सोने के समय के लिए छुट्टियाँ अवकाश मानी जाती हैं। इसके बिना शनिवार और रविवार अवकाश होते हैं।",
+  "settings.workday_entity.label": "कार्यदिवस सेंसर"
 }

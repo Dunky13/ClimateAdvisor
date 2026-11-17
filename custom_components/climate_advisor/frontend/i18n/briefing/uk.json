@@ -100,6 +100,7 @@
   "briefing.tldr.occupancy_vacation_deep": "  Присутність: відпустка — глибоке зниження",
   "briefing.tldr.preference": "  Вивчене уподобання ({day_type}, {day_class}): {entries}",
   "briefing.tldr.tomorrow": "  Завтра: {trend} ({high})",
+  "briefing.tldr.tomorrow_wake": "{tomorrow}\n  Пробудження завтра: {wake} (вивчено)",
   "briefing.tldr.windows_close_by": "  Вікна: зачинити до {when}",
   "briefing.tldr.windows_closed": "  Вікна: зачинені цілий день",
   "briefing.tldr.windows_hot_both": "  Вікна: зачинити до {when} (<{threshold}) / відчинити від {open}",
