@@ -2,8 +2,8 @@
 
 # Preference Learning (fork feature, Dunky13#1)
 
-Status: phase 1 shipped (0.9.41.1); phase 3 (rooms, humidity, history backfill) implemented in 0.9.41.2; phase 2
-planned. Fork-only feature; upstream is gunkl/ClimateAdvisor.
+Status: phase 1 shipped (0.9.41.1); phase 3 (rooms, humidity, history backfill) shipped (0.9.41.2); phase 2 (learned
+wake and bed times) specified for 0.9.41.3. Fork-only feature; upstream is gunkl/ClimateAdvisor.
 
 ## Goal
 
@@ -26,6 +26,10 @@ bounds. This implements the "Override Pattern Analysis" future-work item in
 | D7 | (2026-11-16) Humidity is a learning dimension from the start (dry air feels colder), accepting that buckets need more observations. |
 | D8 | (2026-11-16) History backfill: past setpoint changes become a proposed seed the user reviews and accepts on the dashboard; recurring thermostat-schedule changes are filtered out. Room and humidity history is imported as context. |
 | D9 | (2026-11-16) Phase 3 (rooms, humidity, backfill) ships before phase 2 (wake and bed times). |
+| D10 | (2026-11-17) Learned wake and bed times are applied automatically, bounded: at most 15 minutes per week, at most 90 minutes from the configured time. Visible on the dashboard, with a reset. |
+| D11 | (2026-11-17) Wake and bed times are learned from optional signal entities the user selects (lights, switches, buttons), with the occupant's thermostat changes as the fallback. |
+| D12 | (2026-11-17) Weekday/weekend follows an optional Workday sensor (holidays are days off), for phase 1's day class too; without it, Saturday and Sunday. |
+| D13 | (2026-11-17) "Analyse history" also proposes wake and bed times, reviewed and accepted like the temperature rows. |
 
 ## Phase 1: setpoint preference learning
 
@@ -202,13 +206,179 @@ Learning is only meaningful when Climate Advisor is the only thing that sets the
 occupants. On a Google Nest, turn off the Nest schedule, Eco temperatures, Home/Away Assist and Auto-Schedule in the
 Google Home app before enabling automation and preference learning.
 
-## Phase 2: learned wake and bed times (planned)
+## Phase 2: learned wake and bed times
 
-Separate weekday and weekend wake and bed times, learned from when the occupant's morning raises and evening
-lowers happen, bounded by a maximum shift per week. Requires a date-aware sleep window, re-registered wake/bed
-timers, and rerouting the ~15 direct parsers of `wake_time` / `sleep_time`. Specified before implementation. The
-pre-wake and pre-bed episodes that phase 1 excludes from setpoint learning (the 60-minute schedule-edge window) are
-the input for these learned wake and bed times. Ships after phase 3 (D9).
+Implements D2's wake and bed times and D10 to D13. Fork version `0.9.41.3`.
+
+### Evidence from the target install (2026-11-17)
+
+Recorder history, 2026-10-17 to 2026-11-17:
+
+- Configured `wake_time` 06:30 and `sleep_time` 22:30 (the defaults).
+- `light.bedroom` first turns on between 06:27 and 07:25 on workdays (median about 07:03) and between 06:40 and
+  08:10 on days off (one 10:00). Its evening use (on about 17:00 to 19:30, off by 20:00) is not bedtime. It is a
+  wake signal only.
+- `light.tv_wled` (the TV LED) is turned on by an automation at 07:00:01 every day. It goes off by hand between 23:15
+  and 23:56 on 9 of 31 nights and by an automation at exactly 23:59:00 on the others. On the late nights the downstairs
+  switch's off button (`event.downstairs_switch_*`) is pressed between 00:12 and 00:50. Bedtime is therefore about
+  23:15 to 00:50, roughly 80 minutes after the configured 22:30.
+- Both of those trigger the "Good night" automation, which sets the Nest to 18 °C. That automation, not the Nest
+  schedule, is the source of the "about 23:59 18.0 °C" slot in the phase 3 evidence, and of the 18 °C writes at
+  varying times between 23:15 and 00:50.
+- `binary_sensor.workday_sensor` exists (Workday integration; `workday.check_date` is available and returns a
+  response).
+- Home Assistant's history API returns states without context (`LazyState.context` is empty), so history cannot tell
+  a person's change from an automation's. Live state-change events carry a context.
+
+### Off by default
+
+Everything in this phase requires `preference_learning_enabled`. With learning disabled, or with
+`schedule_max_shift_min` at 0, wake and bed times are the configured ones, the wake and bed timers register exactly as
+today, and every output is identical to phase 3. Without a workday entity the day class stays Saturday and Sunday.
+All golden simulations stay unchanged.
+
+### Settings (options flow step `preference_learning`)
+
+| Key | Type | Default | Notes |
+|-----|------|---------|-------|
+| `workday_entity` | entity id or empty | empty | `binary_sensor` of the `workday` integration. Opt-in. |
+| `wake_signal_entities` | list of entity ids | `[]` | `light`, `switch`, `input_boolean`, `binary_sensor`, `event`. |
+| `bed_signal_entities` | list of entity ids | `[]` | Same domains. Help text: pick what you switch off or press when you go to bed. |
+| `schedule_max_shift_min` | minutes | `90` | 0 to 180. 0 keeps the configured times fixed. |
+| `schedule_weekly_step_min` | minutes | `15` | 5 to 60. |
+
+Validation: a signal entity must exist; the same entity may be in both lists. The configured `wake_time` and
+`sleep_time` stay the user's base; the learned shift is applied on top and shown next to them.
+
+### Day class (D12, also changes phase 1)
+
+With `workday_entity` set, a date's class is `weekday` when `workday.check_date` says it is a workday, otherwise
+`weekend` (holidays are days off). The bucket key labels stay `weekday` and `weekend`, so stored phase 1 and 3 offsets
+keep their meaning. Without it, or when the call fails (logged at WARNING once per date), Saturday and Sunday are
+`weekend`. Results are cached per date in memory. The coordinator resolves every date it needs on the event loop:
+today, tomorrow and, for a backfill, every date in the window before the executor job starts. Pure functions receive a
+`{date: is_workday}` mapping and fall back to the weekday rule for a missing date. A night still belongs to the day it
+wakes into.
+
+### Effective schedule (one seam)
+
+`learned_schedule` holds a signed shift in minutes per class and kind:
+`{"weekday": {"wake": 0, "bed": 0}, "weekend": {"wake": 0, "bed": 0}}`.
+
+- `effective_times(day)` returns the wake time on the morning of `day` (class of `day`) and the bedtime on the evening
+  of `day` (class of `day + 1`, the day that night wakes into), each the configured time plus the shift clamped to
+  `±schedule_max_shift_min`, as `"HH:MM"`, wrapping past midnight.
+- `schedule_at(at)` returns the `(sleep_time, wake_time)` pair for the night that matters at `at`: before 12:00 the
+  night that ends this morning (yesterday's bedtime and today's wake), from 12:00 the coming night (today's bedtime
+  and tomorrow's wake). The existing `in_sleep_window` semantics apply unchanged to that pair, including a bedtime at
+  or after midnight (#1376, non-wrapping branch).
+- Every reader of `wake_time` and `sleep_time` that means "the schedule at this moment" goes through `schedule_at`;
+  forward-looking readers (chart band, plan, operation timeline, `predictor_v4` and `v4_shadow`, pre-cool fallback,
+  briefing, next-automation text, `prediction_accuracy`) call it for each moment of their horizon, so a 24-hour horizon
+  that crosses from a workday into a day off uses both. `predictor_v4.in_sleep_window` stays hass-free: it receives
+  the pair. Readers that mean "the configured setting" (options flow, validation, settings display) keep the raw
+  value. Grep every read (counts at 0.9.41.2: coordinator 53, automation 22, operation_timeline 18, v4_shadow 15,
+  predictor_v4 14, preference_learning 11, prediction_accuracy 11, briefing 11, config_flow 8, const 7, v4_archive 5,
+  preference_backfill 2, invariant_watchdog 2, api 2, ai_skills_context 2) and classify each one in the PR.
+- Phase 1's part of day and the 60-minute wake and bed exclusion use the effective times.
+
+### Timers
+
+With phase 2 inactive the wake and bed callbacks stay registered with `async_track_time_change` at the configured
+times, exactly as today (the golden simulations and HA-tier tests hook these). When active, they are scheduled with
+`async_track_point_in_time` for the next effective wake and the next effective bedtime (local clock, DST-safe), and
+re-armed after each fire and whenever the shift, the workday entity or the configured times change (weekly update,
+seed accept, reset, options reload). A bedtime that moves past midnight fires once, on the right calendar day.
+
+### Candidates
+
+One candidate per class, kind and night at most:
+
+- **Wake.** The first qualifying activation of a wake signal entity in `[configured wake − 3 h, configured wake + 3 h]`
+  on that morning. Activation: a change to `on` for `light`, `switch`, `input_boolean` and `binary_sensor`; any new
+  event for `event`.
+- **Bed.** The last qualifying deactivation of a bed signal entity in `[configured bedtime − 3 h, configured bedtime +
+  3 h]` of that night (a time after midnight belongs to the previous evening). Deactivation: a change to `off`; any new
+  event for `event`.
+- Only real transitions count: the old and new states are both known (not `unavailable` or `unknown`), so a restart or
+  a dropped device never counts, and a history read's synthetic start-of-window state is skipped.
+- **Not caused by an automation** (the shared predicate below, live only).
+- Occupancy home or guest at the moment (live); history assumes home.
+- **Thermostat fallback.** For a kind with no signal entities selected and automation on (phase 1 rule 2): the start
+  of an occupant raise episode in the 60 minutes before the effective wake is a wake candidate; the start of an
+  occupant lower episode in the 60 minutes before the effective bedtime is a bed candidate. These only move times
+  earlier (once the heat is right nobody adjusts), which is why sensors are preferred.
+
+Signal entities are observed in observe-only mode too: lights and switches are not confounded by Climate Advisor's
+own writes.
+
+A candidate is stored as `{"date", "class", "kind", "delta_min", "source": "sensor" | "thermostat" | "history"}` where
+`date` is the waking date and `delta_min` is the signed distance from the configured time, wrapped to ±12 h. Retention
+like observations (400 days, 2000 entries).
+
+### Automation-caused changes (shared predicate)
+
+A live state change is automation-caused when its context has a `parent_id`, or when a `call_service` event with a
+`parent_id` context targeted that entity within the previous 120 seconds (targets resolved through entity, device and
+area ids; the Nest's state update arrives through the cloud and often does not carry the caller's context). One
+tracker, one predicate, used by the signal collector and by the live phase 1 to 3 observation path (an
+automation-caused thermostat change is not an occupant override for learning; it may still be an override for the
+rest of Climate Advisor, which is unchanged). History has no context: history candidates and history thermostat
+changes rely on the schedule filter. For signal entities the filter uses ±2 minutes (automations fire to the second;
+±10 minutes would also remove the person who turns the TV LED off at 23:54 near the automation's 23:59).
+
+### Weekly update
+
+Runs with the phase 1 weekly update. Per class and kind:
+
+1. Take the most recent 20 candidates. Fewer than 4: no change.
+2. `target = median(delta_min)`, clamped to `±schedule_max_shift_min`.
+3. `new = current + clamp(target − current, ±schedule_weekly_step_min)`, clamped, rounded to 5 minutes.
+4. Log a change at INFO and record it in `preference_history`. Re-arm the timers.
+
+Lowering `schedule_max_shift_min` takes effect immediately (shifts are clamped when read).
+
+### History backfill and seed
+
+The existing "Analyse history" also reads the signal entities' history for the window, resolves workday for each date
+first, applies the ±2-minute schedule filter, builds candidates (`source: history`) and adds one review row per class
+and kind: n, median, current shift and the shift it would set. Rows with fewer than 4 candidates are shown disabled.
+Accept applies the selected rows' shifts immediately (clamped to the maximum, not limited by the weekly step) and adds
+the candidates to `schedule_candidates`; Discard drops them. Both re-arm the timers. A candidate already stored for the
+same date, kind and source is not added twice.
+
+### Persistence
+
+New `LearningState` fields: `learned_schedule` and `schedule_candidates`. Validated in `load_state`; the
+`preferences` reset scope clears them.
+
+### Visibility
+
+- Status tab: "Wake 07:05 on workdays (learned, +35 min) · Bed 23:50 (learned, +80 min)", with tomorrow's class.
+- Analysis tab: per class and kind the configured time, shift, target, n and source, plus the most recent candidates.
+- Briefing: tomorrow's wake time when it differs from the configured one.
+- Diagnostics: the new state. All text through i18n in all 16 languages.
+
+### Fixes to phases 1 and 3 in this PR
+
+- The live observation path skips automation-caused thermostat changes (shared predicate).
+- An HA-tier test against a real recorder pins that history states carry no context, so a future HA change that adds
+  it is noticed (and the phase 3 note "rarely applies" becomes "never applies on this HA version").
+
+### Tests
+
+- Pure: `effective_times` and `schedule_at` across the noon pivot, Friday night and Sunday night with and without a
+  workday mapping, a holiday, bedtime 23:59, 00:00 and 00:10 (sleep-window branch flip; `automation._in_sleep_window`
+  and `predictor_v4.in_sleep_window` agree), a DST night (2026-10-25); candidate extraction (first on, last off, events,
+  unavailable and unknown skipped, after-midnight bedtimes assigned to the previous evening); wrapped median; weekly
+  step and clamp; ±2-minute schedule filter on the recorded TV LED pattern (07:00:01 on and 23:59:00 off removed, the
+  23:15 to 23:56 hand offs kept).
+- Engine and coordinator: timers registered as today when inactive; point-in-time timers fire at the effective times
+  and re-arm after accept and the weekly update; a 24-hour chart horizon from a Friday afternoon uses both classes;
+  the automation-caused predicate (parent context, and a `call_service` with a device target 30 s before) for the
+  signal collector and the thermostat observation path; workday resolution on the loop before the backfill executor
+  job; accept and discard.
+- Golden simulations unchanged; the pending scenarios gain one where a learned 23:50 bedtime moves the setback.
 
 ## Phase 3: rooms, humidity and history backfill
 
@@ -219,8 +389,9 @@ Implements D3, D6, D7 and D8. Fork version `0.9.41.2`.
 Recorder history of `climate.living_room` (30 days, 2026-10-17 to 2026-11-16, raw resolution) and the room sensors
 was analysed before this spec was written:
 
-- The Nest schedule is fixed and recognisable: 01:30 15.9, 06:15 16.0, 07:15 16.8, 08:45 15.9, 21:30 16.1 and about
-  23:59 18.0 °C, each within ±2 minutes on every day. After removing those, 85 occupant episodes remain (bursts of
+- The Nest schedule is fixed and recognisable: 01:30 15.9, 06:15 16.0, 07:15 16.8, 08:45 15.9 and 21:30 16.1 °C,
+  each within ±2 minutes on every day. A further 18.0 °C at about 23:59 (and at varying times from 23:15 to 00:50) is
+  the "Good night" automation, not the Nest schedule (found in phase 2). After removing those, 85 occupant episodes remain (bursts of
   dial changes grouped with the phase 1 15-minute rule): morning raises to 19.5 to 21 °C, daytime raises to about
   20 °C, evening lowers to 16 to 17 °C.
 - Room temperatures at the moment of a raise (hourly means): morning, thermostat MAD 0.59 °C (n=40), living room
