@@ -3,6 +3,19 @@
 All notable changes to Climate Advisor are documented here.
 This project follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) conventions.
 
+## [0.9.41.3] — 2026-11-17
+
+### Added (fork feature, off by default)
+- Feat #1: preference learning, phase 2: learned wake and bed times. Needs Learn Setpoint Preferences on and a maximum schedule shift above 0; otherwise Climate Advisor behaves exactly as in 0.9.41.2.
+  - **Signals:** under Settings, Learning & prediction, pick the lights, switches, buttons or helpers that you use when you get up (**Wake Signal Entities**) and when you go to bed (**Bed Signal Entities**). The first activation within three hours of your configured wake time is a wake signal; the last switch-off within three hours of your configured bedtime is a bedtime signal. For a kind without signal entities, a thermostat change you make in the hour before the wake or bed time counts instead. Changes an automation caused are ignored.
+  - **Learning:** the weekly update moves a learned wake or bed time towards the median of your recent signals (at least 4 are needed), per weekday and weekend, by at most **Learned Schedule Weekly Step** (default 15 min) and never more than **Learned Schedule Maximum Shift** (default 90 min) from the time you configured. A **Workday Sensor** makes holidays count as weekend days.
+  - **Where it applies:** the sleep window, the bedtime setback, the morning warm-up, the briefing, the chart and the predictions all use the learned times; your configured times stay the base and are shown next to them. **Analyse history** also reads the signal entities' recorded history and proposes a shift per day class that you can accept row by row.
+  - **Where it shows:** the Status tab says "Learned times: wake tomorrow 07:05 (+35 min), bed tonight 23:50 (+80 min)", the Analysis tab shows the configured time, shift, target and sample count per day class and kind plus the latest signals, and the briefing names tomorrow's learned wake time.
+  - Spec: `docs/preference-learning-spec.md`, Phase 2.
+
+### Fixed (fork feature)
+- Thermostat changes caused by an automation no longer count as your preferences, and a change an automation made right after a service call on the thermostat is recognised even when the thermostat's cloud update lost the context.
+
 ## [0.9.41.2] — 2026-11-16
 
 ### Added (fork feature, off by default)

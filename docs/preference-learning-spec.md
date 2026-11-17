@@ -3,7 +3,7 @@
 # Preference Learning (fork feature, Dunky13#1)
 
 Status: phase 1 shipped (0.9.41.1); phase 3 (rooms, humidity, history backfill) shipped (0.9.41.2); phase 2 (learned
-wake and bed times) specified for 0.9.41.3. Fork-only feature; upstream is gunkl/ClimateAdvisor.
+wake and bed times) shipped (0.9.41.3). Fork-only feature; upstream is gunkl/ClimateAdvisor.
 
 ## Goal
 
@@ -379,6 +379,27 @@ New `LearningState` fields: `learned_schedule` and `schedule_candidates`. Valida
   signal collector and the thermostat observation path; workday resolution on the loop before the backfill executor
   job; accept and discard.
 - Golden simulations unchanged; the pending scenarios gain one where a learned 23:50 bedtime moves the setback.
+
+### Implementation notes (phase 2, as built)
+
+- A seed accept adds only the candidates of the rows the occupant selected. Candidates are deduplicated by (date, kind),
+  stricter than the spec's per class, kind and night, because a night has one wake and one bedtime.
+- Seed row keys are `"<class>|<kind>"`. A candidate's `delta_min` is validated to ±180 minutes (the maximum shift).
+- Readers that look at a past night keep the pair stored at that moment: `night_replay` windows stay on the raw
+  config, `v4_archive` uses the pair stored at `now` and `night_window` receives the pair at `now`.
+  `compute_bedtime_setback` uses the configuration at `now`.
+- The history replay uses the current view with the weekday rule where a date has no resolved workday.
+- The backfill has no thermostat-history fallback for a kind without signal entities (only live thermostat changes
+  feed that fallback). The `user_id` keep rule in the backfill is left as it is (phase 3 scope).
+- A restart loses the first `event` entity event because the previous state is unknown.
+- The `preference_seed_accepted` message does not mention schedule rows; the API response carries `schedule` (the keys
+  applied) instead.
+- `homeassistant.helpers.target` (`TargetSelection`, `async_extract_referenced_entity_ids`) is verified on HA 2026.10
+  only; the integration's minimum is 2026.3.0, where it is unchecked. The HA-tier test pins that recorder history
+  carries no context.
+- The Analysis tab's schedule table shows the configured time, shift, target and sample count; the signal source is
+  listed on the recent-signal lines, not per row. Times in that table are 24-hour `HH:MM`.
+- Open decision: thermostat fallback candidates only move times earlier (as specified); sensors are preferred.
 
 ## Phase 3: rooms, humidity and history backfill
 

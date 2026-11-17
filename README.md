@@ -148,6 +148,8 @@ Climate Advisor can learn the heating temperature you actually want from your ow
 
 With preference learning on you can also pick room temperature sensors and, per part of the day, let a room steer the heating (Climate Advisor nudges the thermostat setpoint until that room is warm, the same way the bedroom sensor works at night; heating only), and learned adjustments are kept per humidity band (dry, normal, humid). **Analyse history** on the Analysis tab (or the `climate_advisor.backfill_preferences` service) proposes adjustments from your thermostat's recorded history; nothing applies until you accept them.
 
+Preference learning can also learn when you get up and go to bed: pick the lights, switches or buttons you use at those moments (and optionally the Workday sensor) and Climate Advisor shifts its wake time and bedtime, per weekday and weekend, by at most your **Learned Schedule Maximum Shift** (default 90 minutes). The sleep window, bedtime setback, morning warm-up, briefing and predictions all follow the learned times; your configured times stay the base.
+
 Learning is only meaningful when Climate Advisor is the only thing that sets the temperature apart from you. On a Google Nest, turn off the Nest schedule, Eco temperatures, Home/Away Assist and Auto-Schedule in the Google Home app before enabling automation and preference learning.
 
 ### Multiple zones

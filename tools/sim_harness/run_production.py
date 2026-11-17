@@ -509,6 +509,10 @@ class FakeHassSession:
             coordinator.learning._state.preference_offsets = {
                 bucket: {"offset_f": float(offset)} for bucket, offset in scenario["preference_offsets"].items()
             }
+        # Fork #1 phase 2: ``learned_schedule`` {class: {kind: minutes}} seeds the learned wake and bed shifts; they
+        # apply only when the scenario config also sets ``preference_learning_enabled``.
+        if isinstance(scenario.get("learned_schedule"), dict) and coordinator is not None:
+            coordinator.learning._state.learned_schedule = scenario["learned_schedule"]
         if "hourly_forecast" in scenario and isinstance(scenario["hourly_forecast"], list) and coordinator is not None:
             # Production's coordinator owns the forecast (_refresh_hourly_forecast); the engine holds no copy.
             coordinator._hourly_forecast_temps = scenario["hourly_forecast"]
