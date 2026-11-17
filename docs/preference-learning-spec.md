@@ -268,9 +268,9 @@ wakes into.
 - `effective_times(day)` returns the wake time on the morning of `day` (class of `day`) and the bedtime on the evening
   of `day` (class of `day + 1`, the day that night wakes into), each the configured time plus the shift clamped to
   `±schedule_max_shift_min`, as `"HH:MM"`, wrapping past midnight.
-- `schedule_at(at)` returns the `(sleep_time, wake_time)` pair for the night that matters at `at`: before 12:00 the
+- `schedule_at(at)` returns the `WakeBed(wake, bed)` named tuple for the night that matters at `at`: before 12:00 the
   night that ends this morning (yesterday's bedtime and today's wake), from 12:00 the coming night (today's bedtime
-  and tomorrow's wake). The existing `in_sleep_window` semantics apply unchanged to that pair, including a bedtime at
+  and tomorrow's wake). The existing `in_sleep_window` semantics apply unchanged to those times, including a bedtime at
   or after midnight (#1376, non-wrapping branch).
 - Every reader of `wake_time` and `sleep_time` that means "the schedule at this moment" goes through `schedule_at`;
   forward-looking readers (chart band, plan, operation timeline, `predictor_v4` and `v4_shadow`, pre-cool fallback,
@@ -397,7 +397,9 @@ New `LearningState` fields: `learned_schedule` and `schedule_candidates`. Valida
   120 seconds (bounded, pruned, unsubscribed on unload). A state change or service call whose context id or parent id
   is a remembered run, or whose service call has a parent id, is an automation's. This covers time-triggered
   automations, whose context has no parent.
-- A reset re-arms the wake and bed timers. A failed workday lookup is retried after an hour and warns once per date.
+- A reset (the dashboard button and the `reset_learning_data` service alike, through `async_reset_learning`) re-arms the
+  wake and bed timers. `night_replay` rolls a bedtime before noon (learned or configured) to the next calendar day. A failed workday lookup is retried after an hour and warns once per date.
+- The seed review's Current column is the stored shift clamped to the current cap, as read.
 - The weekly step starts from the current clamped shift, not the stored one (a lowered cap moves the step's base).
 - The `preference_seed_accepted` message does not mention schedule rows; the API response carries `schedule` (the keys
   applied) instead.

@@ -751,9 +751,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             zone_coordinator = _resolve_zone_coordinator(hass, call)
             with log_capture.zone_scope(zone_coordinator.zone_label):
                 scope = call.data.get("scope", "all")
-                await hass.async_add_executor_job(
-                    log_capture.bind_zone_for_executor(zone_coordinator.learning.reset), scope
-                )
+                await zone_coordinator.async_reset_learning(scope)
                 _LOGGER.info("Learning data reset via service: entry_id=%s scope=%s", call.data.get("entry_id"), scope)
 
         hass.services.async_register(

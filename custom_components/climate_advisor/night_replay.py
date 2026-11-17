@@ -71,8 +71,9 @@ def find_nights(
     d = first
     while d <= last:
         night_bed, night_wake = night_times(d) if night_times is not None else (bed, wake)
-        start = datetime(d.year, d.month, d.day, night_bed[0], night_bed[1], tzinfo=tz)
         nxt = d + timedelta(days=1)
+        bed_day = nxt if night_bed[0] < 12 else d  # a bedtime after midnight belongs to the evening of ``d``
+        start = datetime(bed_day.year, bed_day.month, bed_day.day, night_bed[0], night_bed[1], tzinfo=tz)
         end = datetime(nxt.year, nxt.month, nxt.day, night_wake[0], night_wake[1], tzinfo=tz)
         n = int((end.timestamp() - start.timestamp()) // STEP_S)
         grid = [start] + p4.grid_steps(start, n)

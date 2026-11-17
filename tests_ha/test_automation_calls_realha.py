@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from homeassistant.core import Context, Event
+from homeassistant.core import Context, Event, callback
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
@@ -80,10 +80,21 @@ def _track(hass):
     from custom_components.climate_advisor.automation_calls import RUN_EVENTS
 
     calls, verdicts = AutomationCalls(), []
-    hass.bus.async_listen("call_service", lambda event: calls.record(hass, event))
-    for run_event in RUN_EVENTS:
-        hass.bus.async_listen(run_event, calls.record_run)
 
+    # ``@callback`` like production: a plain function would run as an executor job, unordered and off the loop.
+    @callback
+    def _called(event):
+        calls.record(hass, event)
+
+    @callback
+    def _ran(event):
+        calls.record_run(event)
+
+    hass.bus.async_listen("call_service", _called)
+    for run_event in RUN_EVENTS:
+        hass.bus.async_listen(run_event, _ran)
+
+    @callback
     def _changed(event):
         new = event.data["new_state"]
         if event.data["entity_id"] == "input_boolean.tv_led" and event.data["old_state"] is not None:

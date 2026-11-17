@@ -682,6 +682,7 @@ def test_reset_preferences_clears_nothing_but_the_preference_fields_via_the_view
 
     from custom_components.climate_advisor.api import ClimateAdvisorResetPreferencesView
     from custom_components.climate_advisor.const import DOMAIN
+    from custom_components.climate_advisor.coordinator import ClimateAdvisorCoordinator
 
     engine = _engine(tmp_path)
     engine._state.preference_offsets = {B: {"offset_f": 1.0, "n": 3, "level": "bucket", "updated": "2026-11-16"}}
@@ -696,6 +697,8 @@ def test_reset_preferences_clears_nothing_but_the_preference_fields_via_the_view
         return fn(*args)
 
     hass.async_add_executor_job = _run_in_executor
+    coordinator.hass = hass
+    coordinator.async_reset_learning = ClimateAdvisorCoordinator.async_reset_learning.__get__(coordinator)
     request = MagicMock()
     request.app = {"hass": hass}
     request.query = {}

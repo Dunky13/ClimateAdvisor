@@ -367,6 +367,11 @@ def test_seed_rows_flag_thin_pairs_disabled_and_set_the_clamped_median():
     )
 
 
+def test_the_seed_current_column_is_the_stored_shift_clamped_to_the_cap():
+    rows = ps.seed_schedule_rows(_cands("weekday", "wake", [40] * 4), {"weekday": {"wake": 90}}, max_shift_min=30)
+    assert rows["weekday|wake"]["current_min"] == 30
+
+
 def test_trim_keeps_four_hundred_days():
     today = date(2026, 11, 20)
     old = {"date": "2025-01-01", "class": "weekday", "kind": "wake", "delta_min": 1}

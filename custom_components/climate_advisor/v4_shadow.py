@@ -968,7 +968,7 @@ def run_cycle(
     ca_sleep_node: str | None = None,
     ca_sleep_time: str | None = None,
     ca_wake_time: str | None = None,
-    ca_schedule: Callable[[datetime], tuple[str | None, str | None]] | None = None,
+    ca_schedule: Callable[[datetime], Any] | None = None,  # WakeBed per instant
     baseline: bool = False,
     display: bool = False,
     sleep_loop: RemoteLoopEmulator | None = None,
@@ -1075,7 +1075,7 @@ def chart_extras(
     ca_sleep_node: str | None = None,
     ca_sleep_time: str | None = None,
     ca_wake_time: str | None = None,
-    ca_schedule: Callable[[datetime], tuple[str | None, str | None]] | None = None,
+    ca_schedule: Callable[[datetime], Any] | None = None,  # WakeBed per instant
 ) -> tuple[list[tuple[datetime, float]], dict[str, list[tuple[datetime, float]]]]:
     """The two extra future lines the Status chart draws: ``(corrected_outdoor, baseline_by_sensor)`` (Issue #1230 R2).
 

@@ -13,6 +13,8 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+import pytest
+
 from custom_components.climate_advisor import night_strategy as ns
 from custom_components.climate_advisor import predictor_v4 as p4
 
@@ -135,3 +137,28 @@ def test_class_with_a_frozen_rate_is_excluded_not_scored() -> None:
     assert rep["excluded"]["fan_rate_frozen"] >= 1
     assert ns.CLS_FAN not in rep["classes"]  # no scored fan night: no evidence, so the gate hides the fan options
     assert rep["n_nights_found"] >= 10
+
+
+@pytest.mark.parametrize(
+    ("bed", "hours"),
+    [((23, 45), 6.75), ((0, 30), 6.0), ((1, 0), 5.5)],
+    ids=["23:45", "learned 00:30", "configured 01:00"],
+)
+def test_a_bedtime_after_midnight_starts_the_night_on_the_next_calendar_day(bed, hours) -> None:
+    nights = nsr.find_nights(_history(6), TZ, bed, (6, 30))
+    assert nights
+    for start, end, _rows in nights:
+        assert (start.hour, start.minute) == bed
+        assert (end - start).total_seconds() / 3600 == pytest.approx(hours, abs=0.01)  # never a 30 h night
+
+
+def test_a_learned_bedtime_past_midnight_through_the_seam_is_a_short_night() -> None:
+    from custom_components.climate_advisor.preference_schedule import ScheduleView, night_times_fn
+
+    view = ScheduleView(
+        shifts={"weekday": {"wake": 0, "bed": 120}, "weekend": {"wake": 0, "bed": 120}}, max_shift_min=180
+    )
+    night_times = night_times_fn(view, {"sleep_time": "22:30", "wake_time": "06:30"})
+    assert night_times(date(2026, 6, 2)) == ((0, 30), (6, 30))
+    nights = nsr.find_nights(_history(6), TZ, (22, 30), (6, 30), night_times=night_times)
+    assert nights and all((end - start).total_seconds() == 6 * 3600 for start, end, _rows in nights)

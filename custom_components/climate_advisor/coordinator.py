@@ -11840,6 +11840,11 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         await self._async_resolve_workdays()
         self._arm_schedule_timers()
 
+    async def async_reset_learning(self, scope: str) -> None:
+        """Reset learned data in ``scope``, then re-arm the wake and bed timers (learned shifts may be gone)."""
+        await self.hass.async_add_executor_job(log_capture.bind_zone_for_executor(self.learning.reset), scope)
+        await self.async_refresh_schedule()
+
     def _preference_refs(self, view: PreferenceView | None) -> dict[str, str | None]:
         """``{part: reference entity}`` under the current config (``view`` None = the feature is off)."""
         return references_by_part(self.config, None if view is None else view.learned_rooms)

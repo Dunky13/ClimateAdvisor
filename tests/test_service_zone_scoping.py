@@ -57,6 +57,26 @@ class TestServiceCallsResolveByEntryId:
         assert zones["zone_0"]["coordinator"].learning._state.dismissed_suggestions == []
         assert zones["zone_1"]["coordinator"].learning._state.dismissed_suggestions == ["zone_1_seed"]
 
+    def test_the_reset_service_re_arms_the_timers_only_for_the_named_zone(self):
+        """Resetting learned preferences removes the learned shifts, so the wake and bed timers must follow."""
+        from unittest.mock import AsyncMock
+
+        from custom_components.climate_advisor.const import DOMAIN
+
+        zones, fake_hass, _scheduler = build_headless_multi_zone(zone_count=2)
+        for zone in zones.values():
+            zone["coordinator"].async_refresh_schedule = AsyncMock()
+        zone_0_id = zones["zone_0"]["entry"].entry_id
+
+        run_coro(
+            fake_hass.services.async_call(
+                DOMAIN, "reset_learning_data", {"entry_id": zone_0_id, "scope": "preferences"}
+            )
+        )
+
+        zones["zone_0"]["coordinator"].async_refresh_schedule.assert_awaited_once()
+        zones["zone_1"]["coordinator"].async_refresh_schedule.assert_not_awaited()
+
     def test_cross_zone_isolation_assertion_now_passes(self):
         """Same check via the harness's own cross_zone_isolation evaluator.
 

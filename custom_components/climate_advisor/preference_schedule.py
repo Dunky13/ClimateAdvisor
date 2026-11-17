@@ -419,11 +419,15 @@ def seed_schedule_rows(
             rows[schedule_row_key(cls, kind)] = {
                 "n": len(deltas),
                 "median_min": round_minutes(float(median(deltas))),
-                "current_min": int(shifts.get(cls, {}).get(kind, 0)),
+                "current_min": _clamped(shifts.get(cls, {}).get(kind), max_shift_min),  # the shift as read
                 "new_min": target_shift(deltas, max_shift_min) if enabled else None,
                 "enabled": enabled,
             }
     return rows
+
+
+def _clamped(stored: Any, cap: int) -> int:
+    return int(clamp_minutes(stored, cap)) if is_minutes(stored) else 0
 
 
 def schedule_row_key(cls: str, kind: str) -> str:
