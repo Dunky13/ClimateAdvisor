@@ -132,6 +132,15 @@ ROOM_PIN_KEYS: dict[str, str] = {
 ROOM_PIN_AUTO = "auto"
 ROOM_PIN_THERMOSTAT = "thermostat"
 DEFAULT_ROOM_PIN = ROOM_PIN_AUTO
+# Fork Dunky13#1 phase 2: learned wake and bed times (the optional Workday sensor, the signal entities, the bounds).
+CONF_WORKDAY_ENTITY = "workday_entity"
+CONF_WAKE_SIGNAL_ENTITIES = "wake_signal_entities"
+CONF_BED_SIGNAL_ENTITIES = "bed_signal_entities"
+CONF_SCHEDULE_MAX_SHIFT_MIN = "schedule_max_shift_min"
+CONF_SCHEDULE_WEEKLY_STEP_MIN = "schedule_weekly_step_min"
+DEFAULT_SCHEDULE_MAX_SHIFT_MIN = 90
+DEFAULT_SCHEDULE_WEEKLY_STEP_MIN = 15
+SIGNAL_ENTITY_DOMAINS: tuple[str, ...] = ("light", "switch", "input_boolean", "binary_sensor", "event")
 BACKFILL_DAYS_DEFAULT = 30
 BACKFILL_DAYS_MIN = 1
 BACKFILL_DAYS_MAX = 400
