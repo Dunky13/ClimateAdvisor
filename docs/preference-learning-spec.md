@@ -608,8 +608,8 @@ reset scope clears all of them.
   (`preference_seed_failed`) instead of failing silently.
 - The backfill analyses a deep copy of the config taken when it starts, so an options change during the run cannot
   mix two configurations.
-- Recorder history rows carry no context, so the `user_id` keep rule rarely applies to history; the schedule filter
-  does the work.
+- Recorder history rows carry no context, so the `user_id` keep rule never applies on this HA version (pinned by
+  `tests_ha/test_history_has_no_context_realha.py`); the schedule filter does the work.
 - The history humidity source is today's humidity source for the thermostat's room (entity or `entity#attribute`);
   when it is not usable, history observations get band `-`.
 - Pins use a selector with `custom_value`, so a room added in the same form validates against the submitted

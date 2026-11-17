@@ -1858,9 +1858,11 @@ class TestBriefingRegeneration:
         """Fork #1: the end-of-day wiring calls the preference hook and persists when it reports a change."""
         coord = self._eod_coord()
         coord._run_preference_update = MagicMock(return_value=True)
+        coord.async_refresh_schedule = AsyncMock()
         asyncio.run(coord._async_end_of_day(MagicMock()))
         coord._run_preference_update.assert_called_once()
         coord._executor_job.assert_awaited_with(coord.learning.save_state)
+        coord.async_refresh_schedule.assert_awaited_once()  # a moved shift moves the timers
 
     def test_end_of_day_survives_a_failing_preference_update(self):
         """Fork #1: a failing weekly update is logged and the end-of-day reset still runs."""

@@ -1274,7 +1274,8 @@ class ClimateAdvisorBackfillPreferencesView(HomeAssistantView):
 
 
 class ClimateAdvisorPreferenceSeedView(HomeAssistantView):
-    """Accept or discard the history seed; body ``{"action": "accept"|"discard", "buckets": [key, ...]}``."""
+    """Accept or discard the history seed; body ``{"action": "accept"|"discard", "buckets": [key, ...],
+    "schedule_rows": ["<class>|<kind>", ...]}`` (a missing list means every row)."""
 
     url = API_PREFERENCE_SEED
     name = "api:climate_advisor:preference_seed"
@@ -1294,9 +1295,11 @@ class ClimateAdvisorPreferenceSeedView(HomeAssistantView):
             except Exception:
                 return self.json(_error_body(hass, "invalid_json_body"), status_code=400)
             action = body.get("action") if isinstance(body, dict) else None
-            buckets = body.get("buckets") if isinstance(body, dict) else None
-            if action not in ("accept", "discard") or (
-                buckets is not None and not (isinstance(buckets, list) and all(isinstance(b, str) for b in buckets))
+            selections = [body.get(key) if isinstance(body, dict) else None for key in ("buckets", "schedule_rows")]
+            buckets, schedule_rows = selections
+            if action not in ("accept", "discard") or any(
+                keys is not None and not (isinstance(keys, list) and all(isinstance(k, str) for k in keys))
+                for keys in selections
             ):
                 return self.json(_error_body(hass, "preference_seed_action"), status_code=400)
             if coordinator.preference_view() is None:
@@ -1305,7 +1308,7 @@ class ClimateAdvisorPreferenceSeedView(HomeAssistantView):
                 if action == "discard":
                     discarded = await coordinator.async_discard_preference_seed()
                 else:
-                    result = await coordinator.async_accept_preference_seed(buckets)
+                    result = await coordinator.async_accept_preference_seed(buckets, schedule_rows)
             except Exception as err:
                 _LOGGER.error("Preference history seed failed: action=%s", action, exc_info=True)
                 return self.json(_error_body(hass, "preference_seed_failed", error=type(err).__name__), status_code=500)

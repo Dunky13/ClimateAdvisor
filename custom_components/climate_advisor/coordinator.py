@@ -165,6 +165,7 @@ from .const import (
     CONF_PREFERENCE_MAX_OFFSET_F,
     CONF_PREFERENCE_WEEKLY_STEP_F,
     CONF_SCHEDULE_MAX_SHIFT_MIN,
+    CONF_SCHEDULE_WEEKLY_STEP_MIN,
     CONF_SENSOR_DEBOUNCE,
     CONF_SENSOR_POLARITY_INVERTED,
     CONF_SLEEP_INDOOR_HUMIDITY_ENTITY,
@@ -194,6 +195,7 @@ from .const import (
     DEFAULT_PREFERENCE_MAX_OFFSET_F,
     DEFAULT_PREFERENCE_WEEKLY_STEP_F,
     DEFAULT_SCHEDULE_MAX_SHIFT_MIN,
+    DEFAULT_SCHEDULE_WEEKLY_STEP_MIN,
     DEFAULT_SENSOR_DEBOUNCE_SECONDS,
     DEFAULT_SETBACK_COOL,
     DEFAULT_SETBACK_DEPTH_COOL_F,
@@ -441,7 +443,7 @@ from .operation_timeline import to_dict as timeline_to_dict
 from .override_confirm_split import ca_expected_mode
 from .prediction_accuracy import RANGES as CHART_RANGE_DAYS
 from .prediction_accuracy import build_chart_v4, ca_swap_epochs, load_backtest
-from .preference_backfill import build_seed, climate_rows, humidity_series, temperature_series
+from .preference_backfill import build_seed, climate_rows, humidity_series, signal_rows, temperature_series
 from .preference_learning import (
     BACKGROUND_INTERVAL,
     BAND_NONE,
@@ -11979,7 +11981,8 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         end-of-day reset still runs.
         """
         try:
-            if self.preference_view() is None:
+            view = self.preference_view()
+            if view is None:
                 return self.learning.discard_preference_episode() is True
             closed = self.learning.flush_preference_episode(now) is True
             due = self.learning.run_preference_update(
@@ -11989,6 +11992,8 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
                 unit=self.config.get("temp_unit", "fahrenheit"),
                 rooms=selected_rooms(self.config),
                 references=lambda learned: references_by_part(self.config, learned),
+                max_shift_min=view.schedule.max_shift_min,
+                step_min=int(self.config.get(CONF_SCHEDULE_WEEKLY_STEP_MIN, DEFAULT_SCHEDULE_WEEKLY_STEP_MIN)),
             )
             return closed or due is not None
         except Exception:
@@ -12024,7 +12029,8 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             else None
         )
         outdoor = outdoor_sensor or cfg.get("weather_entity")
-        entities = sorted({e for e in (climate, *rooms, rh_entity, outdoor) if e})
+        signal_entities = [*cfg.get(CONF_WAKE_SIGNAL_ENTITIES, []), *cfg.get(CONF_BED_SIGNAL_ENTITIES, [])]
+        entities = sorted({e for e in (climate, *rooms, rh_entity, outdoor, *signal_entities) if e})
         end = dt_util.utcnow()
         start = end - timedelta(days=days)
         _LOGGER.info(
@@ -12070,6 +12076,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
                 max_offset_f=float(cfg.get(CONF_PREFERENCE_MAX_OFFSET_F, DEFAULT_PREFERENCE_MAX_OFFSET_F)),
                 live_since=live_since,
                 schedule=pref_view.schedule if pref_view is not None else None,
+                signals={e: signal_rows(raw.get(e, [])) for e in signal_entities} if signal_entities else None,
             )
 
         seed = await self._executor_job(_build)
@@ -12078,8 +12085,11 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         _LOGGER.info("Preference history backfill finished: counts=%s buckets=%d", seed["counts"], len(seed["summary"]))
         return {"counts": seed["counts"], "buckets": len(seed["summary"]), "window": seed["window"]}
 
-    async def async_accept_preference_seed(self, buckets: list[str] | None) -> dict[str, Any] | None:
-        """Accept the history seed (``buckets`` None = every row): offsets apply now, within the cap; None = no seed."""
+    async def async_accept_preference_seed(
+        self, buckets: list[str] | None, schedule_rows: list[str] | None = None
+    ) -> dict[str, Any] | None:
+        """Accept the history seed (``buckets``, ``schedule_rows`` None = every row): offsets and learned wake and bed
+        shifts apply now, within their caps; None = no seed."""
         view = self.preference_view()
         if view is None:
             return None
@@ -12089,9 +12099,12 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             refs=self._preference_refs(view),
             max_offset_f=view.max_offset_f,
             rooms=selected_rooms(self.config),
+            schedule_rows=schedule_rows,
+            max_shift_min=view.schedule.max_shift_min,
         )
         if result is not None:
             await self._executor_job(self.learning.save_state)
+            await self.async_refresh_schedule()
             await self.async_request_refresh()  # the next decision arms the new floors
         return result
 
@@ -12100,6 +12113,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         if not self.learning.discard_preference_seed(dt_util.now().date(), rooms=selected_rooms(self.config)):
             return False
         await self._executor_job(self.learning.save_state)
+        await self.async_refresh_schedule()
         return True
 
     def preference_status(self) -> dict[str, Any]:
@@ -12252,6 +12266,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         # fork Dunky13#1: weekly preference update (when enabled and due)
         if self._run_preference_update(now) is True:
             await self._executor_job(self.learning.save_state)
+            await self.async_refresh_schedule()  # a moved shift moves the next wake and bed timers
 
         self._today_record = None
         self._briefing_sent_today = False
