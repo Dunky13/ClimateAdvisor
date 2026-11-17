@@ -78,6 +78,7 @@ from .automation import (
     select_comfort_band,
     tou_bank_band,
 )
+from .automation_calls import AutomationCalls
 from .briefing import BriefingText, generate_briefing
 from .chart_log import ChartStateLog
 from .classifier import DayClassification, ForecastSnapshot, classify_day
@@ -141,6 +142,7 @@ from .const import (
     CONF_AI_API_KEY,
     CONF_AI_ENABLED,
     CONF_AUTOMATION_GRACE_PERIOD,
+    CONF_BED_SIGNAL_ENTITIES,
     CONF_BRIEFING_NOTIFICATIONS_ENABLED,
     CONF_COOL_POWER_KW,
     CONF_ENERGY_RATE,
@@ -173,6 +175,7 @@ from .const import (
     CONF_THRESHOLD_WARM,
     CONF_VACATION_TOGGLE,
     CONF_VACATION_TOGGLE_INVERT,
+    CONF_WAKE_SIGNAL_ENTITIES,
     CONF_WEATHER_BIAS,
     CONF_WORKDAY_ENTITY,
     CYCLE_FILE,
@@ -459,7 +462,17 @@ from .preference_learning import (
     steering_reference,
     steering_room,
 )
-from .preference_schedule import KIND_BED, KIND_WAKE, ScheduleView, instants_on, next_times
+from .preference_schedule import (
+    KIND_BED,
+    KIND_WAKE,
+    SOURCE_SENSOR,
+    SOURCE_THERMOSTAT,
+    ScheduleView,
+    candidate_for,
+    instants_on,
+    next_times,
+    transition_active,
+)
 from .promise_journal import (
     PROMISE_STATS_WINDOW_DAYS,
     PromiseJournal,
@@ -1466,6 +1479,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         self._schedule_unsubs: list[Callable[[], None]] = []
         self._schedule_plan_armed: tuple[Any, ...] | None = None
         self._schedule_fired: dict[str, datetime] = {}
+        self._automation_calls = AutomationCalls()
         self.learning = LearningEngine(
             Path(hass.config.config_dir), entry_id=self._entry_id, temp_unit=config.get("temp_unit", "fahrenheit")
         )
@@ -1954,6 +1968,7 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         # Schedule: morning wake-up and bedtime (clock-time timers; point-in-time ones once a learned shift applies)
         await self._async_resolve_workdays()
         self._arm_schedule_timers()
+        self._listen_for_schedule_signals()
 
         # Schedule: midnight — finalize daily record and reset
         self._unsub_listeners.append(
@@ -11576,6 +11591,73 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             workdays=dict(getattr(self, "_workdays", {})),
         )
 
+    def _listen_for_schedule_signals(self) -> None:
+        """While learning is on: track automation-issued service calls and watch the wake and bed signal entities."""
+        if self.preference_view() is None:
+            return
+
+        @callback
+        def _on_call_service(event: Event) -> None:
+            self._automation_calls.record(self.hass, event)
+
+        self._unsub_listeners.append(
+            self.hass.bus.async_listen(EVENT_CALL_SERVICE, self._zone_scoped_sync(_on_call_service))
+        )
+        signals = sorted(
+            {*self.config.get(CONF_WAKE_SIGNAL_ENTITIES, []), *self.config.get(CONF_BED_SIGNAL_ENTITIES, [])}
+        )
+        if signals:
+            self._unsub_listeners.append(
+                async_track_state_change_event(self.hass, signals, self._zone_scoped(self._async_schedule_signal))
+            )
+
+    async def _async_schedule_signal(self, event: Event) -> None:
+        """A wake or bed signal entity changed: store the candidate a real, occupant-made transition makes.
+
+        Observed in observe-only mode too (a light or a switch is not confounded by Climate Advisor's own writes).
+        """
+        entity_id = event.data.get("entity_id")
+        old, new = event.data.get("old_state"), event.data.get("new_state")
+        if not isinstance(entity_id, str) or new is None or self.preference_view() is None:
+            return
+        if self._occupancy_mode not in (OCCUPANCY_HOME, OCCUPANCY_GUEST):
+            return
+        if self._automation_calls.caused(entity_id, new.context, dt_util.utcnow()):
+            _LOGGER.debug("Schedule signal skipped: reason=caused by an automation entity=%s", entity_id)
+            return
+        now = dt_util.now()
+        domain = entity_id.partition(".")[0]
+        changed = False
+        for kind, key in ((KIND_WAKE, CONF_WAKE_SIGNAL_ENTITIES), (KIND_BED, CONF_BED_SIGNAL_ENTITIES)):
+            if entity_id not in self.config.get(key, []):
+                continue
+            if not transition_active(domain, getattr(old, "state", None), new.state, kind):
+                continue
+            candidate = candidate_for(kind, now, self.config, self._workdays)
+            if candidate is not None and self.learning.add_schedule_candidate(
+                candidate, SOURCE_SENSOR, today=now.date()
+            ):
+                changed = True
+        if changed:
+            await self._executor_job(self.learning.save_state)
+
+    def _record_thermostat_schedule_candidate(self, now: datetime, schedule: dict, old_f: float, new_f: float) -> bool:
+        """Thermostat fallback for a kind with no signal entity: an occupant raise in the hour before the wake time is a
+        wake candidate, a lowering in the hour before bedtime a bed candidate. True when one was stored."""
+        if new_f == old_f:
+            return False
+        kind, key, edge = (
+            (KIND_WAKE, CONF_WAKE_SIGNAL_ENTITIES, (schedule.get("wake_time"), None))
+            if new_f > old_f
+            else (KIND_BED, CONF_BED_SIGNAL_ENTITIES, (None, schedule.get("sleep_time")))
+        )
+        if self.config.get(key) or not near_schedule_edge(now, *edge):
+            return False
+        candidate = candidate_for(kind, now, self.config, self._workdays)
+        return candidate is not None and self.learning.add_schedule_candidate(
+            candidate, SOURCE_THERMOSTAT, today=now.date()
+        )
+
     async def _async_resolve_workdays(self) -> None:
         """Resolve yesterday through the day after tomorrow with the workday entity (cached per date).
 
@@ -11823,6 +11905,9 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
         view = self.preference_view()
         if view is None:
             return False
+        if self._automation_calls.caused(self.config["climate_entity"], new_state.context, dt_util.utcnow()):
+            _LOGGER.info("Preference observation skipped: reason=caused by an automation")
+            return False
         c = self._current_classification
         gate = heat_gate_reasons(
             getattr(new_state, "state", None),
@@ -11844,6 +11929,8 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             _LOGGER.info("Preference observation skipped: reason=a time-of-use bank holds the setpoint")
             return False
         schedule = _config_at(self, now)
+        excluded = near_schedule_edge(now, schedule.get("wake_time"), schedule.get("sleep_time"))
+        recorded = excluded and self._record_thermostat_schedule_candidate(now, schedule, old_f, new_f)
         asleep = _in_sleep_window(now, schedule)
         savings = bool(self.config.get("aggressive_savings", False))
         common = {"occupancy_mode": self._occupancy_mode, "in_sleep_window": asleep, "aggressive_savings": savings}
@@ -11866,10 +11953,10 @@ class ClimateAdvisorCoordinator(DataUpdateCoordinator):
             bucket=bucket,
             base_f=base.floor,
             target_f=target.floor,
-            excluded=near_schedule_edge(now, schedule.get("wake_time"), schedule.get("sleep_time")),
+            excluded=excluded,
             context=context,
         )
-        return changed is True
+        return recorded or changed is True
 
     def _flush_preference_episode(self) -> bool:
         """Close the open preference episode once its 15 minutes have passed (lazy, no timer); True = state changed.

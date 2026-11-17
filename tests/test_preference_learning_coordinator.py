@@ -11,6 +11,7 @@ import pytest
 
 from custom_components.climate_advisor import coordinator as coord_mod
 from custom_components.climate_advisor.automation import select_comfort_band
+from custom_components.climate_advisor.automation_calls import AutomationCalls
 from custom_components.climate_advisor.const import REMOTE_CONTEXT_ROOM
 from custom_components.climate_advisor.coordinator import ClimateAdvisorCoordinator, _compute_target_band_schedule
 from custom_components.climate_advisor.indoor_temp import IndoorTempReading
@@ -23,12 +24,12 @@ B = "cold|evening|weekday"
 
 def _state(mode="heat", preset=None):
     attrs = {} if preset is None else {"preset_mode": preset}
-    return SimpleNamespace(state=mode, attributes=attrs)
+    return SimpleNamespace(state=mode, attributes=attrs, context=SimpleNamespace(parent_id=None))
 
 
 def _coordinator(*, enabled=True, automation=True, occupancy="home", classified=True, offsets=None, remote_f=0.0):
     coord = object.__new__(ClimateAdvisorCoordinator)
-    coord.config = {**CONFIG, "preference_learning_enabled": enabled}
+    coord.config = {**CONFIG, "preference_learning_enabled": enabled, "climate_entity": "climate.thermostat"}
     coord.learning = MagicMock()
     coord.learning.record_preference_change.return_value = True
     coord.learning.preference_offsets.return_value = offsets if offsets is not None else {B: 2.0}
@@ -44,6 +45,8 @@ def _coordinator(*, enabled=True, automation=True, occupancy="home", classified=
 def _no_rooms_or_humidity(coord):
     """Phase 3 context: the thermostat's own reading, no humidity known (band "-"), no learned rooms."""
     coord._preference_band = coord._preference_rh = None  # set by __init__, which a bare coordinator skips
+    coord._automation_calls = AutomationCalls()
+    coord._workdays = {}
     coord._preference_bg_sampled = {}
     coord.learning.learned_room_map.return_value = {}
     coord._get_indoor_temp_with_provenance = MagicMock(
@@ -244,6 +247,7 @@ def _drive(coord, event):
 
     from tests.test_heat_cool_override import _PATCH_CALLBACK
 
+    event.data["new_state"].context = SimpleNamespace(parent_id=None)
     with (
         patch(_PATCH_CALLBACK, side_effect=lambda fn: fn),
         patch.object(coord_mod.dt_util, "now", return_value=EVENING),
